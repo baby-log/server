@@ -45,17 +45,18 @@ class P0ArchitectureTest {
     private static final String CORE_PACKAGE = "com.babylog.starter.core..";
 
     /** A8 表前缀白名单（《03 后端功能开发流程》阶段2 登记处：插件模块名 → 表前缀） */
-    private static final java.util.Map<String, String> TABLE_PREFIX_WHITELIST = java.util.Map.of(
-        "babylog-plugin-system", "sys_",
-        "babylog-plugin-message", "msg_",
-        "babylog-plugin-ai", "ai_",
-        "babylog-plugin-file", "sys_",
-        "babylog-plugin-workflow", "flow_",
-        "babylog-plugin-ai-kb", "ai_kb_",
-        "babylog-plugin-monitor", "mn_",
-        "babylog-plugin-docsync", "doc_sync_",
-        "babylog-plugin-migration", "migration_",
-        "babylog-plugin-mind", "mind_");
+    private static final java.util.Map<String, String> TABLE_PREFIX_WHITELIST = java.util.Map.ofEntries(
+        java.util.Map.entry("babylog-plugin-system", "sys_"),
+        java.util.Map.entry("babylog-plugin-message", "msg_"),
+        java.util.Map.entry("babylog-plugin-ai", "ai_"),
+        java.util.Map.entry("babylog-plugin-file", "sys_"),
+        java.util.Map.entry("babylog-plugin-workflow", "flow_"),
+        java.util.Map.entry("babylog-plugin-ai-kb", "ai_kb_"),
+        java.util.Map.entry("babylog-plugin-monitor", "mn_"),
+        java.util.Map.entry("babylog-plugin-docsync", "doc_sync_"),
+        java.util.Map.entry("babylog-plugin-migration", "migration_"),
+        java.util.Map.entry("babylog-plugin-mind", "mind_"),
+        java.util.Map.entry("babylog-plugin-biz", "bl_"));
 
     // ========== A1 + A2：Plugin 实现包之间无编译依赖；跨插件仅可访问对方 api 包 ==========
     // 直接否定式：system 实现包不得依赖任何"其他插件实现包"；其他插件 api 包不在清单内，天然放行。
@@ -79,12 +80,12 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.flow..", "com.babylog.file..",
                     "com.babylog.job..", "com.babylog.monitor..", "com.babylog.ai..",
                     "com.babylog.workflow..", "com.babylog.docsync..", "com.babylog.migration..",
-                    "com.babylog.mind..")
+                    "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.ai.api..",
                     "com.babylog.ai.kb.api..", "com.babylog.workflow.api..",
                     "com.babylog.docsync.api..", "com.babylog.migration.api..",
-                    "com.babylog.mind.api..")))
+                    "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // ai 侧对称规则（S19 新增）：ai 实现包只可依赖其他插件的 api 包
@@ -98,12 +99,12 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
                     "com.babylog.ai.kb..", "com.babylog.workflow..", "com.babylog.docsync..",
-                    "com.babylog.migration..", "com.babylog.mind..")
+                    "com.babylog.migration..", "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..",
                     "com.babylog.ai.kb.api..", "com.babylog.workflow.api..",
                     "com.babylog.docsync.api..", "com.babylog.migration.api..",
-                    "com.babylog.mind.api..")))
+                    "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // ai-kb 侧对称规则（S58 新增）：ai-kb 实现包只可依赖其他插件的 api 包
@@ -116,13 +117,13 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
                     "com.babylog.ai..", "com.babylog.workflow..", "com.babylog.docsync..",
-                    "com.babylog.migration..", "com.babylog.mind..")
+                    "com.babylog.migration..", "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..",
                     "com.babylog.file.api..", "com.babylog.ai.api..",
                     "com.babylog.ai.kb..", "com.babylog.workflow.api..",
                     "com.babylog.docsync.api..", "com.babylog.migration.api..",
-                    "com.babylog.mind.api..")))
+                    "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // monitor 侧对称规则（S48 新增，S71 运营看板启用 api 依赖）：monitor 实现包只可依赖其他插件的 api 包
@@ -134,13 +135,13 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.ai..",
                     "com.babylog.workflow..", "com.babylog.docsync..", "com.babylog.migration..",
-                    "com.babylog.mind..")
+                    "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..", "com.babylog.ai.api..",
                     "com.babylog.file.api..",
                     "com.babylog.ai.kb.api..", "com.babylog.workflow.api..",
                     "com.babylog.docsync.api..", "com.babylog.migration.api..",
-                    "com.babylog.mind.api..")))
+                    "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // workflow 侧对称规则（S55 新增，S92 补登 migration）：workflow 实现包只可依赖其他插件的 api 包
@@ -153,12 +154,12 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
                     "com.babylog.ai..", "com.babylog.docsync..", "com.babylog.migration..",
-                    "com.babylog.mind..")
+                    "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..",
                     "com.babylog.ai.api..", "com.babylog.ai.kb.api..",
                     "com.babylog.docsync.api..", "com.babylog.migration.api..",
-                    "com.babylog.mind.api..")))
+                    "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // docsync 侧对称规则（S90 新增，S92 补登 migration）：docsync 实现包只可依赖其他插件的 api 包
@@ -171,12 +172,12 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
                     "com.babylog.ai..", "com.babylog.workflow..", "com.babylog.ai.kb..",
-                    "com.babylog.migration..", "com.babylog.mind..")
+                    "com.babylog.migration..", "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..",
                     "com.babylog.ai.api..", "com.babylog.ai.kb.api..",
                     "com.babylog.workflow.api..", "com.babylog.file.api..",
-                    "com.babylog.migration.api..", "com.babylog.mind.api..")))
+                    "com.babylog.migration.api..", "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // migration 侧对称规则（S92 新增）：migration 实现包只可依赖其他插件的 api 包
@@ -189,13 +190,13 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
                     "com.babylog.ai..", "com.babylog.workflow..", "com.babylog.ai.kb..",
-                    "com.babylog.docsync..", "com.babylog.mind..")
+                    "com.babylog.docsync..", "com.babylog.mind..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..",
                     "com.babylog.file.api..", "com.babylog.ai.api..",
                     "com.babylog.ai.kb.api..", "com.babylog.workflow.api..",
                     "com.babylog.docsync.api..", "com.babylog.generator.api..",
-                    "com.babylog.mind.api..")))
+                    "com.babylog.mind.api..", "com.babylog.biz.api..")))
         .allowEmptyShould(true);
 
     // mind 侧对称规则：mind 实现包只可依赖其他插件的 api 包
@@ -208,12 +209,31 @@ class P0ArchitectureTest {
                     "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
                     "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
                     "com.babylog.ai..", "com.babylog.workflow..", "com.babylog.ai.kb..",
-                    "com.babylog.docsync..", "com.babylog.migration..")
+                    "com.babylog.docsync..", "com.babylog.migration..", "com.babylog.biz..")
                 .and(JavaClass.Predicates.resideOutsideOfPackages(
                     "com.babylog.system.api..", "com.babylog.message.api..",
                     "com.babylog.file.api..", "com.babylog.ai.api..",
                     "com.babylog.ai.kb.api..", "com.babylog.workflow.api..",
-                    "com.babylog.docsync.api..", "com.babylog.migration.api..")))
+                    "com.babylog.docsync.api..", "com.babylog.migration.api..", "com.babylog.biz.api..")))
+        .allowEmptyShould(true);
+
+    // biz 侧对称规则（BabyLog 业务插件，M4 新增）：biz 实现包只可依赖其他插件的 api 包
+    @ArchTest
+    static final ArchRule a1_a2_biz_impl_must_not_depend_on_other_plugin_impls = noClasses()
+        .that().resideInAPackage("com.babylog.biz..")
+        .and().resideOutsideOfPackage("com.babylog.biz.api..")
+        .should().dependOnClassesThat(
+            JavaClass.Predicates.resideInAnyPackage(
+                    "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
+                    "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
+                    "com.babylog.ai..", "com.babylog.workflow..", "com.babylog.ai.kb..",
+                    "com.babylog.docsync..", "com.babylog.migration..", "com.babylog.mind..")
+                .and(JavaClass.Predicates.resideOutsideOfPackages(
+                    "com.babylog.system.api..", "com.babylog.message.api..",
+                    "com.babylog.file.api..", "com.babylog.ai.api..",
+                    "com.babylog.ai.kb.api..", "com.babylog.workflow.api..",
+                    "com.babylog.docsync.api..", "com.babylog.migration.api..",
+                    "com.babylog.mind.api..")))
         .allowEmptyShould(true);
 
     // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========    @ArchTest
@@ -223,7 +243,7 @@ class P0ArchitectureTest {
             "com.babylog.system..", "com.babylog.message..", "com.babylog.flow..",
             "com.babylog.file..", "com.babylog.job..", "com.babylog.monitor..",
             "com.babylog.ai..", "com.babylog.workflow..", "com.babylog.docsync..",
-            "com.babylog.migration..", "com.babylog.mind..")
+            "com.babylog.migration..", "com.babylog.mind..", "com.babylog.biz..")
         .allowEmptyShould(true);
 
     // ========== A6：无 new Thread / 裸 CompletableFuture.supplyAsync（必须走 ContextExecutor） ==========
@@ -575,7 +595,8 @@ class P0ArchitectureTest {
         "com.babylog.system", "com.babylog.message", "com.babylog.file",
         "com.babylog.workflow", "com.babylog.docsync", "com.babylog.migration",
         "com.babylog.mind", "com.babylog.monitor", "com.babylog.generator",
-        "com.babylog.ai.coding", "com.babylog.ai.kb", "com.babylog.ai"
+        "com.babylog.ai.coding", "com.babylog.ai.kb", "com.babylog.ai",
+        "com.babylog.biz"
     };
 
     /**
@@ -591,7 +612,8 @@ class P0ArchitectureTest {
         "com.babylog.system.api", "com.babylog.message.api", "com.babylog.file.api",
         "com.babylog.ai.api", "com.babylog.ai.kb.api", "com.babylog.ai.coding.api",
         "com.babylog.workflow.api", "com.babylog.docsync.api", "com.babylog.migration.api",
-        "com.babylog.mind.api", "com.babylog.generator.api", "com.babylog.generator.service");
+        "com.babylog.mind.api", "com.babylog.generator.api", "com.babylog.generator.service",
+        "com.babylog.biz.api");
 
     /** 契约包的<b>实现侧排除项</b>：包名在白名单前缀内，但类其实属于实现模块（见白名单注释） */
     private static final java.util.Set<String> CONTRACT_PACKAGE_EXCLUSIONS = java.util.Set.of(

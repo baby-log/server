@@ -160,6 +160,10 @@
             <groupId>com.babylog</groupId>
             <artifactId>babylog-plugin-mind</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-biz</artifactId>
+        </dependency>
 
         <!-- ===== API 文档（Knife4j Next：SB4 兼容增强 UI；jakarta 变体适配 SB4 的 jakarta.servlet） ===== -->
         <dependency>
