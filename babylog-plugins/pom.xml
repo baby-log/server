@@ -39,6 +39,8 @@
         <module>babylog-plugin-migration</module>
         <module>babylog-plugin-mind-api</module>
         <module>babylog-plugin-mind</module>
+        <module>babylog-plugin-biz-api</module>
+        <module>babylog-plugin-biz</module>
     </modules>
 
     <dependencyManagement>

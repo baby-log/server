@@ -736,6 +736,16 @@
                 <artifactId>babylog-plugin-mind</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.babylog</groupId>
+                <artifactId>babylog-plugin-biz-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.babylog</groupId>
+                <artifactId>babylog-plugin-biz</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
