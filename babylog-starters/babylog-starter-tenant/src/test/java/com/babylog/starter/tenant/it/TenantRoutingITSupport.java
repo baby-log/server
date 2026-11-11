@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -35,11 +36,12 @@ abstract class TenantRoutingITSupport {
     /** 主库 JDBC URL */
     protected abstract String primaryJdbcUrl();
 
-    /** 测试中间件 MySQL 密码：从环境变量注入，仓库内不保留真实凭据 */
-    private static String testMysqlPassword() {
-        String pwd = System.getenv("BABYLOG_TEST_MYSQL_PASSWORD");
-        return pwd != null ? pwd : "";
-    }
+    /**
+     * 测试中间件 MySQL 密码：由 Spring 从测试 yml 注入（配置口径：凭据只进 yml，
+     * 不写进 Java 代码，也不走环境变量），与数据源消费同一份属性，天然不漂移。
+     */
+    @Value("${spring.datasource.dynamic.datasource.master.password}")
+    private String testMysqlPassword;
 
     /**
      * 补 {@code createDatabaseIfNotExist=true}：直连的 JDBC URL 不带它时，
@@ -55,9 +57,9 @@ abstract class TenantRoutingITSupport {
         return jdbcUrl + (jdbcUrl.contains("?") ? "&" : "?") + "createDatabaseIfNotExist=true";
     }
 
-    protected static void createFixtureTableIfAbsent(String jdbcUrl) throws Exception {
+    protected void createFixtureTableIfAbsent(String jdbcUrl) throws Exception {
         String url = withCreateDatabaseIfNotExist(jdbcUrl);
-        try (Connection conn = DriverManager.getConnection(url, "root", testMysqlPassword());
+        try (Connection conn = DriverManager.getConnection(url, "root", testMysqlPassword);
              Statement st = conn.createStatement()) {
             st.execute("CREATE TABLE IF NOT EXISTS t_tenant_demo ("
                     + "id BIGINT NOT NULL, title VARCHAR(128) NOT NULL,"
@@ -97,7 +99,7 @@ abstract class TenantRoutingITSupport {
     /** 纯 JDBC 直连指定库查询标题（实证数据物理落点） */
     protected List<String> jdbcTitles(String jdbcUrl) throws Exception {
         List<String> titles = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", testMysqlPassword());
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, "root", testMysqlPassword);
              Statement st = conn.createStatement();
              ResultSet rs = st.executeQuery("SELECT title FROM t_tenant_demo")) {
             while (rs.next()) {

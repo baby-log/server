@@ -98,7 +98,7 @@ spring:
   config:
     import:
       - optional:nacos:babylog-admin-server.yaml
-      - optional:nacos:babylog-admin-server-${BABYLOG_NACOS_CONFIG_ENV:dev}.yaml
+      - optional:nacos:babylog-admin-server-dev.yaml
   servlet:
     multipart:
       max-file-size: 50MB
@@ -119,7 +119,7 @@ spring:
     model:
       chat: openai
     openai:
-      api-key: ${BABYLOG_LLM_API_KEY:}
+      api-key: 
       # Spring AI 2.0 底层为官方 openai-java SDK，base-url 须含 /v1（SDK 直接追加 /chat/completions）
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
@@ -153,25 +153,25 @@ spring:
       # 与 discovery 同源：连接信息一律环境变量占位符（yml 进 git，凭据不得落库）。
       # namespace 为空即 public；group 与注册发现共用同一份占位符，避免「注册在 A 域、配置在 B 域」。
       config:
-        server-addr: ${BABYLOG_NACOS_SERVER_ADDR:127.0.0.1:8848}
-        username: ${BABYLOG_NACOS_USERNAME:}
-        password: ${BABYLOG_NACOS_PASSWORD:}
-        namespace: ${BABYLOG_NACOS_NAMESPACE:}
-        group: ${BABYLOG_NACOS_GROUP:DEFAULT_GROUP}
+        server-addr: 127.0.0.1:8848
+        username: 
+        password: 
+        namespace: 
+        group: DEFAULT_GROUP
         # 只认 yaml：dataId 后缀必须与 file-extension 一致，否则内容解析不到
         file-extension: yaml
         # 读超时（ms）：optional: 前缀已兜住失败，这里只是别让不可达时白等 30s
         timeout: 3000
       discovery:
         # 默认不注册：alibaba 形态要真的注册到 Nacos 需显式置 true（引入 ≠ 生效，V3-S2 L2 铁律）
-        enabled: ${BABYLOG_NACOS_DISCOVERY_ENABLED:false}
+        enabled: false
         # 连接信息一律走环境变量占位符：凭据不落库（yml 会进 git），未注入时用本机兜底地址。
         # dev: 175.24.176.176:8848 / test: 10.0.0.7:8848 / prod: 10.0.4.15:8848（三环境均开启鉴权）
-        server-addr: ${BABYLOG_NACOS_SERVER_ADDR:127.0.0.1:8848}
-        username: ${BABYLOG_NACOS_USERNAME:}
-        password: ${BABYLOG_NACOS_PASSWORD:}
-        namespace: ${BABYLOG_NACOS_NAMESPACE:}
-        group: ${BABYLOG_NACOS_GROUP:DEFAULT_GROUP}
+        server-addr: 127.0.0.1:8848
+        username: 
+        password: 
+        namespace: 
+        group: DEFAULT_GROUP
         # 注册失败绝不阻断启动：SCA 默认会让「Nacos 不可达」直接把应用带崩
         # （实测：Tomcat 起来后 WebServerStartStopLifecycle 抛 ErrCode:-401，进程退出，
         #  且仅设 fail-fast=false 无效——它只管「是否快速失败」，true/false 都会把异常抛穿）。
@@ -206,12 +206,12 @@ mybatis-plus:
 # API 文档（Knife4j Next 增强 UI，底层复用 SpringDoc OpenAPI 3）
 springdoc:
   api-docs:
-    enabled: ${BABYLOG_API_DOCS_ENABLED:true}
+    enabled: true
     path: /v3/api-docs
   default-flat-param-object: true
 
 knife4j:
-  enable: ${BABYLOG_API_DOCS_ENABLED:true}
+  enable: true
   setting:
     language: zh_cn
 
@@ -225,34 +225,34 @@ babylog:
   # 回滚：BABYLOG_AUTH_GUARD_ENABLED=false 即不注册过滤器。
   auth:
     guard:
-      enabled: ${BABYLOG_AUTH_GUARD_ENABLED:true}
-      paths: ${BABYLOG_AUTH_GUARD_PATHS:/warm-flow/**}
-      exclude-paths: ${BABYLOG_AUTH_GUARD_EXCLUDE_PATHS:}
-      message: ${BABYLOG_AUTH_GUARD_MESSAGE:该端点要求登录后访问}
+      enabled: true
+      paths: /warm-flow/**
+      exclude-paths: 
+      message: 该端点要求登录后访问
   # 日志落盘（v3.1.0 生产化 · A3，V3.1-H · B1 追加按级别分文件）。实际由 logback-spring.xml 消费，
   # 这里只定义可覆盖项：prod/test 按「单文件 100MB + 按天切分 + 归档 gzip」滚动写两个文件——
-  #   主文件  ：INFO 及以下（保留 ${BABYLOG_LOG_MAX_HISTORY} 天 / 总量 ${BABYLOG_LOG_TOTAL_SIZE_CAP}）
+  #   主文件  ：INFO 及以下（保留 30 天 / 总量 5GB）
   #   错误文件：WARN 及以上，文件名前缀带 -error（保留 60 天 / 总量 1GB，事故常隔周复盘）
-  # 两者零重叠，不存双份 WARN/ERROR。dev 只写控制台（保持开发期可读性）。全部可环境变量覆盖。
+  # 两者零重叠，不存双份 WARN/ERROR。dev 只写控制台（保持开发期可读性）。全部可直接在本文件修改。
   log:
-    dir: ${BABYLOG_LOG_DIR:logs}
-    file-name: ${BABYLOG_LOG_FILE_NAME:babylog-admin-server}
-    max-file-size: ${BABYLOG_LOG_MAX_FILE_SIZE:100MB}
-    max-history: ${BABYLOG_LOG_MAX_HISTORY:30}
-    total-size-cap: ${BABYLOG_LOG_TOTAL_SIZE_CAP:5GB}
-    error-max-history: ${BABYLOG_LOG_ERROR_MAX_HISTORY:60}
-    error-total-size-cap: ${BABYLOG_LOG_ERROR_TOTAL_SIZE_CAP:1GB}
+    dir: logs
+    file-name: babylog-admin-server
+    max-file-size: 100MB
+    max-history: 30
+    total-size-cap: 5GB
+    error-max-history: 60
+    error-total-size-cap: 1GB
   migration:
     # 迁移工作区使用绝对路径，避免因启动目录不同（mvn spring-boot:run vs java -jar）导致路径漂移
-    workspace: ${BABYLOG_MIGRATION_WORKSPACE:/Users/huweilong/WorkBuddy/业余项目/server/babylog-admin-server/data/migration}
+    workspace: /Users/huweilong/WorkBuddy/业余项目/server/babylog-admin-server/data/migration
   mybatis:
     # 字段加密密钥（AES，16/24/32 位）：ai_api_key.api_key 等 @FieldEncrypt 字段落库加密
     # dev 默认值恰 16 位仅供本地联调，生产必须用环境变量覆盖
-    field-encrypt-key: ${BABYLOG_FIELD_ENCRYPT_KEY:babylog-dev-key!}
+    field-encrypt-key: babylog-dev-key!
   kb:
     # 默认向量存储类型：simple（本地零中间件兜底，Milvus 服务端未部署）/ milvus（部署后可由环境变量切换）
     vector-store:
-      type: ${BABYLOG_KB_VECTOR_STORE_TYPE:simple}
+      type: simple
       simple:
         data-path: ./data/kb/simple
         file-name: kb-store.json
@@ -269,52 +269,52 @@ babylog:
     # 默认带来 jvm.* / system.* / process.* / logback.* / hikaricp.* / http.server.requests，
     # 外加三类自研业务指标：检索调用量、AI 调用量与 token、慢接口。
     # ⚠️ 抓取端点免鉴权（Prometheus 抓取不带登录态）→ 生产必须在网络层（Nginx/安全组）限制内网。
-    enabled: ${BABYLOG_METRICS_ENABLED:true}
+    enabled: true
     prometheus:
       # 只摘端点、不停采集：指标仍在内存里，只是没人能抓走
-      enabled: ${BABYLOG_METRICS_PROMETHEUS_ENABLED:true}
+      enabled: true
       # 沿用 Prometheus 生态惯例（scrape_config 的默认 metrics_path 就是这个值），改这里要同步改抓取配置
-      path: ${BABYLOG_METRICS_PROMETHEUS_PATH:/actuator/prometheus}
+      path: /actuator/prometheus
     slow-request:
-      enabled: ${BABYLOG_METRICS_SLOW_REQUEST_ENABLED:true}
-      threshold-ms: ${BABYLOG_METRICS_SLOW_REQUEST_THRESHOLD_MS:1000}
+      enabled: true
+      threshold-ms: 1000
   search:
     # ST-SEARCH（S121）：搜索抽象层。type=simple 为进程内内存兜底（零中间件，重启即失），
     # 生产接入 ES 时引入 babylog-starter-search-easy-es（ES 7.17）或 -es-java（ES 8.x/9.x）
     # 并把 type 改为 easy-es / es-java；未命中已注册实现时自动回落 simple 并打 WARN（配错也能起服）
-    type: ${BABYLOG_SEARCH_TYPE:simple}
+    type: simple
     # 多环境共用一套 ES 时用它做索引名前缀隔离，留空表示不加前缀
-    index-prefix: ${BABYLOG_SEARCH_INDEX_PREFIX:}
+    index-prefix: 
     # es-java 实现（官方 elasticsearch-java 8.19.18，面向 ES 8.x/9.x）。
     # 未引入 babylog-starter-search-es-java 模块时，即便 type=es-java 也会回落到 simple 并打 WARN（配错也能起服）。
     # 具体地址/口令写在各环境的 application-{profile}.yml（dev 用 175.24.176.176，test 用 10.0.0.7）。
     es-java:
-      uris: ${BABYLOG_ES_JAVA_URIS:http://localhost:9200}
-      username: ${BABYLOG_ES_JAVA_USERNAME:}
-      password: ${BABYLOG_ES_JAVA_PASSWORD:}
+      uris: http://localhost:9200
+      username: 
+      password: 
       connect-timeout: 3000
       socket-timeout: 30000
       # 兼容模式：用 8.19 客户端连 ES 7.x 服务端时置 true（发 compatible-with=7 官方兼容头）。
       # 连 8.x / 9.x 服务端必须保持 false——实测 ES 9.5.3 会拒绝 compatible-with=7
       # （media_type_header_exception 400）；启动期版本探测会据此判不可用并回落 simple。
-      compatibility-mode: ${BABYLOG_ES_JAVA_COMPATIBILITY_MODE:false}
+      compatibility-mode: false
       # ES 默认近实时（写后最多 1s 才可检索）。置 true 改为 refresh=wait_for：写后立即可检索，
       # 代价是每次索引写入多一次 refresh 开销，高频写链路（操作日志）不建议开。
-      refresh-on-write: ${BABYLOG_ES_JAVA_REFRESH_ON_WRITE:false}
+      refresh-on-write: false
     # S122 业务检索开关：每条链路可单独关（关闭即回到 MyBatis 查询，零数据/零迁移的一键回滚）
     # 数据来源：写侧双写索引 + 起服时索引为空则从数据库全量回灌（simple 内存实现重启即失，靠它恢复）
     oper-log:
-      enabled: ${BABYLOG_SEARCH_OPER_LOG_ENABLED:true}
+      enabled: true
       bootstrap-on-start: true
       bootstrap-max-rows: 50000
     kb-doc:
-      enabled: ${BABYLOG_SEARCH_KB_DOC_ENABLED:true}
+      enabled: true
       bootstrap-on-start: true
       bootstrap-max-rows: 20000
     # S128：知识库「全文召回通道」（RAG 的关键词那一路，与上面 kb-doc 的列表检索不是一回事）
     # 走同一个 search 抽象：simple = 进程内确定性 BM25；es-java = 引擎侧 BM25（multi_match）
     kb-chunk:
-      enabled: ${BABYLOG_SEARCH_KB_CHUNK_ENABLED:true}
+      enabled: true
       bootstrap-on-start: true
       bootstrap-max-rows: 20000
       # 参与打分的字段（须与建索引时一致；指向 keyword 字段只会整值命中，拿不到 BM25）
@@ -339,9 +339,9 @@ babylog:
   # 即使超管（*:*），DROP / DELETE / UPDATE / INSERT / ALTER / TRUNCATE / GRANT / 多语句 / 注释绕过 也一律拒绝。
   datainspect:
     # 总开关；false 时所有组件一律降级（200 + available=false + reason）
-    enabled: ${BABYLOG_DATA_INSPECT_ENABLED:true}
+    enabled: true
     # 自由 SQL 开关（高危）。生产默认关闭，见 application-prod.yml
-    query-enabled: ${BABYLOG_DATA_INSPECT_QUERY_ENABLED:true}
+    query-enabled: true
     # 默认返回行数 / 硬上限（请求参数不可突破）
     max-rows: 200
     hard-max-rows: 1000
@@ -357,9 +357,9 @@ babylog:
     mask-enabled: true
     mysql:
       # false = 只查白名单表（安全默认）
-      allow-all-tables: ${BABYLOG_DATA_INSPECT_ALLOW_ALL_TABLES:false}
-      table-whitelist: ${BABYLOG_DATA_INSPECT_TABLE_WHITELIST:}
-      schema-whitelist: ${BABYLOG_DATA_INSPECT_SCHEMA_WHITELIST:}
+      allow-all-tables: false
+      table-whitelist: 
+      schema-whitelist: 
       tenant-id-column: tenant_id
     es:
       max-rows: 100
@@ -373,16 +373,16 @@ babylog:
     # false / 缺省 —— 守卫拦截旧入口（HTTP 410 + code=4100），单入口为 bpmn-js 新版设计器；
     # true —— 放行旧入口，回滚到并存态（仅改这一处即可，无需重新打包）
     legacy-designer:
-      enabled: ${BABYLOG_WORKFLOW_LEGACY_DESIGNER_ENABLED:false}
+      enabled: false
   # ==================== V3 微服务通道（ST-CLOUD） ====================
   # 三通道：local（自研零依赖，默认）/ cloud（Spring Cloud 原生）/ alibaba（Nacos + Sentinel）。
   # 通道实现是否进 fat jar 由 Maven profile 决定（-P cloud / -P alibaba）；
   # 这里只决定「装配哪个通道」与「跨进程传播到什么程度」。
   cloud:
     # 总开关：false 时所有通道 Bean 均不装配
-    enabled: ${BABYLOG_CLOUD_ENABLED:true}
+    enabled: true
     # 生效通道（写错回落 local 并打 WARN，不会起不来）
-    provider: ${BABYLOG_CLOUD_PROVIDER:local}
+    provider: local
     context:
       # 出站：调用下游时带上租户/身份/链路头
       propagate: true
@@ -393,12 +393,12 @@ babylog:
       restore-tenant: false
       restore-login: false
       # 内部调用凭证：留空 = 拒绝一切入站恢复
-      internal-token: ${BABYLOG_CLOUD_INTERNAL_TOKEN:}
+      internal-token: 
     local:
       # 要切成远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换（零网络行为）
-      proxied: ${BABYLOG_CLOUD_LOCAL_PROXIED:}
+      proxied: 
       # 是否暴露 /__rpc/invoke 服务端点。开启必须配 internal-token，否则启动 FAIL-FAST
-      server-enabled: ${BABYLOG_CLOUD_LOCAL_SERVER_ENABLED:false}
+      server-enabled: false
       # 静态实例表：serviceId -> host:port（local 通道不连任何注册中心）
       instances: {}
     # Spring Cloud 原生通道（-P cloud / -P alibaba 打进 fat jar 才有意义）
@@ -406,28 +406,28 @@ babylog:
       # 要切成 Feign 远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换
       # ⚠️ 前提：该接口方法必须带 Spring MVC 注解（Feign 的 Contract 靠它解析路径）。
       #    业务 Facade 契约（IUserFacade 等）目前没有 MVC 注解，直接填这里是建不出客户端的（已知待办）。
-      proxied: ${BABYLOG_CLOUD_SC_PROXIED:}
+      proxied: 
       # Feign 客户端服务名（走 LoadBalancer，需要注册中心）
-      service-id: ${BABYLOG_CLOUD_SC_SERVICE_ID:babylog-admin-server}
+      service-id: babylog-admin-server
       # 直连地址（形如 http://127.0.0.1:8080）；配了它就不走负载均衡，无注册中心也能跑
-      url: ${BABYLOG_CLOUD_SC_URL:}
+      url: 
       circuit-breaker:
         # 熔断（Resilience4j）总开关。默认 false —— 不打开就等于 Feign 客户端一层都没多包，
         # 与「包里有 Resilience4j 但没接线」完全一致（引入 ≠ 生效）。
         # 打开后：状态转换与被拒绝的调用会打 [CLOUD][cloud][CB] 前缀日志。
-        enabled: ${BABYLOG_CLOUD_SC_CB_ENABLED:false}
+        enabled: false
         # 熔断实例粒度：interface（默认，整个 Facade 一个）/ method（每个方法一个）
-        granularity: ${BABYLOG_CLOUD_SC_CB_GRANULARITY:interface}
+        granularity: interface
         # 降级口径：none（默认，抛 CloudCircuitBreakerOpenException，绝不静默返回 null）
         #           local（回落到容器内 <beanName>$Local 的进程内实现；本地实现缺席照抛异常）
         # 刻意不提供「返回 null / 空集合」：那会把「下游挂了」伪装成「业务本来就没数据」。
-        fallback-mode: ${BABYLOG_CLOUD_SC_CB_FALLBACK_MODE:none}
+        fallback-mode: none
         # 滑动窗口 / 最小调用数 / 失败率阈值（%）/ OPEN 停留时长 / 半开探测数
-        sliding-window-size: ${BABYLOG_CLOUD_SC_CB_WINDOW:100}
-        minimum-number-of-calls: ${BABYLOG_CLOUD_SC_CB_MIN_CALLS:20}
-        failure-rate-threshold: ${BABYLOG_CLOUD_SC_CB_FAILURE_RATE:50}
-        wait-duration-in-open-state: ${BABYLOG_CLOUD_SC_CB_WAIT:10s}
-        permitted-number-of-calls-in-half-open-state: ${BABYLOG_CLOUD_SC_CB_HALF_OPEN_CALLS:5}
+        sliding-window-size: 100
+        minimum-number-of-calls: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 5
         # 不计入失败的异常类名（逗号分隔的全限定名）。典型用法：把业务异常排除，
         # 让熔断只反映「通道不可用」而不是「业务拒绝了请求」。留空 = 记录所有 Throwable。
         # ignore-exceptions: com.babylog.common.api.exception.BizException
@@ -439,9 +439,9 @@ babylog:
     facade-http:
       # 默认不开：这是「默认形态零行为」边界的一部分。开启会强制校验 context.internal-token，
       # 未配凭证启动 FAIL-FAST（与 local 通道的 /__rpc/invoke 同口径）。
-      enabled: ${BABYLOG_CLOUD_FACADE_HTTP_ENABLED:false}
+      enabled: false
       # 白名单刻意不在 yml 里写默认值：
-      # 一旦写了 interfaces: ${X:} 且 X 为空，Spring 会把空串绑成空 List，
+      # 一旦写了 interfaces:  且 X 为空，Spring 会把空串绑成空 List，
       # 把代码默认值（只有 ContextFacade）顶掉 —— 「默认值」会被配置静默改写。
       # 因此业务接口一律由部署方显式传（命令行 --babylog.cloud.facade-http.interfaces=... 或环境变量）。
       #

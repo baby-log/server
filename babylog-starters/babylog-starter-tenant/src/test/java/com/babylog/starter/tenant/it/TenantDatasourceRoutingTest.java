@@ -1,6 +1,6 @@
 package com.babylog.starter.tenant.it;
 
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -21,9 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "babylog.tenant.mode=datasource",
         "babylog.tenant.datasource-map[2]=d2",
         "spring.datasource.dynamic.primary=master",
-        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://${BABYLOG_TEST_MYSQL_HOST:${MYSQL_HOST:175.24.176.176}}:${BABYLOG_TEST_MYSQL_PORT:${MYSQL_PORT:3306}}/test_tenant_d1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
+        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://175.24.176.176:3306/test_tenant_d1?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
         "spring.datasource.dynamic.datasource.master.username=root",
-        "spring.datasource.dynamic.datasource.master.password=${BABYLOG_TEST_MYSQL_PASSWORD:}",
         "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
 })
 @AutoConfigureMockMvc
@@ -49,8 +48,8 @@ class TenantDatasourceRoutingTest extends TenantRoutingITSupport {
         return PRIMARY_URL;
     }
 
-    @BeforeAll
-    static void prepareSecondaryDatasource() throws Exception {
+    @BeforeEach
+    void prepareSecondaryDatasource() throws Exception {
         createFixtureTableIfAbsent(SECONDARY_URL);
     }
 

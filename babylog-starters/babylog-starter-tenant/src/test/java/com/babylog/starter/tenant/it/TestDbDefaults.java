@@ -1,44 +1,34 @@
 package com.babylog.starter.tenant.it;
 
 /**
- * 集成测试的中间件地址默认值 —— **全仓只允许这一处出现 dev 环境的 IP 字面量**（V3.1-H · B5）。
+ * 集成测试的中间件地址常量（配置口径：全部内联 yml，不再走环境变量注入）。
  *
- * <p>为什么需要一个独立的类：CI 的 test job 会起自己的 MySQL / Redis 容器并注入
- * {@code MYSQL_HOST} / {@code REDIS_HOST}，但此前四个测试 yml 与四个租户 IT 类里都
- * **硬编码了 dev 主机的 IP**。后果有两个方向，都很糟：
- * <ol>
- *   <li>GitHub Actions 连不上那台机器 → 测试红灯，于是「CI 的 test job 从未真正通过」；</li>
- *   <li>反过来，若哪天 Runner 能连通这个公网地址 → CI 会把测试数据写进别人正在用的
- *       开发实例，而流水线依然显示通过。这比红灯更危险。</li>
- * </ol>
- *
- * <p>注解属性（{@code @SpringBootTest(properties=...)}）必须是编译期常量，没法调用本类的方法，
- * 所以那里写成 {@code ${BABYLOG_TEST_MYSQL_HOST:${MYSQL_HOST:175.24.176.176}}} 这样的占位符，
- * 由 Spring 在运行时从 Environment 解析；本类提供的是运行期用 JDBC 直连核对数据落位时
- * 需要的同样地址。**两者必须始终一致**
- * —— 这就是 {@code scripts/ops/check_ci_wiring.py} 里那条「默认值漂移」门禁要守的事。
+ * <p>历史：此前 CI 的 test job 会起自己的 MySQL / Redis 容器并注入
+ * {@code BABYLOG_TEST_*} 环境变量，本类按「env 优先、字面量兜底」解析，
+ * 并由 {@code scripts/ops/check_ci_wiring.py} 守护与 yml 的一致性。
+ * 2026-11-12 起项目废除 .env / 环境变量注入，测试配置全部内联在各模块
+ * {@code src/test/resources/application.yml}；本类只保留直连核对数据落位
+ * 需要的主机/端口常量——改 yml 时同步改这里。
  */
 final class TestDbDefaults {
 
-    /** dev 中间件主机。CI 注入 MYSQL_HOST 后自动让位。 */
+    /** dev 中间件主机（与各测试 yml 数据源一致）。 */
     static final String MYSQL_HOST = "175.24.176.176";
 
-    /** dev 中间件端口。CI 注入 MYSQL_PORT 后自动让位。 */
+    /** dev 中间件端口（与各测试 yml 数据源一致）。 */
     static final String MYSQL_PORT = "3306";
 
     private TestDbDefaults() {
     }
 
-    /** 按与 yml 完全相同的优先级解析主机：BABYLOG_TEST_MYSQL_HOST &gt; MYSQL_HOST &gt; 本地默认值。 */
+    /** 测试中间件主机。 */
     static String mysqlHost() {
-        return firstNonBlank(System.getenv("BABYLOG_TEST_MYSQL_HOST"),
-                System.getenv("MYSQL_HOST"), MYSQL_HOST);
+        return MYSQL_HOST;
     }
 
-    /** 同上处的端口解析：BABYLOG_TEST_MYSQL_PORT &gt; MYSQL_PORT &gt; 本地默认值。 */
+    /** 测试中间件端口。 */
     static String mysqlPort() {
-        return firstNonBlank(System.getenv("BABYLOG_TEST_MYSQL_PORT"),
-                System.getenv("MYSQL_PORT"), MYSQL_PORT);
+        return MYSQL_PORT;
     }
 
     /**
@@ -52,17 +42,8 @@ final class TestDbDefaults {
      */
     static String jdbcUrl(String database, boolean createDatabaseIfNotExist) {
         String base = "jdbc:mysql://" + mysqlHost() + ":" + mysqlPort() + "/" + database
-                + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+                + "?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai"
                 + "&useSSL=false&allowPublicKeyRetrieval=true";
         return createDatabaseIfNotExist ? base + "&createDatabaseIfNotExist=true" : base;
-    }
-
-    private static String firstNonBlank(String... candidates) {
-        for (String candidate : candidates) {
-            if (candidate != null && !candidate.isBlank()) {
-                return candidate.trim();
-            }
-        }
-        throw new IllegalStateException("至少一个候选值必须非空");
     }
 }

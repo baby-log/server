@@ -6,9 +6,9 @@ spring:
         master:
           # 开发库 babylog；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
           # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
-          url: ${BABYLOG_MYSQL_URL:jdbc:mysql://10.0.0.7:3306/babylog_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false}
-          username: ${BABYLOG_MYSQL_USERNAME:root}
-          password: ${BABYLOG_MYSQL_PASSWORD:mysql_DNCi3f}
+          url: jdbc:mysql://10.0.0.7:3306/babylog_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
+          username: root
+          password: mysql_DNCi3f
           driver-class-name: com.mysql.cj.jdbc.Driver
       # 连接池（V3.1-G · P1-B2）：与容量无关的生产参数在 application.yml，
       # 这里只给容量三件套。test 保持 20/5/5，与全量 IT 的既有基线一致。
@@ -18,9 +18,9 @@ spring:
         max-active: 20
   data:
     redis:
-      host: ${BABYLOG_REDIS_HOST:10.0.0.7}
+      host: 10.0.0.7
       port: 6379
-      password: ${BABYLOG_REDIS_PASSWORD:redis_Q6aiiX}
+      password: redis_Q6aiiX
       timeout: 5s
       database: 1
 
@@ -28,7 +28,7 @@ spring:
     # test 兜底：自动化测试未注入环境变量时保持既有行为
     # 优先级：环境变量 BABYLOG_LLM_API_KEY > 此兜底值；生产环境必须通过环境变量注入
     openai:
-      api-key: ${BABYLOG_LLM_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+      api-key: sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC
     # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
     # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
     #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
@@ -66,8 +66,8 @@ babylog:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: ${BABYLOG_COS_ACCESS_KEY:AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC}
-    secret-key: ${BABYLOG_COS_SECRET_KEY:ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO}
+    access-key: AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC
+    secret-key: ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
@@ -77,15 +77,15 @@ babylog:
     app-name: babylog-test-executor
     port: 9999
     group-id: 3   # XXL-Job admin 中 babylog-executor 执行器组 ID
-    access-token: ${BABYLOG_XXL_JOB_ACCESS_TOKEN:123456}
+    access-token: 123456
   # 检索（S121/S122）：test 环境 ES——10.0.0.7:9200（内网，与 test 库同机；口令与 dev 一致）
   # 注意：10.0.0.7 属内网网段，非该 VPC 内（如开发机）访问不通——检索会自动回退数据库查询，不影响业务。
   search:
-    type: ${BABYLOG_SEARCH_TYPE:es-java}
+    type: es-java
     es-java:
-      uris: ${BABYLOG_ES_JAVA_URIS:http://10.0.0.7:9200}
-      username: ${BABYLOG_ES_JAVA_USERNAME:elastic}
-      password: ${BABYLOG_ES_JAVA_PASSWORD:Elastic_RGRSPM}
+      uris: http://10.0.0.7:9200
+      username: elastic
+      password: Elastic_RGRSPM
   # 微信小程序（测试号）
   wechat:
     miniapp:

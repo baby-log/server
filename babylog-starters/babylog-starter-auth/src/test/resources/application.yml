@@ -1,9 +1,9 @@
 spring:
   data:
     redis:
-      host: ${BABYLOG_TEST_REDIS_HOST:${REDIS_HOST:175.24.176.176}}
-      port: ${BABYLOG_TEST_REDIS_PORT:${REDIS_PORT:6379}}
-      password: ${BABYLOG_TEST_REDIS_PASSWORD:${REDIS_PASSWORD:}}
+      host: 175.24.176.176
+      port: 6379
+      password: 
       timeout: 5s
 
 sa-token:

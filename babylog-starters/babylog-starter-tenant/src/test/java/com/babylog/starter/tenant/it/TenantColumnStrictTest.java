@@ -19,9 +19,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "babylog.tenant.mode=column",
         "babylog.tenant.strict=true",
         "spring.datasource.dynamic.primary=master",
-        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://${BABYLOG_TEST_MYSQL_HOST:${MYSQL_HOST:175.24.176.176}}:${BABYLOG_TEST_MYSQL_PORT:${MYSQL_PORT:3306}}/test_tenant?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
+        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://175.24.176.176:3306/test_tenant?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
         "spring.datasource.dynamic.datasource.master.username=root",
-        "spring.datasource.dynamic.datasource.master.password=${BABYLOG_TEST_MYSQL_PASSWORD:}",
         "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
 })
 @AutoConfigureMockMvc

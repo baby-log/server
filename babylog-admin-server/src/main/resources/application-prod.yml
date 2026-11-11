@@ -1,3 +1,8 @@
+# ============================================================
+# 生产配置（本仓库为私有仓库，凭据直接填在本文件，不再走环境变量注入）。
+# 部署前必填：MySQL url/username/password、Redis host/password、
+#           field-encrypt-key（写入即不可换）、LLM api-key（AI 能力）。
+# ============================================================
 spring:
   datasource:
     dynamic:
@@ -5,9 +10,9 @@ spring:
       datasource:
         master:
           # 生产连接与凭据必须由环境变量注入；空默认用于 fail-fast，禁止回填真实值
-          url: ${BABYLOG_MYSQL_URL:}
-          username: ${BABYLOG_MYSQL_USERNAME:}
-          password: ${BABYLOG_MYSQL_PASSWORD:}
+          url: 
+          username: 
+          password: 
           driver-class-name: com.mysql.cj.jdbc.Driver
       # ===== 连接池（V3.1-G · P1-B2）=====
       # 与容量无关的生产参数（获取等待/有效性检测/驱逐/保活/泄漏回收/慢SQL）
@@ -24,16 +29,16 @@ spring:
         max-active: 50
   data:
     redis:
-      host: ${BABYLOG_REDIS_HOST:}
+      host: 
       port: 6379
-      password: ${BABYLOG_REDIS_PASSWORD:}
+      password: 
       timeout: 5s
       database: 0
 
   ai:
     # 生产禁止凭据兜底，未注入时 AI 能力不可用
     openai:
-      api-key: ${BABYLOG_LLM_API_KEY:}
+      api-key: 
     # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
     # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
     #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
@@ -83,8 +88,8 @@ babylog:
     storage-type: s3
     vendor: cos
     endpoint: https://cos.ap-shanghai.myqcloud.com
-    access-key: ${BABYLOG_COS_ACCESS_KEY:}
-    secret-key: ${BABYLOG_COS_SECRET_KEY:}
+    access-key: 
+    secret-key: 
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
@@ -94,22 +99,22 @@ babylog:
     app-name: babylog-executor
     port: 9999
     group-id: 3   # XXL-Job admin 中 babylog-executor 执行器组 ID
-    access-token: ${BABYLOG_XXL_JOB_ACCESS_TOKEN:}
+    access-token: 
   # 检索（S121/S122）：生产 ES = 10.0.4.15:9200（2026-10-02 接线，接法与 dev 完全一致：
   # type=es-java + uris/username/password + compatibility-mode；admin-server 已引入 es-java 实现）。
   # 启动期探测服务端版本；若生产 ES 为 7.17，启动时加 BABYLOG_ES_JAVA_COMPATIBILITY_MODE=true
   # （dev/test 服务端为 9.x，故默认 false）。检索不可用时链路自动回退数据库查询，业务零阻断。
   search:
-    type: ${BABYLOG_SEARCH_TYPE:es-java}
+    type: es-java
     es-java:
-      uris: ${BABYLOG_ES_JAVA_URIS:http://10.0.4.15:9200}
-      username: ${BABYLOG_ES_JAVA_USERNAME:elastic}
-      password: ${BABYLOG_ES_JAVA_PASSWORD:}
-      compatibility-mode: ${BABYLOG_ES_JAVA_COMPATIBILITY_MODE:false}
+      uris: http://10.0.4.15:9200
+      username: elastic
+      password: 
+      compatibility-mode: false
   # ST-DATAINSPECT（S130）：通用数据监控。生产默认关闭自由 SQL（高危）——
   # 仍可浏览库表与预览，放开自由 SQL 需显式改这里并重启（权限不能替代此开关）
   datainspect:
-    query-enabled: ${BABYLOG_DATA_INSPECT_QUERY_ENABLED:false}
+    query-enabled: false
   # 微信小程序（测试号）
   wechat:
     miniapp:

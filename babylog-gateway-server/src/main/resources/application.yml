@@ -14,24 +14,24 @@ spring:
   config:
     import:
       - optional:nacos:babylog-gateway.yaml
-      - optional:nacos:babylog-gateway-${BABYLOG_NACOS_CONFIG_ENV:dev}.yaml
+      - optional:nacos:babylog-gateway-dev.yaml
   cloud:
     # ===== Nacos 连接信息（同源占位符，凭据一律环境变量，不落 git）=====
     # ⚠️ 缩进必须是 2 空格：spring 的直接子项写成 4 空格会落进别的子树，属性静默失效且不报错。
     nacos:
       config:
-        server-addr: ${BABYLOG_NACOS_SERVER_ADDR:127.0.0.1:8848}
-        username: ${BABYLOG_NACOS_USERNAME:}
-        password: ${BABYLOG_NACOS_PASSWORD:}
-        namespace: ${BABYLOG_NACOS_NAMESPACE:}
-        group: ${BABYLOG_NACOS_GROUP:DEFAULT_GROUP}
+        server-addr: 127.0.0.1:8848
+        username: 
+        password: 
+        namespace: 
+        group: DEFAULT_GROUP
         # dataId 后缀必须与 file-extension 一致，否则内容解析不到
         file-extension: yaml
         # optional: 已兜住失败，这里只是别让不可达时白等 30s
         timeout: 3000
       discovery:
         # 网关默认不注册自身：入口侧直接指向网关，它不需要被服务发现找到
-        enabled: ${BABYLOG_NACOS_GATEWAY_DISCOVERY_ENABLED:false}
+        enabled: false
         fail-fast: false
         # 真正管「Nacos 不可达也不许把进程带崩」的是这个开关，fail-fast=false 只管是否快速失败
         failure-tolerance-enabled: true
