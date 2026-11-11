@@ -285,7 +285,7 @@ def strip_leading_comments(statement: str) -> str:
     dump 的头部注释会被 `iter_statements` 并入紧随其后的第一条语句（MySQL 接受前置注释），
     于是 USE 那条语句在切分结果里长这样（前面挂着两行注释）：
 
-        -- PivotOS MySQL logical backup
+        -- BabyLog MySQL logical backup
         -- Generated at: 2026-10-11T00:00:00Z
         USE <源库名>;
 

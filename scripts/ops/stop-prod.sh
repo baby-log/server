@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PivotOS 生产环境停止脚本（随代码库版本化 · v3.1.0 生产化 A3）
+# BabyLog 生产环境停止脚本（随代码库版本化 · v3.1.0 生产化 A3）
 #
 # 口径：先 SIGTERM 让 Spring 走一遍停机流程，超时 SIGKILL。**不搞 kill -9 一把梭**——
 # 那样会丢掉在途请求与「停机期间正在写的」数据（定时任务、AI 流式输出尤其明显）。
@@ -14,8 +14,8 @@
 
 set -euo pipefail
 
-APP_HOME="${APP_HOME:-/opt/pivotos}"
-LOG_DIR="${PIVOTOS_LOG_DIR:-$APP_HOME/logs}"
+APP_HOME="${APP_HOME:-/opt/babylog}"
+LOG_DIR="${BABYLOG_LOG_DIR:-$APP_HOME/logs}"
 PID_FILE="$LOG_DIR/admin-server.pid"
 TERM_TIMEOUT_SECONDS="${TERM_TIMEOUT_SECONDS:-30}"
 
@@ -31,7 +31,7 @@ if ! kill -0 "$PID" 2>/dev/null; then
   exit 0
 fi
 
-echo "停止 PivotOS（PID=${PID}）..."
+echo "停止 BabyLog（PID=${PID}）..."
 kill -TERM "$PID" || true
 
 DEADLINE=$(( $(date +%s) + TERM_TIMEOUT_SECONDS ))

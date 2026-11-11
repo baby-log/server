@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S118 E2E：AI-2 @Tool **四入口**齐全 + migration 详情端点语义修复
+BabyLog S118 E2E：AI-2 @Tool **四入口**齐全 + migration 详情端点语义修复
 
 四入口（同一 @Tool 注册表、同一 AiToolService.invokeTool 守卫链路）：
   ① REST  POST /ai/tool/call
@@ -25,7 +25,7 @@ import time
 import requests
 
 BASE = "http://localhost:8080"
-CLI = "/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework/scripts/pivot-ai-tool"
+CLI = "/Users/huweilong/WorkBuddy/业余项目/server/scripts/pivot-ai-tool"
 TOOL = "queryMyPendingTaskCount"
 ARGS = {"confirm": True}
 
@@ -200,7 +200,7 @@ log("PASS5", f"SSE 错误帧 code={err_payload['code']} msg={err_payload['msg']}
 
 # ── Step 6: 入口④ CLI ─────────────────────────────────────
 log("STEP6", "CLI 入口 scripts/pivot-ai-tool ...")
-# CLI 的 token 默认取本机缓存 ~/.cache/pivotos/tool-cli-token，那是**仓外残留状态**：
+# CLI 的 token 默认取本机缓存 ~/.cache/babylog/tool-cli-token，那是**仓外残留状态**：
 # 换机 / CI / 缓存被清即报「[4] 未提供 token 且无凭据」exit=1（S119 首跑实证）。
 # 口径同 S115 K1「fixture 一律脚本自生产，不依赖仓外残留」：先 login 再 list/call。
 login_out = subprocess.run([sys.executable, CLI, "login",

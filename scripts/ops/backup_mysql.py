@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PivotOS MySQL 逻辑备份。
+BabyLog MySQL 逻辑备份。
 
 目的：
 - 在没有 mysql/mysqldump 客户端时，使用 pymysql 生成可恢复的 SQL。
@@ -10,8 +10,8 @@ PivotOS MySQL 逻辑备份。
 - 可选按份数轮转（V3.1-H · B4）：`--retain N` 只保留最近 N 份成功备份。
 
 凭据：
-- 推荐从 PIVOTOS_MYSQL_URL / PIVOTOS_MYSQL_USERNAME /
-  PIVOTOS_MYSQL_PASSWORD 环境变量读取。
+- 推荐从 BABYLOG_MYSQL_URL / BABYLOG_MYSQL_USERNAME /
+  BABYLOG_MYSQL_PASSWORD 环境变量读取。
 - 也支持命令行参数；脚本不会打印密码。
 
 ⚠️ 保留策略的逻辑（谁能删、按什么顺序删、什么情况拒绝删）刻意放在 `backup_lib.py`
@@ -71,33 +71,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--url",
-        default=os.getenv("PIVOTOS_MYSQL_URL"),
-        help="JDBC/MySQL URL；默认读取 PIVOTOS_MYSQL_URL。",
+        default=os.getenv("BABYLOG_MYSQL_URL"),
+        help="JDBC/MySQL URL；默认读取 BABYLOG_MYSQL_URL。",
     )
     parser.add_argument(
         "--host",
-        default=os.getenv("PIVOTOS_MYSQL_HOST"),
+        default=os.getenv("BABYLOG_MYSQL_HOST"),
         help="MySQL 主机；优先级高于 --url。",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.getenv("PIVOTOS_MYSQL_PORT", "0")) or None,
+        default=int(os.getenv("BABYLOG_MYSQL_PORT", "0")) or None,
         help="MySQL 端口；优先级高于 --url，默认 3306。",
     )
     parser.add_argument(
         "--username",
-        default=os.getenv("PIVOTOS_MYSQL_USERNAME"),
-        help="MySQL 用户名；默认读取 PIVOTOS_MYSQL_USERNAME。",
+        default=os.getenv("BABYLOG_MYSQL_USERNAME"),
+        help="MySQL 用户名；默认读取 BABYLOG_MYSQL_USERNAME。",
     )
     parser.add_argument(
         "--password",
-        default=os.getenv("PIVOTOS_MYSQL_PASSWORD"),
-        help="MySQL 密码；推荐使用 PIVOTOS_MYSQL_PASSWORD，避免出现在进程列表。",
+        default=os.getenv("BABYLOG_MYSQL_PASSWORD"),
+        help="MySQL 密码；推荐使用 BABYLOG_MYSQL_PASSWORD，避免出现在进程列表。",
     )
     parser.add_argument(
         "--database",
-        default=os.getenv("PIVOTOS_MYSQL_DATABASE"),
+        default=os.getenv("BABYLOG_MYSQL_DATABASE"),
         help="数据库名；优先级高于 --url。",
     )
     parser.add_argument(
@@ -154,10 +154,10 @@ def resolve_connection(args: argparse.Namespace) -> ConnectionOptions:
     missing = [
         name
         for name, value in (
-            ("host（--host 或 PIVOTOS_MYSQL_URL）", host),
-            ("username（--username 或 PIVOTOS_MYSQL_USERNAME）", args.username),
-            ("password（--password 或 PIVOTOS_MYSQL_PASSWORD）", args.password),
-            ("database（--database 或 PIVOTOS_MYSQL_URL）", database),
+            ("host（--host 或 BABYLOG_MYSQL_URL）", host),
+            ("username（--username 或 BABYLOG_MYSQL_USERNAME）", args.username),
+            ("password（--password 或 BABYLOG_MYSQL_PASSWORD）", args.password),
+            ("database（--database 或 BABYLOG_MYSQL_URL）", database),
         )
         if value is None
     ]
@@ -308,7 +308,7 @@ def backup_database(args: argparse.Namespace, options: ConnectionOptions) -> tup
 
         with temp_path.open("w", encoding="utf-8", newline="\n") as output:
             os.chmod(temp_path, 0o600)
-            output.write("-- PivotOS MySQL logical backup\n")
+            output.write("-- BabyLog MySQL logical backup\n")
             output.write(f"-- Generated at: {datetime.now(timezone.utc).isoformat()}\n")
             output.write(f"-- Database: {options.database}\n")
             output.write("SET NAMES utf8mb4;\n")
@@ -332,7 +332,7 @@ def backup_database(args: argparse.Namespace, options: ConnectionOptions) -> tup
         os.chmod(sql_path, 0o600)
         total_rows = sum(item.dumped_rows for item in backups)
         manifest = {
-            "format": "pivotos-mysql-logical-backup-v1",
+            "format": "babylog-mysql-logical-backup-v1",
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "database": options.database,
             "tableCount": len(backups),

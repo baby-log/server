@@ -3,7 +3,7 @@
 
 做什么：
   起 dev 形态 fat jar → 从 /v3/api-docs 取全部 path → 逐个匿名实打 GET →
-  按「响应体出现成功码」判定是否漏出（PivotOS code=0 / warm-flow code=200）→
+  按「响应体出现成功码」判定是否漏出（BabyLog code=0 / warm-flow code=200）→
   与 ALWAYS_ANONYMOUS 白名单比对，多一个就 FAIL。
 
 为什么做成脚本而不是一次性取证：
@@ -37,8 +37,8 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v31c-e2e"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v31c-e2e"
 
 # 设计上就应当匿名、且**会被本脚本扫到**的端点（每一条都必须写清理由）。
 # 登录类端点（/system/auth/login、/app/**/login、/mini/**/login 等）是 POST，不在本脚本的 GET 扫描范围，
@@ -48,7 +48,7 @@ ALWAYS_ANONYMOUS = {
     "/health/ready": "就绪探针：同上；匿名只给 status+checks，明细需登录",
     # V3.1-F · P1-B8-1：Prometheus server 抓取不带登录态，端点必须匿名可达。
     # 代价是「指标全貌对任何能访问该端口的人可见」，故生产必须在网络层限内网，
-    # 或用 PIVOTOS_METRICS_PROMETHEUS_ENABLED=false 把端点整个摘掉。
+    # 或用 BABYLOG_METRICS_PROMETHEUS_ENABLED=false 把端点整个摘掉。
     "/actuator/prometheus": "Prometheus 抓取端点：抓取方无登录态，必须匿名；生产须限内网或整体摘除",
 }
 
@@ -76,9 +76,9 @@ def port_busy(port=8080) -> bool:
 
 
 def clean_env(extra=None):
-    """避免上一段遗留的 PIVOTOS_* 污染本次起服（连接串带 createDatabaseIfNotExist=true，
+    """避免上一段遗留的 BABYLOG_* 污染本次起服（连接串带 createDatabaseIfNotExist=true，
     连错库也不报错，是本项目最容易踩的坑）。"""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     if extra:
         env.update(extra)
@@ -204,7 +204,7 @@ def is_leak(body, http_status):
     """匿名可达判定（HTTP 状态码恒 200，只能读 body，勿按状态码断言）。
 
     三类都算「匿名可达」：
-      · PivotOS 成功：code=0
+      · BabyLog 成功：code=0
       · warm-flow 内置端点成功：code=200
       · 无 code 字段的 200 JSON：如 /health/live 的 {"status":"UP"}（探针本就免鉴权）
     被拦的形态是 code=1002（未登录）/ 1004（不存在）/ 1003（无权限），均不算。

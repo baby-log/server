@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S97 A2 前置验证 E2E 脚本（2026-08-23 第 5 轮）
+BabyLog S97 A2 前置验证 E2E 脚本（2026-08-23 第 5 轮）
 目标（13 号清单 S97 一票否决点）：
   ① spring-ai-starter-mcp-server-webmvc 2.0.0 与 Boot 4.1/JDK 25 兼容（启动即证）；
   ② @Tool 方法 queryMyPendingTaskCount 经 MCP SSE 端点被列出（tools/list）；

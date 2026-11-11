@@ -1,0 +1,4 @@
+com.babylog.starter.core.config.CoreAutoConfiguration
+com.babylog.starter.core.config.TraceAutoConfiguration
+com.babylog.starter.core.config.JsonAutoConfiguration
+com.babylog.starter.core.config.I18nAutoConfiguration

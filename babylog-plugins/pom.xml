@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.babylog</groupId>
+        <artifactId>babylog-server</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <artifactId>babylog-plugins</artifactId>
+    <packaging>pom</packaging>
+
+    <name>babylog-plugins</name>
+    <description>BabyLog 业务插件聚合层（system 等可插拔业务模块）</description>
+
+    <modules>
+        <module>babylog-plugin-system-api</module>
+        <module>babylog-plugin-system</module>
+        <module>babylog-plugin-message-api</module>
+        <module>babylog-plugin-message</module>
+        <module>babylog-plugin-file-api</module>
+        <module>babylog-plugin-file</module>
+        <module>babylog-plugin-ai-api</module>
+        <module>babylog-plugin-ai</module>
+        <module>babylog-plugin-generator-api</module>
+        <module>babylog-plugin-generator</module>
+        <module>babylog-plugin-ai-coding-api</module>
+        <module>babylog-plugin-ai-coding</module>
+        <module>babylog-plugin-monitor</module>
+        <module>babylog-plugin-workflow-api</module>
+        <module>babylog-plugin-workflow</module>
+        <module>babylog-plugin-ai-kb-api</module>
+        <module>babylog-plugin-ai-kb</module>
+        <module>babylog-plugin-docsync-api</module>
+        <module>babylog-plugin-docsync</module>
+        <module>babylog-plugin-migration-api</module>
+        <module>babylog-plugin-migration</module>
+        <module>babylog-plugin-mind-api</module>
+        <module>babylog-plugin-mind</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.babylog</groupId>
+                <artifactId>babylog-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- Swagger/OpenAPI 注解（@Tag/@Operation/@Schema）提供给所有插件编译使用，版本由 BOM 统一管理 -->
+    <dependencies>
+        <dependency>
+            <groupId>io.swagger.core.v3</groupId>
+            <artifactId>swagger-annotations-jakarta</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

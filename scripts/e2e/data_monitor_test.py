@@ -43,16 +43,16 @@ import requests
 
 BASE = "http://localhost:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
-JAR = os.path.join(os.path.dirname(__file__), "..", "..", "pivotos-admin-server", "target",
-                   "pivotos-admin-server.jar")
-LOG_DIR = "/tmp/pivotos-data-monitor-e2e"
+JAR = os.path.join(os.path.dirname(__file__), "..", "..", "babylog-admin-server", "target",
+                   "babylog-admin-server.jar")
+LOG_DIR = "/tmp/babylog-data-monitor-e2e"
 
 DB = dict(
     host="175.24.176.176",
     port=3306,
     user="root",
     password="mysql_DNCi3f",
-    database="pivotos_dev",
+    database="babylog_dev",
     charset="utf8mb4",
 )
 
@@ -115,10 +115,10 @@ def start_server(extra_args=(), tag="main"):
         "-Djava.awt.headless=true",
         "-jar", os.path.abspath(JAR),
         "--spring.profiles.active=dev",
-        "--pivotos.datainspect.enabled=true",
-        "--pivotos.datainspect.query-enabled=true",
+        "--babylog.datainspect.enabled=true",
+        "--babylog.datainspect.query-enabled=true",
         # 超时熔断场景（H）用 1s，逼出「慢语句被熔断」形态
-        "--pivotos.datainspect.query-timeout-seconds=1",
+        "--babylog.datainspect.query-timeout-seconds=1",
         *extra_args,
     ]
     env = dict(os.environ)
@@ -467,7 +467,7 @@ def run_main():
         # ⑧ 超时熔断（软断言：1s 超时下，慢语句要么快到成功，要么被熔断降级，两者都合法）
         r, body = call(hdr, "post", "/monitor/data/query",
                        json={"component": "mysql", "schema": schema,
-                             "statement": "SELECT * FROM sys_oper_log WHERE request_params LIKE '%PivotOS%'"})
+                             "statement": "SELECT * FROM sys_oper_log WHERE request_params LIKE '%BabyLog%'"})
         data = body.get("data") or {}
         ok = (data.get("available") is True) or (data.get("reasonCode") == "COLLECT_FAILED")
         check("H-超时", r.status_code == 200 and ok,
@@ -514,10 +514,10 @@ def run_main():
 
 def run_es_target(name, uris, compatibility_mode, username, password):
     """设计 §9-H：ES 双版本各跑一遍（9200 9.5.3 / 9201 7.17.28 + compatibility-mode=true）。"""
-    args = [f"--pivotos.search.es-java.uris={uris}",
-            f"--pivotos.search.es-java.compatibility-mode={compatibility_mode}",
-            f"--pivotos.search.es-java.username={username}",
-            f"--pivotos.search.es-java.password={password}"]
+    args = [f"--babylog.search.es-java.uris={uris}",
+            f"--babylog.search.es-java.compatibility-mode={compatibility_mode}",
+            f"--babylog.search.es-java.username={username}",
+            f"--babylog.search.es-java.password={password}"]
     proc, fh = start_server(extra_args=args, tag=f"es-{name}")
     try:
         hdr = login()
@@ -528,7 +528,7 @@ def run_es_target(name, uris, compatibility_mode, username, password):
 
 def run_es_unreachable():
     """设计 §9-G：ES 不可达 → 200 + code=0 + available=false + reason，绝不 500。"""
-    args = [f"--pivotos.search.es-java.uris={ES_UNREACHABLE}"]
+    args = [f"--babylog.search.es-java.uris={ES_UNREACHABLE}"]
     proc, fh = start_server(extra_args=args, tag="es-down")
     try:
         hdr = login()

@@ -105,7 +105,7 @@ def clean_reports(root: Path) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="PivotOS 统一 IT 计数（口径冻结）")
+    ap = argparse.ArgumentParser(description="BabyLog 统一 IT 计数（口径冻结）")
     ap.add_argument("--clean", action="store_true", help="统计前先删除历史 surefire 报告")
     ap.add_argument("--clean-only", action="store_true",
                     help="只删历史报告然后退出（跑 IT 之前先做这一步）")
@@ -150,7 +150,7 @@ def main() -> int:
             problems.append(f"{report}: 报告已存在 {age_h:.1f}h（可能是历史残留，会顶高计数）")
 
     print("=" * 72)
-    print("[count-tests] PivotOS IT 计数（口径已冻结：只与本脚本的前后结果对比）")
+    print("[count-tests] BabyLog IT 计数（口径已冻结：只与本脚本的前后结果对比）")
     print("=" * 72)
     print(f"{'模块':<44}{'用例':>7}{'失败':>6}{'错误':>6}{'跳过':>6}{'耗时s':>9}")
     print("-" * 72)

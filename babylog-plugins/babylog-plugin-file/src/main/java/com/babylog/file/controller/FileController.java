@@ -1,0 +1,88 @@
+package com.babylog.file.controller;
+
+import cn.dev33.satoken.annotation.SaCheckPermission;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import com.babylog.common.core.enums.error.GlobalErrorCode;
+import com.babylog.common.core.exception.ServiceException;
+import com.babylog.common.core.page.PageResult;
+import com.babylog.common.core.result.R;
+import com.babylog.file.api.dto.PresignResult;
+import com.babylog.file.domain.dto.FilePageQuery;
+import com.babylog.file.domain.dto.FileRegisterRequest;
+import com.babylog.file.domain.vo.SysFileVO;
+import com.babylog.file.service.FileService;
+import com.babylog.starter.auth.account.StpSysUtil;
+import com.babylog.starter.core.context.LoginContext;
+import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 文件预签名与元数据接口。
+ * presign / presign-download / register 三端通用（sys / app / wx-mini，
+ * 登录态由 LoginContextFilter 统一解析，只校验"已登录"）；
+ * page / delete 是后台管理能力，走 file:file:* 权限（sys 账号体系）。
+ */
+@Tag(name = "文件管理", description = "文件预签名上传/下载 + 元数据管理")
+@RestController
+@RequestMapping("/file")
+@RequiredArgsConstructor
+public class FileController {
+
+    private final FileService fileService;
+
+    /** 预签名直传地址（PUT） */
+    @Operation(summary = "预签名直传地址（PUT）")
+    @GetMapping("/presign")
+    public R<PresignResult> presign(@RequestParam String filename) {
+        if (!LoginContext.isLogin()) {
+            throw new ServiceException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        return R.ok(fileService.presignUpload(filename));
+    }
+
+    /** 预签名下载地址（GET，私有桶回显：key 可传对象键或历史完整 fileUrl） */
+    @Operation(summary = "预签名下载地址（GET，私有桶回显：key 可传对象键或历史完整 fileUrl）")
+    @GetMapping("/presign-download")
+    public R<String> presignDownload(@RequestParam String key) {
+        if (!LoginContext.isLogin()) {
+            throw new ServiceException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        return R.ok(fileService.presignDownload(key));
+    }
+
+    /** 直传完成回调登记（sys_file 元数据落库，三端通用） */
+    @Operation(summary = "直传完成回调登记（sys_file 元数据落库，三端通用）")
+    @PostMapping("/register")
+    public R<Long> register(@Validated @RequestBody FileRegisterRequest request) {
+        if (!LoginContext.isLogin()) {
+            throw new ServiceException(GlobalErrorCode.UNAUTHORIZED);
+        }
+        return R.ok(fileService.register(request));
+    }
+
+    /** 文件元数据分页（后台管理，多租户行级隔离自动生效） */
+    @Operation(summary = "文件元数据分页（后台管理，多租户行级隔离自动生效）")
+    @GetMapping("/page")
+    @SaCheckPermission(value = "file:file:list", type = StpSysUtil.TYPE)
+    public R<PageResult<SysFileVO>> page(FilePageQuery query) {
+        return R.ok(fileService.page(query));
+    }
+
+    /** 删除文件（存储对象 + 元数据同删） */
+    @Operation(summary = "删除文件（存储对象 + 元数据同删）")
+    @DeleteMapping("/{id}")
+    @SaCheckPermission(value = "file:file:remove", type = StpSysUtil.TYPE)
+    public R<Void> delete(@PathVariable Long id) {
+        fileService.delete(id);
+        return R.ok();
+    }
+}

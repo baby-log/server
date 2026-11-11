@@ -4,7 +4,7 @@
 用内存假 fixture 钉死框架的六条契约——历史上 E2E 的 fixture 漂移本质就是这六条
 没有任何一条被代码保证过。
 
-运行：cd pivotos-framework && python3 scripts/e2e/fixture_selfheal_test.py
+运行：cd babylog-server && python3 scripts/e2e/fixture_selfheal_test.py
 """
 from __future__ import annotations
 

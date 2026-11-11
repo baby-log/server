@@ -8,7 +8,7 @@
     两者缺一不可 —— 只做单测会漏掉「真实 DTO 上有没有不可序列化字段」这类问题。
 
 覆盖（单场景，脚本自起自停一套 dev 后端，8080）：
-  ① 起服冒烟：Flyway validated + database=pivotos_dev + 登录 code=0 + 匿名 /sse 401
+  ① 起服冒烟：Flyway validated + database=babylog_dev + 登录 code=0 + 匿名 /sse 401
   ② 预置组一致性：脚本里的白名单直接解析自 FacadeHttpPresets.java（防两处漂移）
   ③ 安全口径：无凭证 403 / 错凭证 403 / 白名单外接口 404
   ④ 只读业务方法真调：system 5 个 + file/ai/kb/generator/migration 各取代表
@@ -36,16 +36,16 @@ import urllib.request
 BASE = "http://localhost:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 HERE = os.path.dirname(os.path.abspath(__file__))
-JAR = os.path.abspath(os.path.join(HERE, "..", "..", "pivotos-admin-server", "target",
-                                   "pivotos-admin-server.jar"))
+JAR = os.path.abspath(os.path.join(HERE, "..", "..", "babylog-admin-server", "target",
+                                   "babylog-admin-server.jar"))
 PRESETS_JAVA = os.path.abspath(os.path.join(
-    HERE, "..", "..", "pivotos-starters", "pivotos-starter-cloud-api", "src", "main", "java",
-    "com", "pivotos", "starter", "cloud", "api", "facade", "FacadeHttpPresets.java"))
-LOG_DIR = "/tmp/pivotos-facade-http-e2e"
+    HERE, "..", "..", "babylog-starters", "babylog-starter-cloud-api", "src", "main", "java",
+    "com", "babylog", "starter", "cloud", "api", "facade", "FacadeHttpPresets.java"))
+LOG_DIR = "/tmp/babylog-facade-http-e2e"
 LOG_PATH = os.path.join(LOG_DIR, "server.log")
 
 TOKEN = "facade-http-e2e-token"
-CONTEXT_FACADE = "com.pivotos.common.api.context.ContextFacade"
+CONTEXT_FACADE = "com.babylog.common.api.context.ContextFacade"
 
 results = []
 
@@ -94,11 +94,11 @@ def start_server(whitelist):
     os.makedirs(LOG_DIR, exist_ok=True)
     cmd = [JAVA, "-Djna.library.path=/opt/homebrew/lib", "-Djava.awt.headless=true",
            "-jar", JAR, "--spring.profiles.active=dev",
-           "--pivotos.cloud.facade-http.enabled=true",
-           f"--pivotos.cloud.context.internal-token={TOKEN}",
-           "--pivotos.cloud.context.restore-tenant=true",
-           "--pivotos.cloud.context.restore-login=true",
-           f"--pivotos.cloud.facade-http.interfaces={CONTEXT_FACADE},{whitelist}"]
+           "--babylog.cloud.facade-http.enabled=true",
+           f"--babylog.cloud.context.internal-token={TOKEN}",
+           "--babylog.cloud.context.restore-tenant=true",
+           "--babylog.cloud.context.restore-login=true",
+           f"--babylog.cloud.facade-http.interfaces={CONTEXT_FACADE},{whitelist}"]
     env = dict(os.environ)
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     fh = open(LOG_PATH, "wb")
@@ -170,13 +170,13 @@ def facade(iface, method, args=None, headers=None):
 
 
 def internal(tenant=None, user=None, username=None, token=TOKEN):
-    h = {"X-PivotOS-Internal": token}
+    h = {"X-BabyLog-Internal": token}
     if tenant is not None:
-        h["X-PivotOS-Tenant-Id"] = str(tenant)
+        h["X-BabyLog-Tenant-Id"] = str(tenant)
     if user is not None:
-        h["X-PivotOS-User-Id"] = str(user)
+        h["X-BabyLog-User-Id"] = str(user)
     if username is not None:
-        h["X-PivotOS-Username"] = username
+        h["X-BabyLog-Username"] = username
     return h
 
 
@@ -201,7 +201,7 @@ def main():
         text = server_log_text()
         check("① Flyway", "Successfully validated" in text or "up to date" in text,
               "Flyway 校验通过（未使用 validate-on-migrate=false）")
-        check("① 数据源", "database=pivotos_dev" in text, "生效数据源 database=pivotos_dev")
+        check("① 数据源", "database=babylog_dev" in text, "生效数据源 database=babylog_dev")
         check("① 端点", "[CLOUD][facade-http] 已注册 MVC 映射" in text, "Facade HTTP 端点已注册")
         status, body = http("/system/auth/login", {"username": "admin", "password": "admin123"})
         check("① 登录", status == 200 and body.get("code") == 0, "登录 code=0")
@@ -209,75 +209,75 @@ def main():
         check("① 匿名 /sse", status == 401, "匿名 /sse 401")
 
         # ③ 安全口径
-        status, body = facade("com.pivotos.system.api.facade.IUserFacade", "getByUsername",
+        status, body = facade("com.babylog.system.api.facade.IUserFacade", "getByUsername",
                               ["admin"], headers={})
         check("③ 无凭证", status == 403 and body.get("error") == "FORBIDDEN", "缺内部凭证 403")
-        status, body = facade("com.pivotos.system.api.facade.IUserFacade", "getByUsername",
+        status, body = facade("com.babylog.system.api.facade.IUserFacade", "getByUsername",
                               ["admin"], headers=internal(token="wrong-token"))
         check("③ 错凭证", status == 403 and body.get("error") == "FORBIDDEN", "错凭证 403")
-        status, body = facade("com.pivotos.migration.api.IMigrationFacade", "whatever",
+        status, body = facade("com.babylog.migration.api.IMigrationFacade", "whatever",
                               [], headers=internal())
         check("③ 白名单外", status == 404 and body.get("error") == "NOT_FOUND",
               "白名单外接口 404（且不可用于探测 classpath）")
 
         # ④⑥ 只读业务方法真调（getByUsername 同时是「单标量参数不摊平」的判据）
-        status, body = facade("com.pivotos.system.api.facade.IUserFacade", "getByUsername",
+        status, body = facade("com.babylog.system.api.facade.IUserFacade", "getByUsername",
                               ["admin"], headers=internal())
         check("④⑥ 单标量参数", status == 200 and body.get("ok") is True
               and (body.get("data") or {}).get("username") == "admin",
               "IUserFacade#getByUsername 返回 admin（单元素数组未被摊平）")
 
         # ⑤ 泛型实参：集合是**一个**参数，必须传 [[...]]
-        status, body = facade("com.pivotos.system.api.facade.IUserFacade", "listByIds",
+        status, body = facade("com.babylog.system.api.facade.IUserFacade", "listByIds",
                               [[1]], headers=internal())
         check("⑤ 泛型", status == 200 and body.get("ok") is True
               and isinstance(body.get("data"), list) and len(body["data"]) == 1
               and body["data"][0].get("id") == 1,
               "IUserFacade#listByIds([[1]]) 命中（Collection<Long> 泛型未擦除）")
 
-        status, body = facade("com.pivotos.system.api.facade.IDeptFacade", "getById",
+        status, body = facade("com.babylog.system.api.facade.IDeptFacade", "getById",
                               [1], headers=internal())
         check("④ Dept", status == 200 and body.get("ok") is True, "IDeptFacade#getById 可调")
 
-        status, body = facade("com.pivotos.system.api.facade.IDictFacade", "listDictData",
+        status, body = facade("com.babylog.system.api.facade.IDictFacade", "listDictData",
                               ["sys_user_sex"], headers=internal())
         check("④ Dict", status == 200 and isinstance(body.get("data"), list),
               "IDictFacade#listDictData 返回列表")
 
-        status, body = facade("com.pivotos.system.api.facade.IStatsFacade", "systemStats",
+        status, body = facade("com.babylog.system.api.facade.IStatsFacade", "systemStats",
                               [], headers=internal())
         check("④ Stats", status == 200 and isinstance((body.get("data") or {}).get("userCount"), int),
               "IStatsFacade#systemStats 返回 userCount")
 
-        status, body = facade("com.pivotos.system.api.facade.IRoleFacade", "listRoleCodesByUserId",
+        status, body = facade("com.babylog.system.api.facade.IRoleFacade", "listRoleCodesByUserId",
                               [1], headers=internal())
         check("④ Role", status == 200 and isinstance(body.get("data"), list),
               "IRoleFacade#listRoleCodesByUserId 返回列表")
 
-        status, body = facade("com.pivotos.file.api.facade.IFileFacade", "storageStats",
+        status, body = facade("com.babylog.file.api.facade.IFileFacade", "storageStats",
                               [], headers=internal())
         check("④ File", status == 200 and body.get("ok") is True, "IFileFacade#storageStats 可调")
 
-        status, body = facade("com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade", "kbStats",
+        status, body = facade("com.babylog.ai.kb.api.facade.IKnowledgeBaseFacade", "kbStats",
                               [], headers=internal())
         check("④ KB", status == 200 and body.get("ok") is True, "IKnowledgeBaseFacade#kbStats 可调")
 
-        status, body = facade("com.pivotos.ai.api.facade.IAiFacade", "resolveModel",
+        status, body = facade("com.babylog.ai.api.facade.IAiFacade", "resolveModel",
                               [""], headers=internal())
         check("④ AI", status == 200 and isinstance(body.get("data"), str),
               "IAiFacade#resolveModel 返回字符串")
 
-        status, body = facade("com.pivotos.migration.api.codeindex.ICodeIndexFacade", "stats",
+        status, body = facade("com.babylog.migration.api.codeindex.ICodeIndexFacade", "stats",
                               [], headers=internal())
         check("④ CodeIndex", status == 200 and isinstance(body.get("data"), dict),
               "ICodeIndexFacade#stats 返回 Map（Optional 类方法未受影响）")
 
         # ④ 依赖登录态的只读方法（带身份头调用，确认不报错）
-        status, body = facade("com.pivotos.workflow.api.IWorkflowFacade", "countPending",
+        status, body = facade("com.babylog.workflow.api.IWorkflowFacade", "countPending",
                               [], headers=internal(tenant=1, user=1, username="admin"))
         check("④ Workflow", status == 200 and isinstance(body.get("data"), int),
               "IWorkflowFacade#countPending 返回数字")
-        status, body = facade("com.pivotos.message.api.facade.IMessageFacade", "countUnread",
+        status, body = facade("com.babylog.message.api.facade.IMessageFacade", "countUnread",
                               [1], headers=internal(tenant=1, user=1, username="admin"))
         check("④ Message", status == 200 and isinstance(body.get("data"), int),
               "IMessageFacade#countUnread 返回数字")
@@ -291,11 +291,11 @@ def main():
 
         # ⑧ P4 负向：写方法未配置即 404
         for iface, method in [
-            ("com.pivotos.message.api.facade.IMessageFacade", "send"),
-            ("com.pivotos.generator.service.IGeneratorFacade", "generateToProject"),
-            ("com.pivotos.workflow.api.IWorkflowFacade", "approveTask"),
-            ("com.pivotos.file.api.facade.IFileFacade", "presignDownload"),
-            ("com.pivotos.ai.api.facade.IAiFacade", "chat"),
+            ("com.babylog.message.api.facade.IMessageFacade", "send"),
+            ("com.babylog.generator.service.IGeneratorFacade", "generateToProject"),
+            ("com.babylog.workflow.api.IWorkflowFacade", "approveTask"),
+            ("com.babylog.file.api.facade.IFileFacade", "presignDownload"),
+            ("com.babylog.ai.api.facade.IAiFacade", "chat"),
         ]:
             status, body = facade(iface, method, [], headers=internal())
             check("⑧ 写方法", status == 404 and body.get("error") == "NOT_FOUND",

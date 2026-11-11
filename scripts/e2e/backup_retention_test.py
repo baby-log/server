@@ -60,7 +60,7 @@ def group_retention() -> None:
         stamps = ["20261001-010000", "20261002-010000", "20261003-010000",
                   "20261004-010000", "20261005-010000"]
         for stamp in stamps:
-            write_backup(root, "pivotos_dev", stamp)
+            write_backup(root, "babylog_dev", stamp)
         plan = _lib.plan_retention(root, keep=2)
         check("R-1", len(plan.delete) == 3 and len(plan.keep) == 2,
               f"5 份保留 2：应删 3 份，实测删 {len(plan.delete)} 保 {len(plan.keep)}")
@@ -95,7 +95,7 @@ def group_retention_guards() -> None:
         root = Path(tmp)
 
         # R-7 keep=0 必须直接拒绝（0 会把备份删光，是最容易写错的一个参数）
-        write_backup(root, "pivotos_dev", "20261001-010000")
+        write_backup(root, "babylog_dev", "20261001-010000")
         try:
             _lib.plan_retention(root, keep=0)
             check("R-7", False, "keep=0 必须抛 RetentionError")
@@ -116,9 +116,9 @@ def group_retention_guards() -> None:
         # 注意用独立子目录：上面 R-7 已经往 root 里写过一份，混着数会算错份额。
         sub = Path(tmp) / "r9"
         sub.mkdir()
-        write_backup(sub, "pivotos_dev", "20261010-010000")
-        write_backup(sub, "pivotos_dev", "20261011-010000")
-        (sub / "pivotos_dev-20261012-010000.sql").write_text("半成品", encoding="utf-8")
+        write_backup(sub, "babylog_dev", "20261010-010000")
+        write_backup(sub, "babylog_dev", "20261011-010000")
+        (sub / "babylog_dev-20261012-010000.sql").write_text("半成品", encoding="utf-8")
         plan = _lib.plan_retention(sub, keep=2)
         check("R-9", len(plan.keep) == 2 and not plan.delete and len(plan.incomplete) == 1,
               f"坏备份不占份额也不可删：keep={len(plan.keep)} delete={len(plan.delete)} "
@@ -135,7 +135,7 @@ def group_verify() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
 
-        sql = write_backup(root, "pivotos_dev", "20261001-010000", body="INSERT INTO t VALUES(1);")
+        sql = write_backup(root, "babylog_dev", "20261001-010000", body="INSERT INTO t VALUES(1);")
         ok = _lib.verify_backup(sql)
         check("V-1", ok.ok, f"完好的备份应通过校验：{ok.describe()}")
 
@@ -148,21 +148,21 @@ def group_verify() -> None:
               "失败报告里必须同时给出期望值与实际值，否则没法人工判断差距在哪")
 
         # V-4 没有 manifest = 备份没跑完 → 判失败（而不是当作「没记录就把 VOID 通过」）
-        orphan = root / "pivotos_dev-20261002-010000.sql"
+        orphan = root / "babylog_dev-20261002-010000.sql"
         orphan.write_text("SELECT 1;", encoding="utf-8")
         missing = _lib.verify_backup(orphan)
         check("V-4", not missing.ok, f"缺 manifest 必须判失败：{missing.describe()}")
 
         # V-5 manifest 不是合法 JSON → 也必须判失败且指明原因
-        broken = root / "pivotos_dev-20261003-010000.sql"
+        broken = root / "babylog_dev-20261003-010000.sql"
         broken.write_text("SELECT 1;", encoding="utf-8")
-        (root / "pivotos_dev-20261003-010000.manifest.json").write_text("{不是 json", encoding="utf-8")
+        (root / "babylog_dev-20261003-010000.manifest.json").write_text("{不是 json", encoding="utf-8")
         broken_result = _lib.verify_backup(broken)
         check("V-5", not broken_result.ok and any("JSON" in p for p in broken_result.problems),
               f"manifest 坏 JSON 必须判失败：{broken_result.describe()}")
 
         # V-6 文件不存在 → 失败而不是抛异常（恢复前批量校验不该崩在中途）
-        vanished = _lib.verify_backup(root / "pivotos_dev-20991231-235959.sql")
+        vanished = _lib.verify_backup(root / "babylog_dev-20991231-235959.sql")
         check("V-6", not vanished.ok, "文件不存在时应给出失败结论而不是抛栈")
 
 
@@ -210,7 +210,7 @@ def group_split() -> None:
     check("S-8", len(parts) == 2, f"连续分号产生的空语句必须被丢弃：{[p for p in parts]}")
 
     # S-9 真实形态：整段 dump 头部 + 多表
-    sample = """-- PivotOS MySQL logical backup
+    sample = """-- BabyLog MySQL logical backup
 -- Generated at: 2026-10-11T00:00:00+00:00
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
@@ -223,7 +223,7 @@ SET FOREIGN_KEY_CHECKS=1;
     # 关键不是条数本身，而是两条 INSERT 各自完整、且注释内容没有丢。
     check("S-9", len(parts) == 5,
           f"整段 dump 切成 {len(parts)} 条（头部注释并入首条，属预期）")
-    check("S-10", parts[0].startswith("-- PivotOS MySQL logical backup")
+    check("S-10", parts[0].startswith("-- BabyLog MySQL logical backup")
           and "SET NAMES utf8mb4" in parts[0],
           "头部注释并入紧随的首条语句，内容不丢")
     inserts = [p for p in parts if p.startswith("INSERT INTO")]
@@ -234,14 +234,14 @@ SET FOREIGN_KEY_CHECKS=1;
 def group_switch() -> None:
     """T 组：库切换语句必须被认出来（少了这一步，恢复会写错库且每条都「成功」）。"""
     # T-1 最常见的形态：dump 头部两条注释 + USE
-    case = "-- PivotOS MySQL logical backup\n-- Generated at: 2026-10-11T00:00:00Z\nUSE `pivotos_dev`"
+    case = "-- BabyLog MySQL logical backup\n-- Generated at: 2026-10-11T00:00:00Z\nUSE `babylog_dev`"
     check("T-1", _lib.classify_database_switch(case) == "USE",
           "头部挂着注释的 USE 必须被识别（真实 dump 就是这个形态）")
 
     # T-2 干净形态
-    check("T-2", _lib.classify_database_switch("USE `pivotos_dev`") == "USE",
+    check("T-2", _lib.classify_database_switch("USE `babylog_dev`") == "USE",
           "不带注释的 USE 也要被识别")
-    check("T-3", _lib.classify_database_switch("use pivotos_dev") == "USE",
+    check("T-3", _lib.classify_database_switch("use babylog_dev") == "USE",
           "小写 use 也要被识别")
     check("T-4", _lib.classify_database_switch("CREATE DATABASE IF NOT EXISTS `x`") == "CREATE DATABASE",
           "CREATE DATABASE 必须被识别（否则会在目标实例上多建一个源同名库）")
@@ -257,12 +257,12 @@ def group_switch() -> None:
           f"普通语句不得被误判为库切换（误判会让表建不出来）：{wrong}")
 
     # T-7 端到端：真实 dump 片段切完之后，USE 必须仍能被认出来
-    sample = ("-- PivotOS MySQL logical backup\n"
+    sample = ("-- BabyLog MySQL logical backup\n"
               "-- Generated at: 2026-10-11T00:00:00Z\n"
-              "-- Database: pivotos_dev\n"
+              "-- Database: babylog_dev\n"
               "SET NAMES utf8mb4;\n"
-              "CREATE DATABASE IF NOT EXISTS `pivotos_dev` CHARACTER SET utf8mb4;\n"
-              "USE `pivotos_dev`;\n"
+              "CREATE DATABASE IF NOT EXISTS `babylog_dev` CHARACTER SET utf8mb4;\n"
+              "USE `babylog_dev`;\n"
               "INSERT INTO t VALUES (1,'a;b');")
     kinds = [_lib.classify_database_switch(s) for s in _lib.iter_statements(sample)]
     check("T-7", kinds.count("USE") == 1 and kinds.count("CREATE DATABASE") == 1

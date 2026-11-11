@@ -41,9 +41,9 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = "/".join(os.path.abspath(__file__).split("/")[:-3])
-JAR = f"{ROOT}/pivotos-admin-server/target/pivotos-admin-server.jar"
+JAR = f"{ROOT}/babylog-admin-server/target/babylog-admin-server.jar"
 DASHBOARD_DIR = f"{ROOT}/scripts/ops/grafana"
-WORK_ROOT = "/tmp/pivotos-v31h-grafana"
+WORK_ROOT = "/tmp/babylog-v31h-grafana"
 PROM_PATH = "/actuator/prometheus"
 
 results: list[tuple[str, bool]] = []
@@ -75,16 +75,16 @@ PROMQL_KEYWORDS = {
 
 # 没机会抓到、但确实存在的指标：给出**可验证的理由**才允许进白名单。
 LAZY_METRICS = {
-    "pivotos_ai_calls_total":
+    "babylog_ai_calls_total":
         "MeteredChatModel 的埋点；需要真的打过一次 LLM 调用才会注册（本机无 LLM Key）",
-    "pivotos_ai_latency_seconds_bucket":
+    "babylog_ai_latency_seconds_bucket":
         "同上，AI 延迟直方图；无 LLM Key 环境不会有数据",
-    "pivotos_ai_tokens_total":
+    "babylog_ai_tokens_total":
         "同上，AI token 计数；无 LLM Key 环境不会有数据",
-    "pivotos_ai_latency_seconds_max":
+    "babylog_ai_latency_seconds_max":
         "AI 延迟 Timer 的窗口最大值，同 AI 系列一样需要真的打过 LLM 调用",
-    "pivotos_ai_latency_seconds_sum": "AI 延迟 Timer 的累计值，同上需要 LLM 调用",
-    "pivotos_ai_latency_seconds_count": "AI 延迟 Timer 的次数，同上需要 LLM 调用",
+    "babylog_ai_latency_seconds_sum": "AI 延迟 Timer 的累计值，同上需要 LLM 调用",
+    "babylog_ai_latency_seconds_count": "AI 延迟 Timer 的次数，同上需要 LLM 调用",
 }
 
 
@@ -158,11 +158,11 @@ def scrape_actual_metrics() -> set[str]:
         shutil.rmtree(WORK_ROOT)
     os.makedirs(WORK_ROOT, exist_ok=True)
 
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env.update({
         "TESSDATA_PREFIX": "/opt/homebrew/share/tessdata",
         # 慢接口阈值 0 = 全部计入，否则亚毫秒请求一条都抓不到（V3.1-F 踩过）
-        "PIVOTOS_METRICS_SLOW_REQUEST_THRESHOLD_MS": "0",
+        "BABYLOG_METRICS_SLOW_REQUEST_THRESHOLD_MS": "0",
     })
     log_path = os.path.join(WORK_ROOT, "console.log")
     fh = open(log_path, "wb")

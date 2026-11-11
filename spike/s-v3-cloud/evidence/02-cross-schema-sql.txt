@@ -1,20 +1,20 @@
 ====================================================================================================
 S133 · 数据层跨模块耦合扫描（同一条 SQL 触碰 >=2 个业务 Plugin 的表）
 ====================================================================================================
-扫描根      : /Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-framework
+扫描根      : /Users/huweilong/Documents/File/Project/BabyLog Technology/BabyLog/babylog-server
 @TableName 索引表数 : 56
-    pivotos-plugin-system: 18 张表
-    pivotos-plugin-ai: 11 张表
-    pivotos-plugin-migration: 7 张表
-    pivotos-plugin-ai-kb: 6 张表
-    pivotos-plugin-message: 4 张表
-    pivotos-plugin-docsync: 2 张表
-    pivotos-plugin-generator: 2 张表
-    pivotos-plugin-mind: 2 张表
-    pivotos-plugin-file: 1 张表
-    pivotos-plugin-workflow: 1 张表
-    pivotos-plugin-ai-coding: 1 张表
-    pivotos-plugin-monitor: 1 张表
+    babylog-plugin-system: 18 张表
+    babylog-plugin-ai: 11 张表
+    babylog-plugin-migration: 7 张表
+    babylog-plugin-ai-kb: 6 张表
+    babylog-plugin-message: 4 张表
+    babylog-plugin-docsync: 2 张表
+    babylog-plugin-generator: 2 张表
+    babylog-plugin-mind: 2 张表
+    babylog-plugin-file: 1 张表
+    babylog-plugin-workflow: 1 张表
+    babylog-plugin-ai-coding: 1 张表
+    babylog-plugin-monitor: 1 张表
 扫描 SQL 语句总数   : 22
 跨模块 SQL 命中     : 0
 

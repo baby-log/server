@@ -8,7 +8,7 @@
   ┃ 场景 1（正向·入站带头发）：请求带 X-Trace-Id → 收到的 span.traceId 必须等于它
   ┃ 场景 2（正向·普通请求）：不带头（TraceIdFilter 会生成）→ 响应头 X-Trace-Id 必须等于
   ┃                          span.traceId（这条覆盖占绝大多数的普通请求，是桥接是否真闭环的判据）
-  ┃ 场景 3（负向·总开关关）：PIVOTOS_TRACING_ENABLED 不设 → 请求照常 200，但**一个 span 都收不到**
+  ┃ 场景 3（负向·总开关关）：BABYLOG_TRACING_ENABLED 不设 → 请求照常 200，但**一个 span 都收不到**
   ┃ 场景 4（MDC 身份）：带 token 请求 → 应用日志里出现 [u=<userId>,t=<tenantId>]
   ┃                    （不是 u=-,t=-；未开 tracing 时恒为 u=-,t=-，属预期）
 
@@ -43,8 +43,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v32a-tracing-e2e"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v32a-tracing-e2e"
 
 OTLP_PORT = 4318
 OTLP_ENDPOINT = f"http://127.0.0.1:{OTLP_PORT}/v1/traces"
@@ -54,14 +54,14 @@ TRACE_HEADER = "X-Trace-Id"
 # dev yml 的兜底连接串指向开发服务器；该机不可达时应用起不来（Flyway 校验卡住），
 # 于是「收不到 span」就会被误判成桥接失败 —— 两件事必须能分开。
 LOCAL_DB_ENV = {
-    "PIVOTOS_MYSQL_URL": "jdbc:mysql://127.0.0.1:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8"
+    "BABYLOG_MYSQL_URL": "jdbc:mysql://127.0.0.1:3306/babylog_dev?useUnicode=true&characterEncoding=utf8"
                          "&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
                          "&createDatabaseIfNotExist=true&allowMultiQueries=false",
-    "PIVOTOS_MYSQL_USERNAME": "root",
-    "PIVOTOS_MYSQL_PASSWORD": "root_ci",
+    "BABYLOG_MYSQL_USERNAME": "root",
+    "BABYLOG_MYSQL_PASSWORD": "root_ci",
     # ⚠️ 密码绝不能是空串：Redisson 拿到空串照样发 AUTH "" 会被 Redis 拒绝
-    "PIVOTOS_REDIS_HOST": "127.0.0.1",
-    "PIVOTOS_REDIS_PASSWORD": "root_ci",
+    "BABYLOG_REDIS_HOST": "127.0.0.1",
+    "BABYLOG_REDIS_PASSWORD": "root_ci",
 }
 
 LOCAL_DB = False
@@ -190,7 +190,7 @@ def port_busy(port=8080) -> bool:
 
 
 def clean_env(extra=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     if extra:
         env.update(extra)
@@ -287,10 +287,10 @@ def wait_spans(count=1, timeout=40):
 # ────────────────────────── 场景 ──────────────────────────
 
 TRACING_ENV = {
-    "PIVOTOS_TRACING_ENABLED": "true",
-    "PIVOTOS_TRACING_OTLP_ENDPOINT": OTLP_ENDPOINT,
-    "PIVOTOS_TRACING_OTLP_TIMEOUT_MS": "3000",
-    "PIVOTOS_TRACING_SAMPLING_PROBABILITY": "1.0",
+    "BABYLOG_TRACING_ENABLED": "true",
+    "BABYLOG_TRACING_OTLP_ENDPOINT": OTLP_ENDPOINT,
+    "BABYLOG_TRACING_OTLP_TIMEOUT_MS": "3000",
+    "BABYLOG_TRACING_SAMPLING_PROBABILITY": "1.0",
 }
 
 
@@ -400,7 +400,7 @@ def scenario_jaeger():
     tag = "jaeger"
     received_spans.clear()
     jaeger_env = dict(TRACING_ENV)
-    jaeger_env["PIVOTOS_TRACING_OTLP_ENDPOINT"] = JAEGER_OTLP_ENDPOINT
+    jaeger_env["BABYLOG_TRACING_OTLP_ENDPOINT"] = JAEGER_OTLP_ENDPOINT
     proc, fh, log_path = start_server(tag, jaeger_env)
     try:
         text = read_log(log_path)

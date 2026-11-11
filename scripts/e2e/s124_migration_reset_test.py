@@ -3,7 +3,7 @@
 
 覆盖（单场景，脚本自起自停一套 dev 后端，8080）：
   ① 起服冒烟：Flyway `Successfully validated` + 登录 code=0 + 匿名 /sse 401
-  ② L9 守卫：启动日志出现「[DataSource] 生效数据源溯源：database=pivotos_dev」
+  ② L9 守卫：启动日志出现「[DataSource] 生效数据源溯源：database=babylog_dev」
   ③ reset 鉴权：匿名调用被拦
   ④ reset 负例：任务不存在 → 8000；任务处于 CREATED → 8001（防抹掉真实产物）
   ⑤ reset 正例：任务置为 ANALYZED 后复位 → 步骤清零、未落盘产物清零、
@@ -28,12 +28,12 @@ import requests
 BASE = "http://localhost:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 JAR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
-                                   "pivotos-admin-server", "target", "pivotos-admin-server.jar"))
-LOG_DIR = "/tmp/pivotos-s124-reset-e2e"
+                                   "babylog-admin-server", "target", "babylog-admin-server.jar"))
+LOG_DIR = "/tmp/babylog-s124-reset-e2e"
 LOG_PATH = os.path.join(LOG_DIR, "server.log")
 
 DB = dict(host="175.24.176.176", port=3306, user="root", password="mysql_DNCi3f",
-          database="pivotos_dev", charset="utf8mb4")
+          database="babylog_dev", charset="utf8mb4")
 
 results = []
 
@@ -226,7 +226,7 @@ def main():
         with open(LOG_PATH, "rb") as f:
             text = f.read().decode("utf-8", errors="ignore")
         check("②L9", "[DataSource] 生效数据源溯源" in text, "启动日志含数据源溯源行")
-        check("②L9", "database=pivotos_dev" in text, "溯源结果 database=pivotos_dev")
+        check("②L9", "database=babylog_dev" in text, "溯源结果 database=babylog_dev")
         check("②Flyway", "Successfully validated" in text, "Flyway 校验通过（未用 validate-on-migrate=false）")
 
         # ④ 负例：任务不存在 → 8000

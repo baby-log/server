@@ -1,12 +1,10 @@
-# 筱筱框架（PivotOS Framework / pivotos-framework）
+# BabyLog 服务端（babylog-server）
 
-> 筱筱框架（PivotOS）「一码三端」企业管理平台 —— 后端全部模块（Maven 多模块单仓），开发者：[胡伟龙（Alex）](https://www.293242.com/)
+> **BabyLog 育儿记录**的服务端与后台管理系统（后端全部模块，Maven 多模块单仓），开发者：[胡伟龙（Alex）](https://www.293242.com/)
 >
-> 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 🖥️ PC 演示：[pivotos-pc.293242.com](https://pivotos-pc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com) ｜ [Apache-2.0](./LICENSE)
->
-> 谨以此项目纪念女儿「筱筱」的诞生 —— 故本项目中文名取作**筱筱框架**，英文名沿用 PivotOS。
+> 本项目 fork 自开源脚手架 [pivotos-framework（筱筱框架）](https://gitee.com/pivotos/pivotos-framework)（Apache-2.0）并全量改名为 babylog，架构规范与开发约定沿用原脚手架，在此致谢。
 
-PivotOS 借鉴若依（RuoYi）的企业级功能面，并在 **插件化架构与 AI 原生能力** 上做差异化的企业级快速开发平台：同一套后端支撑 PC 管理端、移动 H5/App、微信小程序三端。架构特色：**轻量微内核 + 彻底插件化 + AI 原生底座 + 单代码库双部署形态（单体/微服务）**。
+BabyLog 服务端是一个**插件化 + AI 原生底座 + 单代码库双部署形态（单体/微服务）**的后端：同一套后端支撑 Android/iOS 原生 App、微信小程序与 PC 运营管理端。业务代码全部在 `babylog-plugins/babylog-plugin-biz`，脚手架模块不改。
 
 ## 技术栈
 
@@ -29,12 +27,12 @@ PivotOS 借鉴若依（RuoYi）的企业级功能面，并在 **插件化架构�
 ## 模块结构（37 个 Maven 模块）
 
 ```
-pivotos-framework (groupId=com.pivotos)
-├── pivotos-dependencies        # BOM：全部第三方版本集中声明
-├── pivotos-commons             # 契约层（禁依赖 Spring，ArchUnit 守护）
-│   ├── pivotos-common-core     #   R<T> 统一响应 / ServiceException / 分页 / 枚举 / 上下文门面
-│   └── pivotos-common-api      #   通用 API 契约
-├── pivotos-starters            # 10 个技术 Starter（条件装配，可插拔）
+babylog-server (groupId=com.babylog)
+├── babylog-dependencies        # BOM：全部第三方版本集中声明
+├── babylog-commons             # 契约层（禁依赖 Spring，ArchUnit 守护）
+│   ├── babylog-common-core     #   R<T> 统一响应 / ServiceException / 分页 / 枚举 / 上下文门面
+│   └── babylog-common-api      #   通用 API 契约
+├── babylog-starters            # 10 个技术 Starter（条件装配，可插拔）
 │   ├── starter-core            #   ScopedValue 上下文体系 + fastjson2 序列化 + i18n + 链路追踪
 │   ├── starter-web             #   全局异常 / 幂等 / 接口加解密 / XSS / CORS
 │   ├── starter-redis           #   Redisson + Lock4j + 限流 + 租户维度缓存 Key
@@ -45,7 +43,7 @@ pivotos-framework (groupId=com.pivotos)
 │   ├── starter-job             #   XXL-Job 执行器装配
 │   ├── starter-ai              #   Spring AI ChatClient / EmbeddingModel 装配
 │   └── starter-datascope       #   数据权限
-├── pivotos-plugins             # 12 个业务插件（除 monitor 外均拆 -api 契约包 + 实现包）
+├── babylog-plugins             # 12 个业务插件（除 monitor 外均拆 -api 契约包 + 实现包）
 │   ├── plugin-system           #   用户/角色/菜单/部门/岗位/字典/参数/公告/日志/在线用户/认证（含 mind 登录下沉）
 │   ├── plugin-message          #   消息中心（站内信/模板/发送日志）
 │   ├── plugin-file             #   文件存储（多云：腾讯云 COS / MinIO，预签名直传）
@@ -53,12 +51,12 @@ pivotos-framework (groupId=com.pivotos)
 │   ├── plugin-ai               #   AI 对话（多供应商/多 Key/SSE 流式/会话落库）
 │   ├── plugin-ai-coding        #   AI Coding（自然语言生成单表/主子/树表 CRUD）
 │   ├── plugin-ai-kb            #   RAG 知识库（解析/分块/向量化/检索/重排/评测/引用溯源）
-│   ├── plugin-mind             #   PivotOS·智域个人端（知识库/待办/AI 拆分，配 pivotos-mind 前端）
+│   ├── plugin-mind             #   BabyLog·智域个人端（知识库/待办/AI 拆分，配 babylog-mind 前端）
 │   ├── plugin-generator        #   代码生成器（crud/sub/tree 三模板族，PC + uni-app 双端产物）
 │   ├── plugin-docsync          #   文档同步（在线文档站内容同步）
 │   ├── plugin-migration        #   迁移引擎（AI 驱动的系统迁移任务编排）
 │   └── plugin-monitor          #   服务监控 / 缓存监控 / 运营看板
-└── pivotos-admin-server        # 单体启动器（monolith 形态，8080 端口）
+└── babylog-admin-server        # 单体启动器（monolith 形态，8080 端口）
 ```
 
 **契约先行**：跨插件调用只允许经 `-api` 包的 Facade 接口；表前缀按域隔离（`sys_/msg_/flow_/gen_/ai_/kb_`），禁跨前缀联表；ArchUnit A1~A8 规则 CI 强制守护。
@@ -76,15 +74,15 @@ pivotos-framework (groupId=com.pivotos)
 - **代码生成器**：选表即出 CRUD（crud / sub 主子 / tree 树三模板族），前后端 + 菜单一键导入
 - **监控运维**：服务监控、缓存监控、运营看板
 - **任务调度**：XXL-Job 执行器开箱集成
-- **PivotOS·智域（个人端）**：mind-user 第四账号体系 + 个人知识库 + 智能待办（AI 拆分）+ SSE 对话，配套前端见 [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind)
+- **BabyLog·智域（个人端）**：mind-user 第四账号体系 + 个人知识库 + 智能待办（AI 拆分）+ SSE 对话，配套前端见 [babylog-mind](https://github.com/pivotos-inc/pivotos-mind)
 
 ## 快速开始
 
 环境要求：JDK 25、Maven 3.9+、MySQL 8.x、Redis 6+（可选：Milvus、XXL-Job 调度中心、MinIO）
 
 ```bash
-git clone https://github.com/pivotos-inc/pivotos-framework.git
-cd pivotos-framework
+git clone git@gitee.com:baby-log/server.git
+cd server
 
 # 1. 准备本地配置（MySQL/Redis 密码等），模板见 .env.example；
 #    所有凭据经环境变量注入（MYSQL_PASSWORD / REDIS_PASSWORD / DASHSCOPE_API_KEY 等），仓库内不保留真实密钥
@@ -94,7 +92,7 @@ cp .env.example .env.dev    # 按本机实际修改
 mvn clean install -DskipTests
 
 # 3. 启动（Flyway 自动建库建表；默认 profile=dev，见 application-dev.yml 数据源配置）
-source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.jar
+source .env.dev && java -jar babylog-admin-server/target/babylog-admin-server.jar
 ```
 
 启动后：后端 API `http://localhost:8080`，默认账号 `admin / admin123`。
@@ -106,11 +104,11 @@ source .env.dev && java -jar pivotos-admin-server/target/pivotos-admin-server.ja
 
 | 仓库 | 说明 |
 | --- | --- |
-| [pivotos-ui](https://github.com/pivotos-inc/pivotos-ui) | PC 管理端（Vue3 + Element Plus，pnpm Monorepo） |
-| [pivotos-app](https://github.com/pivotos-inc/pivotos-app) | 移动端（uni-app 一码三端：H5 / App / 小程序） |
-| [pivotos-mind](https://github.com/pivotos-inc/pivotos-mind) | PivotOS·智域个人端（C 端 AI 助手开源样板间，对接本仓 plugin-mind） |
-| [pivotos-docs](https://github.com/pivotos-inc/pivotos-docs) | 项目文档库（PRD / 架构 / 规范 / 流程 / 踩坑记录） |
-| [pivotos-docsite](https://github.com/pivotos-inc/pivotos-docsite) | 在线文档站源码（VitePress，部署于 pivotos-doc.293242.com） |
+| [babylog-ui](https://github.com/pivotos-inc/pivotos-ui) | PC 管理端（Vue3 + Element Plus，pnpm Monorepo） |
+| [babylog-app](https://github.com/pivotos-inc/pivotos-app) | 移动端（uni-app 一码三端：H5 / App / 小程序） |
+| [babylog-mind](https://github.com/pivotos-inc/pivotos-mind) | BabyLog·智域个人端（C 端 AI 助手开源样板间，对接本仓 plugin-mind） |
+| [babylog-docs](https://github.com/pivotos-inc/pivotos-docs) | 项目文档库（PRD / 架构 / 规范 / 流程 / 踩坑记录） |
+| [babylog-docsite](https://github.com/pivotos-inc/pivotos-docsite) | 在线文档站源码（VitePress，部署于 pivotos-doc.293242.com） |
 
 ## 维护约定
 

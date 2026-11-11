@@ -1,0 +1,2 @@
+com.babylog.starter.metrics.config.MetricsInfrastructureAutoConfiguration
+com.babylog.starter.metrics.config.MetricsNoOpAutoConfiguration

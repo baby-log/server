@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# PivotOS JVM 参数模板（V3.1-G · P1-B3 进程托管）
+# BabyLog JVM 参数模板（V3.1-G · P1-B3 进程托管）
 #
 # 用法（**source**，不是执行）：
 #     source scripts/ops/jvm-opts.sh
-#     pivotos_build_jvm_opts "$LOG_DIR"
+#     babylog_build_jvm_opts "$LOG_DIR"
 #     echo "$JVM_OPTS"
 #
 # 为什么要单独抽一份文件：
@@ -17,8 +17,8 @@
 
 # 拼装 JVM 参数，结果写入全局变量 JVM_OPTS。
 # 所有开关都由环境变量驱动，**本文件里不出现任何真实口令**。
-pivotos_build_jvm_opts() {
-    local log_dir="${1:?用法：pivotos_build_jvm_opts <log_dir>}"
+babylog_build_jvm_opts() {
+    local log_dir="${1:?用法：babylog_build_jvm_opts <log_dir>}"
 
     # ① headless：本项目的硬要求，缺少即 OCR/上传 1500
     JVM_OPTS="-Djava.awt.headless=true"

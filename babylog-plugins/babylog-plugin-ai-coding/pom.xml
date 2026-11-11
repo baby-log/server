@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.babylog</groupId>
+        <artifactId>babylog-plugins</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <artifactId>babylog-plugin-ai-coding</artifactId>
+    <name>babylog-plugin-ai-coding</name>
+    <description>BabyLog AI Coding 插件实现层：自然语言→单表CRUD（LLM意图解析 + 生成器出码 + 暂存评审）</description>
+
+    <dependencies>
+        <!-- 本插件契约 -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-ai-coding-api</artifactId>
+        </dependency>
+
+        <!-- AI 底座: LLM 调用能力（V3-S1：只依赖 -api 契约，不再依赖实现模块） -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-ai-api</artifactId>
+        </dependency>
+
+        <!-- V3-S1：@Tool / @ToolParam 注解（CodingFileTools 登记 AI 工具用）。
+             原先是「靠 babylog-plugin-ai 传递进来」的隐式依赖，改依赖 -api 后必须显式声明——
+             显式依赖优于传递依赖，断了传递才知道自己真正用了什么（版本由 spring-ai-bom 托管） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+        </dependency>
+
+        <!-- 代码生成器: 模板渲染 + 出码（V3-S1：只用 IGeneratorFacade，改依赖 -api） -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-generator-api</artifactId>
+        </dependency>
+
+        <!-- 代码索引: 迁移引擎 IR 解析器扩展（模块索引 + 符号表），只经 api 包访问（A1/A2 口径） -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-migration-api</artifactId>
+        </dependency>
+
+        <!-- 底座 Starter -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-mybatis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-auth</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

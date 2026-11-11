@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S97 对话链路 ToolCallback 挂载 E2E 脚本（2026-08-23 第 5 轮）
+BabyLog S97 对话链路 ToolCallback 挂载 E2E 脚本（2026-08-23 第 5 轮）
 目标：同步对话挂载 function calling 后，「AI 查当前用户待办数」Hello World 跑通——
   ① REST 直查待办分页拿基线 total；
   ② POST /ai/chat/send 自然语言提问待办数；

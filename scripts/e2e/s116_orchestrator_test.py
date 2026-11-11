@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PivotOS S116 A5-1 工具多步编排专项 E2E（v2.15.0）
+BabyLog S116 A5-1 工具多步编排专项 E2E（v2.15.0）
 
 一票否决点已在开工前用 spike 脚本验证（8 意图 × 3 轮 = 24/24），本脚本验证的是
 **落到产品代码后的全链路能否兑现同款判据**（含写到数据库的一次性 fixture，自生产自清理）：
@@ -17,7 +17,7 @@ PivotOS S116 A5-1 工具多步编排专项 E2E（v2.15.0）
   ⑦ 负例：幻工具名 plan 直接投执行 → 被确定性校验拦下（不为 HTTP 500）；
   ⑧ 能力开关未开时不放行（用 affairs 配置变更验证成本过高，此处仅校验编排在 enabled=true 下全绿）。
 
-fixture 口径（S115 K1：不在 pivotos-tmp 落文件；该目录不在 git 内，证据随脚本 ./evidence 落盘）：
+fixture 口径（S115 K1：不在 babylog-tmp 落文件；该目录不在 git 内，证据随脚本 ./evidence 落盘）：
   · 一次性 API Key 临时登记用于动态通道 —— 本脚本不需要：规划走静态兜底也能跑；
   · 出站副作用（站内消息）以 receiverUserIds=当前登录用户 自产自销，脚本结束发 DELETE 清理不了，
     故只在 ai_tool_invoke / sys_message 层做「计数差值」断言，不做物理删除（避免触碰用户数据）。
@@ -32,9 +32,9 @@ import time
 import requests
 
 BASE = "http://localhost:8080"
-# S115 K1 + 本轮纪律：证据一律归档到 pivotos-tmp/test-evidence/s116/（工作区级、不入 git），
+# S115 K1 + 本轮纪律：证据一律归档到 babylog-tmp/test-evidence/s116/（工作区级、不入 git），
 # 不在 repo 内的 scripts/e2e 下留产物（否则 git status 永远脏）
-EVIDENCE = "/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-tmp/test-evidence/s116"
+EVIDENCE = "/Users/huweilong/WorkBuddy/业余项目/babylog-tmp/test-evidence/s116"
 os.makedirs(EVIDENCE, exist_ok=True)
 
 OK = 0
@@ -174,7 +174,7 @@ try:
     import pymysql
 
     conn = pymysql.connect(host="175.24.176.176", port=3306, user="root",
-                           password="mysql_DNCi3f", database="pivotos_dev",
+                           password="mysql_DNCi3f", database="babylog_dev",
                            charset="utf8mb4", connect_timeout=20)
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM ai_tool_plan WHERE id=%s", (resumed["id"],))
@@ -215,7 +215,7 @@ finally:
         import pymysql
 
         conn = pymysql.connect(host="175.24.176.176", port=3306, user="root",
-                               password="mysql_DNCi3f", database="pivotos_dev",
+                               password="mysql_DNCi3f", database="babylog_dev",
                                charset="utf8mb4", connect_timeout=20)
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM ai_tool_plan WHERE deleted=0")

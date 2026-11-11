@@ -9,7 +9,7 @@
   ┃ 场景 3（预检·通过）      ：环境变量齐全 + 端口空闲 + 库可达 → preflight 退出 0；
   ┃                          库连不上时**只告警不阻断**（--strict 才阻断）
   ┃ 场景 4（连接池·参数落地）：经 start-prod.sh 起服后，/actuator/prometheus 上
-  ┃                          pivotos_datasource_connections_max{pool="master"}
+  ┃                          babylog_datasource_connections_max{pool="master"}
   ┃                          dev == 20、prod == 50 —— 证明「yml → DruidConfig → 运行时池」
   ┃                          这条链路真的通了，而不是被静默忽略；
   ┃                          同时断言 hikaricp.* 一条都没有（本项目是 Druid，承接 V3.1-F M-11）
@@ -44,31 +44,31 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
 OPS = os.path.join(ROOT, "scripts", "ops")
 START_SH = os.path.join(OPS, "start-prod.sh")
 STOP_SH = os.path.join(OPS, "stop-prod.sh")
 PREFLIGHT = os.path.join(OPS, "preflight.py")
-WORK_ROOT = "/tmp/pivotos-v31g-hosting-e2e"
+WORK_ROOT = "/tmp/babylog-v31g-hosting-e2e"
 
 APP_HOME = os.path.join(WORK_ROOT, "app")
 PORT = 8080
 
 # prod profile 启动用：指向 **dev** 实例做只读验证（Flyway 仅校验），不写业务数据
 PROD_ENV = {
-    "PIVOTOS_MYSQL_URL": "jdbc:mysql://175.24.176.176:3306/pivotos_dev?useUnicode=true"
+    "BABYLOG_MYSQL_URL": "jdbc:mysql://175.24.176.176:3306/babylog_dev?useUnicode=true"
                          "&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false"
                          "&allowMultiQueries=false",
-    "PIVOTOS_MYSQL_USERNAME": "root",
-    "PIVOTOS_MYSQL_PASSWORD": "mysql_DNCi3f",
-    "PIVOTOS_REDIS_HOST": "175.24.176.176",
-    "PIVOTOS_REDIS_PASSWORD": "redis_Q6aiiX",
-    "PIVOTOS_FIELD_ENCRYPT_KEY": "e2eTestKey123456",
+    "BABYLOG_MYSQL_USERNAME": "root",
+    "BABYLOG_MYSQL_PASSWORD": "mysql_DNCi3f",
+    "BABYLOG_REDIS_HOST": "175.24.176.176",
+    "BABYLOG_REDIS_PASSWORD": "redis_Q6aiiX",
+    "BABYLOG_FIELD_ENCRYPT_KEY": "e2eTestKey123456",
     # COS 凭据**实际是 prod 起服的硬门槛**：FileConfig$StorageStrategyConfiguration
     # 会在刷新期急切装配 S3 客户端，值为空直接 NPE（"Access key ID cannot be blank"）。
     # 这里填非空占位即可——起服只构造客户端，不会真的访问桶。
-    "PIVOTOS_COS_ACCESS_KEY": "e2eAccessKeyPlaceh",
-    "PIVOTOS_COS_SECRET_KEY": "e2eSecretKeyPlaceholder0123456789",
+    "BABYLOG_COS_ACCESS_KEY": "e2eAccessKeyPlaceh",
+    "BABYLOG_COS_SECRET_KEY": "e2eSecretKeyPlaceholder0123456789",
 }
 
 results = []
@@ -89,7 +89,7 @@ def check(tag, cond, msg):
 
 # ────────────────────────── 环境 ──────────────────────────
 def clean_env(extra=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     env["JNA_LIBRARY_PATH"] = "/opt/homebrew/lib"
     if extra:
@@ -153,7 +153,7 @@ def metric_value(text, name, tag_filter=None):
 # ────────────────────────── 场景 ──────────────────────────
 def prepare_app_home():
     os.makedirs(APP_HOME, exist_ok=True)
-    link = os.path.join(APP_HOME, "pivotos-admin-server.jar")
+    link = os.path.join(APP_HOME, "babylog-admin-server.jar")
     if not os.path.exists(link):
         os.symlink(JAR, link)
     for name in ("run.sh", "start-prod.sh", "stop-prod.sh", "preflight.py", "jvm-opts.sh"):
@@ -168,19 +168,19 @@ def scenario_preflight_missing_env():
     before = read_pid(log_dir_for("missing-env"))
     env = clean_env({
         "APP_HOME": APP_HOME,
-        "PIVOTOS_PROFILE": "prod",
-        "PIVOTOS_LOG_DIR": log_dir_for("missing-env"),
+        "BABYLOG_PROFILE": "prod",
+        "BABYLOG_LOG_DIR": log_dir_for("missing-env"),
         "SERVER_PORT": str(PORT),
     })
-    # 故意不注入任何 PIVOTOS_* 凭据
+    # 故意不注入任何 BABYLOG_* 凭据
     proc = subprocess.run(["bash", START_SH], env=env, capture_output=True, encoding="utf-8", errors="replace", timeout=300)
     out = proc.stdout + proc.stderr
     check("S1-1", proc.returncode != 0, f"start-prod.sh 拒绝启动（exit={proc.returncode}）")
     # 拦截发生在 preflight.py（早于脚本自带的兜底检查），故断言预检的提示：
     # 既要说清是哪一类问题，也要列出**具体变量名**，否则运维还得去翻代码
     check("S1-2", "必需环境变量" in out, "报错信息点明「必需环境变量」缺失")
-    check("S1-2b", "PIVOTOS_MYSQL_URL" in out, "报错信息列出具体缺失变量名 PIVOTOS_MYSQL_URL")
-    check("S1-2c", "PIVOTOS_FIELD_ENCRYPT_KEY" in out, "报错信息列出具体缺失变量名 PIVOTOS_FIELD_ENCRYPT_KEY")
+    check("S1-2b", "BABYLOG_MYSQL_URL" in out, "报错信息列出具体缺失变量名 BABYLOG_MYSQL_URL")
+    check("S1-2c", "BABYLOG_FIELD_ENCRYPT_KEY" in out, "报错信息列出具体缺失变量名 BABYLOG_FIELD_ENCRYPT_KEY")
     check("S1-3", not port_busy(), "8080 未被本轮拉起（无残留进程）")
     check("S1-4", read_pid(log_dir_for("missing-env")) == before, "未生成新的 PID 文件")
 
@@ -199,7 +199,7 @@ def scenario_preflight_port_busy():
     try:
         time.sleep(2)
         check("S2-0", port_busy(), "占位进程已监听 8080")
-        env = clean_env({"PIVOTOS_PROFILE": "dev", "SERVER_PORT": str(PORT)})
+        env = clean_env({"BABYLOG_PROFILE": "dev", "SERVER_PORT": str(PORT)})
         proc = subprocess.run([sys.executable, PREFLIGHT, "--profile=dev", f"--port={PORT}", "--skip-db"],
                          env=env, capture_output=True, encoding="utf-8", errors="replace", timeout=120)
         out = proc.stdout + proc.stderr
@@ -222,18 +222,18 @@ def scenario_preflight_port_busy():
 def scenario_preflight_ok():
     log("S3", "预检·条件满足 → 退出 0，且库连通为 PASS")
     env = clean_env({
-        "PIVOTOS_PROFILE": "dev",
+        "BABYLOG_PROFILE": "dev",
         "SERVER_PORT": str(PORT),
-        "PIVOTOS_MYSQL_URL": "jdbc:mysql://175.24.176.176:3306/pivotos_dev?useSSL=false",
-        "PIVOTOS_MYSQL_USERNAME": "root",
-        "PIVOTOS_MYSQL_PASSWORD": "mysql_DNCi3f",
+        "BABYLOG_MYSQL_URL": "jdbc:mysql://175.24.176.176:3306/babylog_dev?useSSL=false",
+        "BABYLOG_MYSQL_USERNAME": "root",
+        "BABYLOG_MYSQL_PASSWORD": "mysql_DNCi3f",
     })
     proc = subprocess.run([sys.executable, PREFLIGHT, "--profile=dev", f"--port={PORT}",
                             "--jar", JAR, "--db-timeout", "5"],
                            env=env, capture_output=True, encoding="utf-8", errors="replace", timeout=120)
     out = proc.stdout + proc.stderr
     check("S3-1", proc.returncode == 0, f"preflight 通过（exit={proc.returncode}）")
-    check("S3-2", "数据源连通：175.24.176.176:3306/pivotos_dev 可连通" in out,
+    check("S3-2", "数据源连通：175.24.176.176:3306/babylog_dev 可连通" in out,
           "数据源连通判为 PASS")
 
 
@@ -242,8 +242,8 @@ def boot_via_start_script(profile, tag, timeout=300):
     log_dir = log_dir_for(tag)
     env = clean_env({
         "APP_HOME": APP_HOME,
-        "PIVOTOS_PROFILE": profile,
-        "PIVOTOS_LOG_DIR": log_dir,
+        "BABYLOG_PROFILE": profile,
+        "BABYLOG_LOG_DIR": log_dir,
         "SERVER_PORT": str(PORT),
     })
     if profile == "prod":
@@ -260,9 +260,9 @@ def stop_via_stop_script(log_dir, env):
 
 
 def assert_pool_max(text, expected, tag):
-    value = metric_value(text, "pivotos_datasource_connections_max", 'pool="master"')
+    value = metric_value(text, "babylog_datasource_connections_max", 'pool="master"')
     check(tag, value == expected,
-          f"pivotos_datasource_connections_max{{pool=\"master\"}} == {expected}（实际 {value}）")
+          f"babylog_datasource_connections_max{{pool=\"master\"}} == {expected}（实际 {value}）")
 
 
 def scenario_pool_config():

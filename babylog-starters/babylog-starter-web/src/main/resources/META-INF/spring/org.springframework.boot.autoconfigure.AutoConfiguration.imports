@@ -1,0 +1,4 @@
+com.babylog.starter.web.config.WebExceptionAutoConfiguration
+com.babylog.starter.web.config.RepeatSubmitAutoConfiguration
+com.babylog.starter.web.config.EncryptAutoConfiguration
+com.babylog.starter.web.config.XssCorsAutoConfiguration

@@ -18,7 +18,7 @@
       run: python3 scripts/ops/ci_failure_digest.py --repo ${{ github.repository }} --sha ${{ github.sha }}
 
 读取（无需令牌）：
-    curl https://api.github.com/repos/pivotos-inc/pivotos-framework/commits/<sha>/statuses
+    curl https://api.github.com/repos/babylog-inc/babylog-server/commits/<sha>/statuses
 """
 import argparse
 import glob

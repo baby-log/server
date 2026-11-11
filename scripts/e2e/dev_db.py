@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """S115 E2E 测试资产公共模块（一）：dev 库连接与 fixture 物理自清。
 
-背景：本机 dev 库（pivotos_dev）里的 E2E fixture 反复出现「迁移任务行丢失 / 样图丢失」型漂移
+背景：本机 dev 库（babylog_dev）里的 E2E fixture 反复出现「迁移任务行丢失 / 样图丢失」型漂移
 （S108 K2 / S114 §5.1）。复壮的总原则是**不留下依赖**：fixture 由脚本自建、跑完自清，
 而关键粘连点是几个 DELETE 端点不存在或被业务守卫生效拦住——
   · migration 域无 DELETE 端点（`MigrationTaskController` 只有 create/complete/rollback）；
@@ -10,18 +10,18 @@
 故统一在这里提供 dev 库物理清理能力，供各 E2E 脚本按 taskId / instanceId / definitionId 精确自清，
 **只删脚本自己建的行**，不动任何存量数据。
 
-凭据以 pivotos-admin-server/src/main/resources/application-dev.yml 明文为准，支持环境变量覆盖。
+凭据以 babylog-admin-server/src/main/resources/application-dev.yml 明文为准，支持环境变量覆盖。
 """
 import os
 
 import pymysql
 
 DB = dict(
-    host=os.environ.get("PIVOTOS_DEV_MYSQL_HOST", "175.24.176.176"),
-    port=int(os.environ.get("PIVOTOS_DEV_MYSQL_PORT", "3306")),
-    user=os.environ.get("PIVOTOS_DEV_MYSQL_USER", "root"),
-    password=os.environ.get("PIVOTOS_DEV_MYSQL_PASSWORD", "mysql_DNCi3f"),
-    database=os.environ.get("PIVOTOS_DEV_MYSQL_DATABASE", "pivotos_dev"),
+    host=os.environ.get("BABYLOG_DEV_MYSQL_HOST", "175.24.176.176"),
+    port=int(os.environ.get("BABYLOG_DEV_MYSQL_PORT", "3306")),
+    user=os.environ.get("BABYLOG_DEV_MYSQL_USER", "root"),
+    password=os.environ.get("BABYLOG_DEV_MYSQL_PASSWORD", "mysql_DNCi3f"),
+    database=os.environ.get("BABYLOG_DEV_MYSQL_DATABASE", "babylog_dev"),
     charset="utf8mb4",
 )
 

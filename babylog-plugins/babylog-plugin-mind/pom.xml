@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.babylog</groupId>
+        <artifactId>babylog-plugins</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <artifactId>babylog-plugin-mind</artifactId>
+
+    <name>babylog-plugin-mind</name>
+    <description>BabyLog·智域（PivotMind）个人端插件：知识库 + 智能待办</description>
+
+    <dependencies>
+        <!-- 本插件契约 -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-mind-api</artifactId>
+        </dependency>
+
+        <!-- 底座 Starter -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-mybatis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-auth</artifactId>
+        </dependency>
+
+        <!-- AI 底座：AI 智能创建待办使用 ChatClient -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-ai</artifactId>
+        </dependency>
+
+        <!-- 仅依赖 system-api 的 LoginUser 等契约，不依赖 system 实现 -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-system-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+    </dependencies>
+</project>

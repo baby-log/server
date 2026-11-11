@@ -1,0 +1,197 @@
+spring:
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          # 开发库 babylog；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
+          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询，是数据监控 SQL 闸门的第二道防线
+          # （第一道是闸门的单语句校验，两道独立生效，不互相依赖）
+          url: ${BABYLOG_MYSQL_URL:jdbc:mysql://175.24.176.176:3306/babylog_dev?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false}
+          username: ${BABYLOG_MYSQL_USERNAME:root}
+          password: ${BABYLOG_MYSQL_PASSWORD:mysql_DNCi3f}
+          driver-class-name: com.mysql.cj.jdbc.Driver
+      # 连接池（V3.1-G · P1-B2）：与容量无关的生产参数在 application.yml，
+      # 这里只给容量三件套。dev 保持 20/5/5 不动，避免开发机多开时连接数膨胀。
+      druid:
+        initial-size: 5
+        min-idle: 5
+        max-active: 20
+  data:
+    redis:
+      host: ${BABYLOG_REDIS_HOST:175.24.176.176}
+      port: 6379
+      password: ${BABYLOG_REDIS_PASSWORD:redis_Q6aiiX}
+      timeout: 5s
+      database: 0
+
+  ai:
+    # dev 兜底：IDEA 直接启动（不 source .env.dev）时用此值
+    # 优先级：环境变量 BABYLOG_LLM_API_KEY > 此兜底值；生产环境必须通过环境变量注入
+    openai:
+      api-key: ${BABYLOG_LLM_API_KEY:sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC}
+
+    # Milvus 服务端实际未部署（2026-09-24 实测 19530 不通）：
+    # ① spring.ai.vectorstore.type 显式设为 simple——该自动装配 matchIfMissing=true，不设会按默认 localhost:19530 连 Milvus 导致启动失败；
+    # ② 本地 dev 向量库走 babylog.kb.vector-store.type=simple（内存 + JSON 快照，零中间件，即 Milvus Lite 定位的落地形态）；
+    # 将来部署 Milvus 服务端后：改回 type: milvus 并恢复下方 milvus 段即可。
+    vectorstore:
+      type: simple
+    #   milvus:
+    #     client:
+    #       host: 175.24.176.176
+    #       port: 19530
+    #     database-name: default
+    #     collection-name: babylog_dev_kb
+    #     embedding-dimension: 1024
+    #     initialize-schema: true
+    #     metric-type: COSINE
+
+  cloud:
+    # ===== dev Nacos（V3-S3）=====
+    # 与上方 MySQL / Redis 同款口径：dev 配置文件里本来就存明文口令，故此处直接写 dev 值；
+    # test / prod 仍走 application.yml 的 ${BABYLOG_NACOS_*} 占位符，不落任何明文。
+    # 仍保留覆盖能力：显式注入 BABYLOG_NACOS_* 环境变量时以环境变量为准。
+    # ⚠️ 缩进必须是 2 空格，且必须整块放在 spring 的最后一个子项之后：
+    #    插到别的子项中间会把后续配置「吸」进 cloud 子树（本轮就踩了一次——
+    #    spring.ai.vectorstore.type 被吞掉，Milvus 自动装配复活并连 19530 把启动打断）。
+    nacos:
+      config:
+        server-addr: ${BABYLOG_NACOS_SERVER_ADDR:175.24.176.176:8848}
+        username: ${BABYLOG_NACOS_USERNAME:nacos}
+        password: "${BABYLOG_NACOS_PASSWORD:OdBp8FX5Bp5#*pCq}"
+      discovery:
+        # 注册开关仍沿用 application.yml 的默认 false：连得上 ≠ 该注册（V3-S2 L2 铁律）
+        server-addr: ${BABYLOG_NACOS_SERVER_ADDR:175.24.176.176:8848}
+        username: ${BABYLOG_NACOS_USERNAME:nacos}
+        password: "${BABYLOG_NACOS_PASSWORD:OdBp8FX5Bp5#*pCq}"
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    com.babylog: debug
+    org.dromara.warm.flow: debug
+    org.springframework.web.servlet.mvc.method.annotation: trace
+
+babylog:
+  tenant:
+    enabled: true        # 默认 false，不写=单租户
+    mode: column         # column / schema / datasource
+  # 文件存储：腾讯云 COS（测试环境）
+  file:
+    storage-type: s3
+    vendor: cos
+    endpoint: https://cos.ap-shanghai.myqcloud.com
+    access-key: ${BABYLOG_COS_ACCESS_KEY:AKIDKhrqb9UbVCg3D9B9AA4qPuENXUJvJUSC}
+    secret-key: ${BABYLOG_COS_SECRET_KEY:ayBIG1aw51jEVlqiNtDKOL7i5HJ8k9LO}
+    bucket: huweilong-1440252518
+    region: ap-shanghai
+    public-url: https://cos.293242.com
+  # XXL-Job 调度中心（开发环境本地）
+  job:
+    admin-addresses: http://127.0.0.1:8101
+    app-name: babylog-dev-executor
+    port: 9999
+    group-id: 1   # XXL-Job admin 中 babylog-executor 执行器组 ID
+    access-token: ${BABYLOG_XXL_JOB_ACCESS_TOKEN:qaz123}
+  # A4-1 代码索引与定位（S110）：默认关闭（要扫仓库源码），dev 显式开启
+  ai:
+    coding:
+      locate:
+        enabled: true
+        top-n: 5              # LLM 粗筛候选数
+        keyword-top-k: 5      # 确定性关键词召回条数（与粗筛选并集，保召回下限）
+        max-candidates: 8     # 进入并行精定位的候选上限
+        repos:
+          - name: fw
+            root: /Users/huweilong/WorkBuddy/业余项目/server
+            includes:
+              - babylog-plugins/**/src/main/java/**/*.java
+          - name: ui
+            root: /Users/huweilong/WorkBuddy/业余项目/babylog-ui
+            includes:
+              - apps/admin/src/**/*.ts
+              - apps/admin/src/**/*.vue
+      # S111 A4-2 修改型：会写工程文件，dev 显式开启；落盘路径走与生成型同一道白名单
+      # 注意缩进：modify 与 locate 同级（同属 babylog.ai.coding），缩进错了会静默绑不上
+      modify:
+        enabled: true
+        gate:
+          build-enabled: true      # 落盘后跑 mvn compile / pnpm typecheck，不过即回滚
+          timeout-seconds: 600
+    # A5-1 工具多步编排（S116）：与 locate/modify 同为「能力显式开启」口径，dev 显式开启
+    # 注意缩进：orchestrator 与 coding 同级（同属 babylog.ai），缩进错了会静默绑不上
+    orchestrator:
+      enabled: true
+      max-steps: 10              # 单条计划步骤上限（防 LLM 产出失控长链）
+      max-intent-length: 500
+      model: qwen3.8-flash       # V3.2-D 降档（原 qwen-plus）；留空则取供应商默认模型
+      # 排除写工程源码的工具：改源码属 A4 评审面职责，编排面不给旁路
+      excluded-tools:
+        - writeCodeFile
+      # A5-2 重试（S117）：只对「只读步骤 + 工具本体执行失败」重试；
+      # 写步骤 write-enabled=false——写工具非幂等（实测连发两次站内信，消息数 +2），
+      # 且守卫把异常吞成文本，判不了失败发生在副作用前还是后，重试等于重复副作用。
+      # 注意缩进：retry/circuit 与 enabled 同级（同属 orchestrator），缩进错了静默失效。
+      retry:
+        enabled: true
+        max-attempts: 2
+        write-enabled: false
+        backoff-ms: 300
+      # A5-2 熔断（S117）：单条计划的重试预算，防故障态下反复重试放大调用量
+      circuit:
+        enabled: true
+        max-retries-per-plan: 3
+    # A4E 审批建议增强（S117）：受控自动预审——默认关闭（能力显式开启口径）。
+    # 注意缩进：approval 与 coding / orchestrator 同级（同属 babylog.ai），
+    # auto-approve 与 approval 的下级属性同级；缩进挂错一级会静默失效。
+    approval:
+      auto-approve:
+        enabled: false
+        require-policy-kb: true
+        require-single-approver: true
+        amount-variable-key: ""
+        max-amount: 0
+        message: "AI 预审自动通过（依据制度检索结论，审批人已授权自动预审）"
+  # 检索（S121/S122）：dev 环境真连 ES——175.24.176.176:9200。
+  # 2026-09-30 实测：服务端 ES 9.5.3 单节点、HTTP 明文 + Basic 认证（elastic/Elastic_RGRSPM）；
+  # 客户端 elasticsearch-java 8.19.18 与服务端 wire 兼容（服务端 minimum_wire_compatibility_version=8.19.0），
+  # dev 独享该集群故索引名不加前缀。
+  # 一键回退：BABYLOG_SEARCH_TYPE=simple（回内存兜底）或 BABYLOG_SEARCH_OPER_LOG_ENABLED=false（回数据库查询）。
+  # 多版本支持（S127）：同一份 es-java 实现可连 7.17 / 8.x / 9.x。
+  #   · 连 8.x / 9.x（本 dev 的 9200，ES 9.5.3）——compatibility-mode 保持 false；
+  #   · 连 7.x（如 175.24.176.176:9201，ES 7.17.28）——compatibility-mode 置 true 发 compatible-with=7。
+  #   二者只改这一个开关，无需换依赖（不做 shade 双客户端）。启动期会打印服务端版本，
+  #   版本不在支持区间（7.17 ~ 9.x）或兼容头与版本冲突时自动回落 simple 并打 WARN，不会让应用起不来。
+  # ST-DATAINSPECT（S130）：通用数据监控。安全默认——只查白名单表（allow-all-tables=false），
+  # 需要放开某张表就在这里加（表白名单是硬生效的安全过滤，与 monitor:data:* 权限无关）
+  datainspect:
+    mysql:
+      table-whitelist:
+        - sys_user
+        - sys_config
+        - sys_notice
+        - sys_oper_log
+        - sys_login_log
+        - sys_job
+        - sys_job_log
+  search:
+    type: ${BABYLOG_SEARCH_TYPE:es-java}
+    es-java:
+      uris: ${BABYLOG_ES_JAVA_URIS:http://175.24.176.176:9200}
+      username: ${BABYLOG_ES_JAVA_USERNAME:elastic}
+      password: ${BABYLOG_ES_JAVA_PASSWORD:Elastic_RGRSPM}
+      # 服务端是 9.5.3，必须 false；切到 7.17 服务端时改 true
+      compatibility-mode: ${BABYLOG_ES_JAVA_COMPATIBILITY_MODE:false}
+  # 微信小程序（测试号）
+  wechat:
+    miniapp:
+      appid: wx0a426f6d4bce0b5c
+      # BabyLog·智域小程序（比赛作品）AppID/Secret，待用户提供后填明文
+      configs:
+        mind:
+          appid: ${BABYLOG_MIND_MINIAPP_APPID:}
+          secret: ${BABYLOG_MIND_MINIAPP_SECRET:}

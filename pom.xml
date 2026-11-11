@@ -3,22 +3,22 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.pivotos</groupId>
-    <artifactId>pivotos-framework</artifactId>
+    <groupId>com.babylog</groupId>
+    <artifactId>babylog-server</artifactId>
     <version>3.2.0</version>
     <packaging>pom</packaging>
 
-    <name>pivotos-framework</name>
-    <description>PivotOS 后端框架聚合父工程</description>
+    <name>babylog-server</name>
+    <description>BabyLog 后端框架聚合父工程</description>
 
     <modules>
-        <module>pivotos-dependencies</module>
-        <module>pivotos-commons</module>
-        <module>pivotos-starters</module>
-        <module>pivotos-plugins</module>
-        <module>pivotos-admin-server</module>
+        <module>babylog-dependencies</module>
+        <module>babylog-commons</module>
+        <module>babylog-starters</module>
+        <module>babylog-plugins</module>
+        <module>babylog-admin-server</module>
         <!-- V3-S2 L2：Spring Cloud Gateway（webmvc 变体）独立进程，单体形态不启动 -->
-        <module>pivotos-gateway-server</module>
+        <module>babylog-gateway-server</module>
     </modules>
 
     <properties>
@@ -27,9 +27,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <!-- V3-S2 第二轮：Spring Boot 版本仲裁点（由 pivotos-dependencies 上移到这里）。
+        <!-- V3-S2 第二轮：Spring Boot 版本仲裁点（由 babylog-dependencies 上移到这里）。
              上移原因：spring-boot-maven-plugin 必须在 pluginManagement 里显式钉版本，
-             而父 pom 读不到子模块（pivotos-dependencies）的 property —— 若不钉，Maven 会
+             而父 pom 读不到子模块（babylog-dependencies）的 property —— 若不钉，Maven 会
              「自由取版本」把 fat jar 打成 milestone 插件产物（实测混入 jarmode-tools-4.2.0-M2）。
              本项目全仓仅此一处声明 Boot 版本，子模块与 BOM 一律继承，勿在其他 pom 重复声明。 -->
         <spring-boot.version>4.1.1</spring-boot.version>
@@ -44,7 +44,7 @@
         <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
 
-        <!-- 与 pivotos-dependencies 中 mapstruct-plus.version 保持一致（annotationProcessorPaths 无法引用 import BOM 的属性） -->
+        <!-- 与 babylog-dependencies 中 mapstruct-plus.version 保持一致（annotationProcessorPaths 无法引用 import BOM 的属性） -->
         <mapstruct-plus.version>1.5.1</mapstruct-plus.version>
     </properties>
 

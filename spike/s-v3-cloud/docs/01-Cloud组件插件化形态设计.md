@@ -1,7 +1,7 @@
 # Cloud 组件插件化形态设计（S133 spike 技术说明）
 
 > 产出时间：2026-10-02 ｜ 状态：**spike 资产，非生产实现**
-> 归属：`pivotos-framework/spike/s-v3-cloud/`（不进 Maven reactor、不改生产 pom、依赖数不变）
+> 归属：`babylog-server/spike/s-v3-cloud/`（不进 Maven reactor、不改生产 pom、依赖数不变）
 > 相关：《18-V2收官与V3启动路线图（已拍板）.md》第五节「v3.0.0 spike 计划」
 
 ---
@@ -20,7 +20,7 @@
 
 | 维度 | 单体形态（默认） | 微服务形态（可选） |
 |---|---|---|
-| 运行方式 | `java -jar pivotos-admin-server.jar`（零额外依赖） | classpath 追加 `pivotos-starter-cloud-openfeign` / `-nacos` |
+| 运行方式 | `java -jar babylog-admin-server.jar`（零额外依赖） | classpath 追加 `babylog-starter-cloud-openfeign` / `-nacos` |
 | 跨 Plugin 调用 | 进程内 Spring Bean 注入 `-api` Facade | 同一批 Facade 接口走 HTTP（OpenFeign 语义） |
 | 服务发现 | 不需要 | `ServiceInstanceProvider` SPI（static / nacos / 未来 k8s） |
 | 分布式事务 | 本地事务 | `TxContext`（XID 传播）+ 后续二阶段/补偿 |
@@ -35,11 +35,11 @@
 
 | # | Starter（spike 命名） | 职责 | 开关属性 | 缺省行为 |
 |---|---|---|---|---|
-| ① | `pivotos-starter-cloud-openfeign` | 通信抽象：Facade 接口 → JDK HttpClient JSON-RPC；含 HMAC 签名、`TxContext`、RPC 服务端点（`/__rpc/*` Servlet） | `pivotos.cloud.openfeign.enabled` | 不引即零行为；引入未开启亦零行为 |
-| ② | `pivotos-starter-cloud-nacos` | 注册/发现：直连 Nacos **Open API v1**（注册/心跳/实例列表），实现 `ServiceInstanceProvider` | `pivotos.cloud.nacos.enabled` | 未配 `server-addr` → **fail-fast 起不来** |
-| ③ | `pivotos-starter-cloud-gateway` | 统一入口：注入 `X-Edge-Gateway` / `X-Edge-Request-Id`，可选前缀剥离转发 | `pivotos.cloud.gateway.enabled` | 默认不改写任何路径 |
-| ④ | `pivotos-starter-cloud-sentinel` | 流控：滑动窗口 QPS 限流，超限 429 | `pivotos.cloud.sentinel.enabled` | `qps<=0` 等于不限流 |
-| ⑤ | `pivotos-starter-cloud-seata` | 事务边界：生成 XID → `TxContext` → RPC 自动携带 `X-Tx-Id` | `pivotos.cloud.seata.enabled` | 只记录，不改变业务行为 |
+| ① | `babylog-starter-cloud-openfeign` | 通信抽象：Facade 接口 → JDK HttpClient JSON-RPC；含 HMAC 签名、`TxContext`、RPC 服务端点（`/__rpc/*` Servlet） | `babylog.cloud.openfeign.enabled` | 不引即零行为；引入未开启亦零行为 |
+| ② | `babylog-starter-cloud-nacos` | 注册/发现：直连 Nacos **Open API v1**（注册/心跳/实例列表），实现 `ServiceInstanceProvider` | `babylog.cloud.nacos.enabled` | 未配 `server-addr` → **fail-fast 起不来** |
+| ③ | `babylog-starter-cloud-gateway` | 统一入口：注入 `X-Edge-Gateway` / `X-Edge-Request-Id`，可选前缀剥离转发 | `babylog.cloud.gateway.enabled` | 默认不改写任何路径 |
+| ④ | `babylog-starter-cloud-sentinel` | 流控：滑动窗口 QPS 限流，超限 429 | `babylog.cloud.sentinel.enabled` | `qps<=0` 等于不限流 |
+| ⑤ | `babylog-starter-cloud-seata` | 事务边界：生成 XID → `TxContext` → RPC 自动携带 `X-Tx-Id` | `babylog.cloud.seata.enabled` | 只记录，不改变业务行为 |
 
 **自动配置边界三条铁律（沿用既有口径）**
 
@@ -74,7 +74,7 @@ FacadeRpcServlet（server-enabled=true 时才注册）
 
 - **为什么 `$Local` 必须 `setAutowireCandidate(false)`**：否则 by-type 注入点同时看到两个候选，直接 `NoUniqueBeanDefinitionException`（本次实测踩坑 K3）。
 - **为什么服务端要按名取 `$Local`**：若 `getBean(iface)` 会命中代理 → 自调用成环。
-- **为什么用 Servlet 而不是 `@RestController`**：主应用组件扫描范围不覆盖 `com.pivotos.cloud.**`，Servlet 注册不受扫描影响。
+- **为什么用 Servlet 而不是 `@RestController`**：主应用组件扫描范围不覆盖 `com.babylog.cloud.**`，Servlet 注册不受扫描影响。
 
 ---
 
@@ -97,7 +97,7 @@ spike 刻意**没有**引入真实 `spring-cloud-starter-openfeign` / `spring-cl
 
 ## 5. ArchUnit 守护规则增补点
 
-草案见同目录 `../docs/ArchUnit-guard-addendum.java`（**尚未落库**，建议 V3 正式启动时并入 `pivotos-admin-server` 既有 P0 门禁）：
+草案见同目录 `../docs/ArchUnit-guard-addendum.java`（**尚未落库**，建议 V3 正式启动时并入 `babylog-admin-server` 既有 P0 门禁）：
 
 - **C1** 业务 Plugin 实现层不得直接引用其它 Plugin 实现层（豁免清单按 Sprint 清偿）
 - **C2** `-api` 契约模块不得反向依赖实现模块

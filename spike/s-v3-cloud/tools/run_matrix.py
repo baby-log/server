@@ -18,7 +18,7 @@ S133 V3 spike —— 形态切换与一票否决点实测脚本（可复跑）
 
 用法
 ----
-cd pivotos-framework && python3 spike/s-v3-cloud/tools/run_matrix.py            # 全跑
+cd babylog-server && python3 spike/s-v3-cloud/tools/run_matrix.py            # 全跑
 python3 spike/s-v3-cloud/tools/run_matrix.py --only F1-monolith,F2-microservice
 """
 
@@ -40,7 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FW_ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 EV_DIR = os.path.join(FW_ROOT, "spike", "s-v3-cloud", "evidence")
 JARS_DIR = os.path.join(FW_ROOT, "spike", "s-v3-cloud", "build", "jars")
-APP_JAR = os.path.join(FW_ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
+APP_JAR = os.path.join(FW_ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
 EXPLODED = os.path.join(FW_ROOT, "spike", "s-v3-cloud", "build", "exploded-app")
 JAVA_HOME = os.environ.get("JAVA_HOME", "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home")
 JAVA = os.path.join(JAVA_HOME, "bin", "java")
@@ -50,9 +50,9 @@ APP_PORT = 8080
 STUB_PORT = 18849
 START_TIMEOUT = 180
 PROXIES = (
-    "com.pivotos.file.api.facade.IFileFacade,"
-    "com.pivotos.ai.api.facade.IAiFacade,"
-    "com.pivotos.ai.kb.api.facade.IKnowledgeBaseFacade"
+    "com.babylog.file.api.facade.IFileFacade,"
+    "com.babylog.ai.api.facade.IAiFacade,"
+    "com.babylog.ai.kb.api.facade.IKnowledgeBaseFacade"
 )
 
 
@@ -84,14 +84,14 @@ FORMS = [
         launcher="cp",
         jars=["cloud-openfeign", "cloud-nacos"],
         props={
-            "pivotos.cloud.openfeign.enabled": "true",
-            "pivotos.cloud.openfeign.server-enabled": "true",
-            "pivotos.cloud.openfeign.service-instance-provider": "nacos",
-            "pivotos.cloud.openfeign.proxied": PROXIES,
-            "pivotos.cloud.nacos.enabled": "true",
-            "pivotos.cloud.nacos.server-addr": f"127.0.0.1:{STUB_PORT}",
-            "pivotos.cloud.nacos.ip": "127.0.0.1",
-            "pivotos.cloud.nacos.port": str(APP_PORT),
+            "babylog.cloud.openfeign.enabled": "true",
+            "babylog.cloud.openfeign.server-enabled": "true",
+            "babylog.cloud.openfeign.service-instance-provider": "nacos",
+            "babylog.cloud.openfeign.proxied": PROXIES,
+            "babylog.cloud.nacos.enabled": "true",
+            "babylog.cloud.nacos.server-addr": f"127.0.0.1:{STUB_PORT}",
+            "babylog.cloud.nacos.ip": "127.0.0.1",
+            "babylog.cloud.nacos.port": str(APP_PORT),
         },
         checks=["login", "summary", "log-rpc", "log-nacos"],
     ),
@@ -101,18 +101,18 @@ FORMS = [
         launcher="cp",
         jars=["cloud-openfeign", "cloud-nacos", "cloud-gateway", "cloud-sentinel", "cloud-seata"],
         props={
-            "pivotos.cloud.openfeign.enabled": "true",
-            "pivotos.cloud.openfeign.server-enabled": "true",
-            "pivotos.cloud.openfeign.service-instance-provider": "nacos",
-            "pivotos.cloud.openfeign.proxied": PROXIES,
-            "pivotos.cloud.nacos.enabled": "true",
-            "pivotos.cloud.nacos.server-addr": f"127.0.0.1:{STUB_PORT}",
-            "pivotos.cloud.nacos.ip": "127.0.0.1",
-            "pivotos.cloud.nacos.port": str(APP_PORT),
-            "pivotos.cloud.gateway.enabled": "true",
-            "pivotos.cloud.sentinel.enabled": "true",
-            "pivotos.cloud.sentinel.qps": "500",
-            "pivotos.cloud.seata.enabled": "true",
+            "babylog.cloud.openfeign.enabled": "true",
+            "babylog.cloud.openfeign.server-enabled": "true",
+            "babylog.cloud.openfeign.service-instance-provider": "nacos",
+            "babylog.cloud.openfeign.proxied": PROXIES,
+            "babylog.cloud.nacos.enabled": "true",
+            "babylog.cloud.nacos.server-addr": f"127.0.0.1:{STUB_PORT}",
+            "babylog.cloud.nacos.ip": "127.0.0.1",
+            "babylog.cloud.nacos.port": str(APP_PORT),
+            "babylog.cloud.gateway.enabled": "true",
+            "babylog.cloud.sentinel.enabled": "true",
+            "babylog.cloud.sentinel.qps": "500",
+            "babylog.cloud.seata.enabled": "true",
         },
         checks=["login", "summary", "log-rpc", "gateway-header"],
     ),
@@ -122,10 +122,10 @@ FORMS = [
         launcher="cp",
         jars=["cloud-seata", "cloud-openfeign"],
         props={
-            "pivotos.cloud.seata.enabled": "true",
-            "pivotos.cloud.openfeign.enabled": "true",
-            "pivotos.cloud.openfeign.server-enabled": "true",
-            "pivotos.cloud.openfeign.proxied": PROXIES,
+            "babylog.cloud.seata.enabled": "true",
+            "babylog.cloud.openfeign.enabled": "true",
+            "babylog.cloud.openfeign.server-enabled": "true",
+            "babylog.cloud.openfeign.proxied": PROXIES,
         },
         checks=["login", "summary", "log-seata", "log-rpc"],
     ),
@@ -134,7 +134,7 @@ FORMS = [
         title="V3 · 单独引 gateway",
         launcher="cp",
         jars=["cloud-gateway"],
-        props={"pivotos.cloud.gateway.enabled": "true"},
+        props={"babylog.cloud.gateway.enabled": "true"},
         checks=["login", "summary", "gateway-header"],
     ),
     Form(
@@ -143,10 +143,10 @@ FORMS = [
         launcher="cp",
         jars=["cloud-sentinel"],
         props={
-            "pivotos.cloud.sentinel.enabled": "true",
-            "pivotos.cloud.sentinel.qps": "1",
+            "babylog.cloud.sentinel.enabled": "true",
+            "babylog.cloud.sentinel.qps": "1",
             # 只对看板端点限流，避免把「登录」也挡在门外导致形态看起来「起不来」
-            "pivotos.cloud.sentinel.url-pattern": "/monitor/dashboard/*",
+            "babylog.cloud.sentinel.url-pattern": "/monitor/dashboard/*",
         },
         checks=["login", "sentinel-limit"],
     ),
@@ -156,9 +156,9 @@ FORMS = [
         launcher="cp",
         jars=["cloud-openfeign"],
         props={
-            "pivotos.cloud.openfeign.enabled": "true",
-            "pivotos.cloud.openfeign.hmac-enabled": "true",
-            "pivotos.cloud.openfeign.hmac-secret": "",
+            "babylog.cloud.openfeign.enabled": "true",
+            "babylog.cloud.openfeign.hmac-enabled": "true",
+            "babylog.cloud.openfeign.hmac-secret": "",
         },
         expect="fail",
         fail_marker="[CLOUD][FAIL-FAST]",
@@ -169,9 +169,9 @@ FORMS = [
         launcher="cp",
         jars=["cloud-nacos", "cloud-openfeign"],
         props={
-            "pivotos.cloud.nacos.enabled": "true",
-            "pivotos.cloud.nacos.server-addr": "",
-            "pivotos.cloud.openfeign.enabled": "true",
+            "babylog.cloud.nacos.enabled": "true",
+            "babylog.cloud.nacos.server-addr": "",
+            "babylog.cloud.openfeign.enabled": "true",
         },
         expect="fail",
         fail_marker="[CLOUD][FAIL-FAST]",
@@ -338,8 +338,8 @@ def build_cmd(form: Form) -> list:
     if form.launcher == "jar":
         return jvm + ["-jar", APP_JAR] + args
     cp = f"{EXPLODED}/BOOT-INF/classes:{EXPLODED}/BOOT-INF/lib/*:" + ":".join(
-        os.path.join(JARS_DIR, f"pivotos-starter-{j}.jar") for j in form.jars)
-    return jvm + ["-cp", cp, "com.pivotos.server.PivotOsAdminApplication"] + args
+        os.path.join(JARS_DIR, f"babylog-starter-{j}.jar") for j in form.jars)
+    return jvm + ["-cp", cp, "com.babylog.server.BabyLogAdminApplication"] + args
 
 
 def start_stub() -> subprocess.Popen:
@@ -461,8 +461,8 @@ def main() -> int:
     # 业务模块零改动（V2 否决点的硬证据）
     business_diff = subprocess.run(
         ["git", "diff", "--numstat", "--",
-         "pivotos-plugins", "pivotos-starters", "pivotos-commons",
-         "pivotos-admin-server", "pom.xml", "pivotos-dependencies"],
+         "babylog-plugins", "babylog-starters", "babylog-commons",
+         "babylog-admin-server", "pom.xml", "babylog-dependencies"],
         cwd=FW_ROOT, capture_output=True, text=True).stdout.strip()
 
     lines = []

@@ -35,14 +35,14 @@ ROUTERS_URL = f"{BASE}/system/menu/routers"
 SSE_URL = f"{BASE}/sse"
 
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
-JAR = os.path.join(os.path.dirname(__file__), "..", "..", "pivotos-admin-server", "target",
-                   "pivotos-admin-server.jar")
-LOG_FILE = "/tmp/pivotos-fe-comp-menu-e2e.log"
+JAR = os.path.join(os.path.dirname(__file__), "..", "..", "babylog-admin-server", "target",
+                   "babylog-admin-server.jar")
+LOG_FILE = "/tmp/babylog-fe-comp-menu-e2e.log"
 
 MYSQL = dict(host="175.24.176.176", port=3306, user="root", password="mysql_DNCi3f",
-             database="pivotos_dev", charset="utf8mb4")
+             database="babylog_dev", charset="utf8mb4")
 
-UI_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..", "pivotos-ui")
+UI_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..", "babylog-ui")
 VIEWS_ROOT = os.path.join(UI_ROOT, "apps", "admin", "src", "views")
 
 # (id, parent_id, menu_name, menu_type, path, component, perms)

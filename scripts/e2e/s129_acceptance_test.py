@@ -27,7 +27,7 @@ K 数据监控（1250）：components 三组件 + schemas/tables/stats/preview +
 前置：后端已在 8080 起服（本脚本不抢端口、不自启停；只 kill 自己造的数据，不 kill 任何进程）。
 用法：
     python3 scripts/e2e/s129_acceptance_test.py
-    PIVOTOS_DASHSCOPE_KEY=sk-xxx python3 scripts/e2e/s129_acceptance_test.py   # 供 AI 链路临时登记
+    BABYLOG_DASHSCOPE_KEY=sk-xxx python3 scripts/e2e/s129_acceptance_test.py   # 供 AI 链路临时登记
 """
 import json
 import os
@@ -43,7 +43,7 @@ import dev_db  # noqa: E402  统一物理清理口径
 
 BASE = "http://localhost:8080"
 DB = dict(host="175.24.176.176", port=3306, user="root", password="mysql_DNCi3f",
-          database="pivotos_dev", charset="utf8mb4")
+          database="babylog_dev", charset="utf8mb4")
 
 FLOW_CODE = "s129_accept_flow"
 KB_NAME = "S129验收知识库"
@@ -279,10 +279,10 @@ def purge_flow(flow_code):
 def ensure_ai_key(hdr):
     """dev 库 ai_api_key 零行时动态通道不可用（已知边界⑳）。
 
-    若环境变量 PIVOTOS_DASHSCOPE_KEY 提供了可用 Key，则临时登记一枚（purpose=all），
+    若环境变量 BABYLOG_DASHSCOPE_KEY 提供了可用 Key，则临时登记一枚（purpose=all），
     让 AI 对话 / AI 图表 / RAG 链路能被真验；返回 key_id 供 main 收尾删除。
     """
-    key = os.environ.get("PIVOTOS_DASHSCOPE_KEY")
+    key = os.environ.get("BABYLOG_DASHSCOPE_KEY")
     if not key:
         return None
     body = j(get("/ai/provider/list", hdr, **{"pageNum": 1, "pageSize": 10}))
@@ -481,12 +481,12 @@ def k_data_monitor(hdr):
 
     body = j(get("/monitor/data/schemas", hdr, **{"component": "mysql"}))
     check("K5 schemas 枚举 code=0", body.get("code") == 0, str(body)[:150])
-    body = j(get("/monitor/data/tables", hdr, **{"component": "mysql", "schema": "pivotos_dev"}))
+    body = j(get("/monitor/data/tables", hdr, **{"component": "mysql", "schema": "babylog_dev"}))
     check("K6 tables 枚举 code=0", body.get("code") == 0, str(body)[:150])
-    body = j(get("/monitor/data/stats", hdr, **{"component": "mysql", "schema": "pivotos_dev",
+    body = j(get("/monitor/data/stats", hdr, **{"component": "mysql", "schema": "babylog_dev",
                                                 "table": "sys_user"}))
     check("K7 stats 查询 code=0", body.get("code") == 0, str(body)[:150])
-    body = j(post("/monitor/data/preview", hdr, {"component": "mysql", "schema": "pivotos_dev",
+    body = j(post("/monitor/data/preview", hdr, {"component": "mysql", "schema": "babylog_dev",
                                                  "table": "sys_user", "pageNum": 1, "pageSize": 5}))
     data = body.get("data") or {}
     check("K8 preview 预览 code=0 且有列",
@@ -494,7 +494,7 @@ def k_data_monitor(hdr):
 
     # 自由 SQL 默认仅 super_admin：admin 是超管，故此处只断言「接口可达且带守卫」
     body = j(post("/monitor/data/query", hdr,
-                  {"component": "mysql", "schema": "pivotos_dev",
+                  {"component": "mysql", "schema": "babylog_dev",
                    "sql": "SELECT id, username FROM sys_user LIMIT 3"}))
     check("K9 自由 SQL（超管）code=0 或守卫明确拒绝",
           body.get("code") in (0, 8201, 8202, 8203), f"code={body.get('code')} msg={body.get('msg')}")

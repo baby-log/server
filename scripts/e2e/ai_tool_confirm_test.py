@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S98 二次确认协议专项 E2E（2026-08-23 第 4 轮）
+BabyLog S98 二次确认协议专项 E2E（2026-08-23 第 4 轮）
 前置：ai_tool_registry_test.py 已 ALL-PASS（基础链路成立）。
 手法：SQL 把 queryMyPendingTaskCount 的 confirm_required 置 1（模拟写操作工具），
 经 REST status 端点触发守卫缓存失效，验证：
@@ -16,7 +16,7 @@ BASE = "http://localhost:8080"
 MYSQL_CP = sorted(glob.glob(os.path.expanduser(
     "~/.m2/repository/com/mysql/mysql-connector-j/*/mysql-connector-j-*.jar")))[-1]
 _WORKSPACE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-TOGGLER = os.path.join(_WORKSPACE, "pivotos-tmp", "S98ConfirmToggle.java")
+TOGGLER = os.path.join(_WORKSPACE, "babylog-tmp", "S98ConfirmToggle.java")
 
 def log(tag, msg):
     print(f"[{tag}] {msg}", flush=True)

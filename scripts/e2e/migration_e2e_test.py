@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PivotOS 系统迁移功能全链路 E2E 自测脚本（S115 fixture 复壮版）。
+"""BabyLog 系统迁移功能全链路 E2E 自测脚本（S115 fixture 复壮版）。
 
 链路：自建任务 → 上传合成源码包 → 解析 → AI 架构分析 → AI 迁移计划 → 断言 → 自清。
 

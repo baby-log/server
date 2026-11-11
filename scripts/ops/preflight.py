@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""PivotOS 启动前置检查（V3.1-G · P1-B3 进程托管）。
+"""BabyLog 启动前置检查（V3.1-G · P1-B3 进程托管）。
 
 为什么要有这个脚本
 ------------------
@@ -61,12 +61,12 @@ MIN_JDK_MAJOR = 17
 #             所以这里**不强制**注入，只打 INFO 说明现状。
 REQUIRED_BY_PROFILE = {
     "prod": [
-        ("PIVOTOS_MYSQL_URL", "JDBC 连接串；空默认会让数据源装配直接失败（A1 的 fail-fast 设计）"),
-        ("PIVOTOS_MYSQL_USERNAME", "MySQL 账号；生产应为最小权限应用账号"),
-        ("PIVOTOS_MYSQL_PASSWORD", "MySQL 口令；由密钥管理系统或部署平台注入"),
-        ("PIVOTOS_REDIS_HOST", "Redis 主机"),
-        ("PIVOTOS_REDIS_PASSWORD", "Redis 口令"),
-        ("PIVOTOS_FIELD_ENCRYPT_KEY",
+        ("BABYLOG_MYSQL_URL", "JDBC 连接串；空默认会让数据源装配直接失败（A1 的 fail-fast 设计）"),
+        ("BABYLOG_MYSQL_USERNAME", "MySQL 账号；生产应为最小权限应用账号"),
+        ("BABYLOG_MYSQL_PASSWORD", "MySQL 口令；由密钥管理系统或部署平台注入"),
+        ("BABYLOG_REDIS_HOST", "Redis 主机"),
+        ("BABYLOG_REDIS_PASSWORD", "Redis 口令"),
+        ("BABYLOG_FIELD_ENCRYPT_KEY",
          "字段加密 AES 密钥（16/24/32 位）；prod 若解析到 git 里的开发默认值，应用会拒绝启动"),
     ],
     "test": [],
@@ -100,14 +100,14 @@ def check_field_encrypt_key(findings: list[Finding], profile: str) -> None:
     prod 形态下应用侧 FieldEncryptKeyGuard 会在解析到开发默认值时直接拒绝启动，
     这里提前拦一次，报错比启动到一半抛 IllegalStateException 好读。
     """
-    key = env("PIVOTOS_FIELD_ENCRYPT_KEY")
+    key = env("BABYLOG_FIELD_ENCRYPT_KEY")
     if not key:
         if profile == "prod":
             # 缺失本身已由 check_required_env 判 FAIL，这里不重复计
             return
         findings.append(Finding(
             "WARN", "字段加密密钥",
-            f"profile={profile} 未注入 PIVOTOS_FIELD_ENCRYPT_KEY，将使用 profile 兜底值",
+            f"profile={profile} 未注入 BABYLOG_FIELD_ENCRYPT_KEY，将使用 profile 兜底值",
             "仅可用于开发/测试；生产必须显式注入，且值不可等于 git 里的开发默认密钥",
         ))
         return
@@ -311,7 +311,7 @@ def parse_jdbc_url(url: str) -> tuple[str, int, str]:
 
 def check_db(findings: list[Finding], url: str, user: str, password: str, timeout: float) -> None:
     if not url:
-        findings.append(Finding("WARN", "数据源连通", "未配置 PIVOTOS_MYSQL_URL，跳过连通检查"))
+        findings.append(Finding("WARN", "数据源连通", "未配置 BABYLOG_MYSQL_URL，跳过连通检查"))
         return
     try:
         host, port, db = parse_jdbc_url(url)
@@ -395,7 +395,7 @@ def check_heap(findings: list[Finding]) -> None:
 
 
 def check_log_dir(findings: list[Finding], log_dir: str) -> None:
-    d = env("PIVOTOS_LOG_DIR") or log_dir
+    d = env("BABYLOG_LOG_DIR") or log_dir
     if not d:
         findings.append(Finding("WARN", "日志目录", "未指定日志目录"))
         return
@@ -415,15 +415,15 @@ def check_log_dir(findings: list[Finding], log_dir: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="PivotOS 启动前置检查：环境变量 / 端口 / 启动包 / JDK / 数据源连通")
-    parser.add_argument("--profile", default=env("PIVOTOS_PROFILE") or "prod",
+        description="BabyLog 启动前置检查：环境变量 / 端口 / 启动包 / JDK / 数据源连通")
+    parser.add_argument("--profile", default=env("BABYLOG_PROFILE") or "prod",
                         help="目标 profile（默认 prod；只有 prod 强制环境变量注入）")
     parser.add_argument("--port", type=int, default=int(env("SERVER_PORT") or 8080),
                         help="待检查的应用端口（默认 8080）")
-    parser.add_argument("--jar", default=os.path.join(ROOT, "pivotos-admin-server", "target",
-                                                      "pivotos-admin-server.jar"),
+    parser.add_argument("--jar", default=os.path.join(ROOT, "babylog-admin-server", "target",
+                                                      "babylog-admin-server.jar"),
                         help="待检查的启动包路径")
-    parser.add_argument("--log-dir", default=env("PIVOTOS_LOG_DIR") or "",
+    parser.add_argument("--log-dir", default=env("BABYLOG_LOG_DIR") or "",
                         help="日志目录（默认随 LOG_DIR 推导）")
     parser.add_argument("--db-timeout", type=float, default=5.0,
                         help="数据源连通检查超时（秒，默认 5）")
@@ -443,13 +443,13 @@ def main() -> int:
     check_jdk(findings)
     check_log_dir(findings, args.log_dir)
     if not args.skip_db:
-        check_db(findings, env("PIVOTOS_MYSQL_URL"), env("PIVOTOS_MYSQL_USERNAME"),
-                 env("PIVOTOS_MYSQL_PASSWORD"), args.db_timeout)
+        check_db(findings, env("BABYLOG_MYSQL_URL"), env("BABYLOG_MYSQL_USERNAME"),
+                 env("BABYLOG_MYSQL_PASSWORD"), args.db_timeout)
     check_ocr_env(findings)
     check_heap(findings)
 
     print("=" * 78)
-    print(f"PivotOS 启动前置检查  profile={args.profile}  port={args.port}")
+    print(f"BabyLog 启动前置检查  profile={args.profile}  port={args.port}")
     print("=" * 78)
     for f in findings:
         mark = {"PASS": "✅", "WARN": "⚠️ ", "FAIL": "❌"}[f.level]

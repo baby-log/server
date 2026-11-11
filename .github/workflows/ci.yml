@@ -33,7 +33,7 @@ jobs:
         #
         # ② SB 只能当前基线，暂不能加 4.0.0：
         #    实测 SB 4.0.0 **编译能通过、但产物起不来** —— 这不是 Boot 的锅，是本仓的
-        #    pivotos-dependencies 显式仲裁了 jackson2.version=2.21.4，而 Boot 4.0.0 的 BOM
+        #    babylog-dependencies 显式仲裁了 jackson2.version=2.21.4，而 Boot 4.0.0 的 BOM
         #    把 jackson-annotations 锁在 2.20，两者在同一 classpath 错配，databind 初始化时
         #    去找已从 annotations 2.20 移除的 JsonSerializeAs：
         #      ExceptionInInitializerError: com/fasterxml/jackson/annotation/JsonSerializeAs
@@ -60,7 +60,7 @@ jobs:
 
       # 这一步是把「手工做了很多轮的收口动作」搬进流水线：
       # fat jar 字节数**不能当指纹**（zip 条目存 mtime，同份代码两次打包字节数不同），
-      # 内层 pivotos 构件的版本号才是硬证据；顺带验证默认形态没有把 cloud/nacos 打进去。
+      # 内层 babylog 构件的版本号才是硬证据；顺带验证默认形态没有把 cloud/nacos 打进去。
       - name: 构件指纹核对（内层构件版本 + 形态残留红线）
         run: |
           python3 scripts/ops/check_jar_artifacts.py \
@@ -74,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fatjar-jdk${{ matrix.jdk }}-sb${{ matrix.sb }}
-          path: pivotos-admin-server/target/*.jar
+          path: babylog-admin-server/target/*.jar
           retention-days: 7
           if-no-files-found: error
 
@@ -125,14 +125,14 @@ jobs:
           python3 scripts/ops/check_test_isolation.py
       - name: 启动 Redis（带密码，与 dev 形态一致）
         run: |
-          docker run -d --name pivotos-ci-redis -p 6379:6379 redis:8 redis-server --requirepass root_ci
+          docker run -d --name babylog-ci-redis -p 6379:6379 redis:8 redis-server --requirepass root_ci
           for i in $(seq 1 30); do
-            if docker exec pivotos-ci-redis redis-cli -a root_ci --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+            if docker exec babylog-ci-redis redis-cli -a root_ci --no-auth-warning ping 2>/dev/null | grep -q PONG; then
               echo "Redis 就绪（带密码）"; exit 0
             fi
             sleep 2
           done
-          echo "Redis 未在 60s 内就绪"; docker logs pivotos-ci-redis; exit 1
+          echo "Redis 未在 60s 内就绪"; docker logs babylog-ci-redis; exit 1
       # 预建 8 个测试库，且字符集/排序规则与 dev 库一致（utf8mb4_general_ci）。
       # 不预建的话，库由连接串的 createDatabaseIfNotExist=true 自动建，
       # 用的是**服务器的默认排序规则** utf8mb4_0900_ai_ci —— 与日常开发库不同，
@@ -140,7 +140,7 @@ jobs:
       - name: 预建测试库（字符集与 dev 一致）
         run: |
           CID=$(docker ps --filter "ancestor=mysql:8.4" --format '{{.ID}}' | head -1)
-          for db in pivotos_test test test_message test_tenant test_tenant_s1 test_tenant_s2 test_tenant_d1 test_tenant_d2; do
+          for db in babylog_test test test_message test_tenant test_tenant_s1 test_tenant_s2 test_tenant_d1 test_tenant_d2; do
             docker exec "$CID" mysql -uroot -proot_ci \
               -e "CREATE DATABASE IF NOT EXISTS $db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci"
           done
@@ -150,19 +150,19 @@ jobs:
         # ⚠️ 这里的变量名必须与测试配置里真正消费的名字一致，否则注入毫无效果且不报错。
         # （2026-10-11 修复：此前注入的是 MYSQL_HOST / MYSQL_DB / REDIS_* 一组名字，
         #   而各模块测试 yml 全部硬编码了 dev 主机 IP —— 结果 CI 的 test job 从未真正
-        #   连上过它自己起的 MySQL/Redis 容器。现在两侧统一为 PIVOTOS_TEST_* 系列，
+        #   连上过它自己起的 MySQL/Redis 容器。现在两侧统一为 BABYLOG_TEST_* 系列，
         #   并由 `python3 scripts/ops/check_ci_wiring.py` 守着不再漂移。）
         # 数据库名不需要注入：每个模块用各自的独立测试库（system 用 test、message 用
         # test_message、tenant 用 test_tenant*），且连接串带 createDatabaseIfNotExist=true。
         env:
-          PIVOTOS_TEST_MYSQL_HOST: 127.0.0.1
-          PIVOTOS_TEST_MYSQL_PORT: '3306'
-          PIVOTOS_TEST_MYSQL_USERNAME: root
-          PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
-          PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
-          PIVOTOS_TEST_REDIS_PORT: '6379'
+          BABYLOG_TEST_MYSQL_HOST: 127.0.0.1
+          BABYLOG_TEST_MYSQL_PORT: '3306'
+          BABYLOG_TEST_MYSQL_USERNAME: root
+          BABYLOG_TEST_MYSQL_PASSWORD: root_ci
+          BABYLOG_TEST_REDIS_HOST: 127.0.0.1
+          BABYLOG_TEST_REDIS_PORT: '6379'
           # ⚠️ 绝不能是空串：空串会让 Redisson 发 AUTH "" 被 Redis 8 拒绝（详见上方注释）
-          PIVOTOS_TEST_REDIS_PASSWORD: root_ci
+          BABYLOG_TEST_REDIS_PASSWORD: root_ci
         # 这里**刻意不再**固定 -Dsurefire.runOrder=alphabetical（2026-10-12 拆除）。
         #
         # 它曾经是根因的止痛药：surefire 默认 filesystem 顺序在不同 OS 上不同，
@@ -186,17 +186,17 @@ jobs:
         if: failure()
         continue-on-error: true
         env:
-          PIVOTOS_TEST_MYSQL_HOST: 127.0.0.1
-          PIVOTOS_TEST_MYSQL_PORT: '3306'
-          PIVOTOS_TEST_MYSQL_USERNAME: root
-          PIVOTOS_TEST_MYSQL_PASSWORD: root_ci
-          PIVOTOS_TEST_REDIS_HOST: 127.0.0.1
-          PIVOTOS_TEST_REDIS_PORT: '6379'
-          PIVOTOS_TEST_REDIS_PASSWORD: root_ci
+          BABYLOG_TEST_MYSQL_HOST: 127.0.0.1
+          BABYLOG_TEST_MYSQL_PORT: '3306'
+          BABYLOG_TEST_MYSQL_USERNAME: root
+          BABYLOG_TEST_MYSQL_PASSWORD: root_ci
+          BABYLOG_TEST_REDIS_HOST: 127.0.0.1
+          BABYLOG_TEST_REDIS_PORT: '6379'
+          BABYLOG_TEST_REDIS_PASSWORD: root_ci
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RESULT=FAIL
-          if mvn -B -pl pivotos-plugins/pivotos-plugin-message -am test \
+          if mvn -B -pl babylog-plugins/babylog-plugin-message -am test \
               -Dtest=MessageIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false \
               > /tmp/bisect.log 2>&1; then
             RESULT=SUCCESS

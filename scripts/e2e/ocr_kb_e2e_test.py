@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""PivotOS OCR 真库实测 E2E 自测脚本（S115 fixture 复壮版）。
+"""BabyLog OCR 真库实测 E2E 自测脚本（S115 fixture 复壮版）。
 
 链路：文件预签名直传 → 登记 → 建知识库 → 上传扫描图档 → Tika+OCR 解析 →
       分块 → Embedding → VectorStore → 文本块校验 → 相似性检索 → 清理
-前置：后端带 OCR 装配启动（pivotos.kb.ocr.enabled=true + tessdata-path + languages=chi_sim+eng）
+前置：后端带 OCR 装配启动（babylog.kb.ocr.enabled=true + tessdata-path + languages=chi_sim+eng）
       macOS brew 形态还需 JVM 参数 -Djna.library.path=/opt/homebrew/lib
 
 S115 改动（三项 fixture 漂移的根因与处置）：
-  K1 样图丢失：原默认样图 pivotos-tmp/ocr-sample-s95.png 是 S95（Windows 会话）时代产物，
-     本机 pivotos-tmp/*.png 零命中。**pivotos-tmp 不在四仓任何 git 仓内**（本机私有目录），
+  K1 样图丢失：原默认样图 babylog-tmp/ocr-sample-s95.png 是 S95（Windows 会话）时代产物，
+     本机 babylog-tmp/*.png 零命中。**babylog-tmp 不在四仓任何 git 仓内**（本机私有目录），
      因此「重新落一张图」并不能根治——本版改为**脚本自生成**：文案固化在 ocr_sample.LINES，
-     运行时用 Pillow 渲染到 pivotos-tmp/ocr-sample-s115.png，缺失/损坏自动重画。
+     运行时用 Pillow 渲染到 babylog-tmp/ocr-sample-s115.png，缺失/损坏自动重画。
   K2 向量库形态漂移：原脚本硬编码 ``vectorStoreType: milvus``（S95 时代 Windows dev 接云 Milvus）。
-     本机 application-dev.yml 已改为 ``pivotos.kb.vector-store.type=simple``（Milvus 服务端未部署），
+     本机 application-dev.yml 已改为 ``babylog.kb.vector-store.type=simple``（Milvus 服务端未部署），
      建库不显式传对类型会走错装配。本版默认 simple，并支持命令行/环境变量覆盖。
   K3 环境不可得判定：后端若未带 OCR 启动（enabled=false）或 tessdata/chi_sim 缺失，
      属**环境不可得**，按 S115 开工口径改判 skip（exit=0）并打印修复姿势；
@@ -30,14 +30,14 @@ import requests
 from ocr_sample import KEYWORDS_HINT, LINES, ensure_sample
 
 BASE = "http://localhost:8080"
-DEFAULT_IMAGE = ensure_sample()          # pivotos-tmp/ocr-sample-s115.png（缺即自生成）
+DEFAULT_IMAGE = ensure_sample()          # babylog-tmp/ocr-sample-s115.png（缺即自生成）
 IMAGE_PATH = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_IMAGE
 FILE_NAME = os.path.basename(IMAGE_PATH)
 KB_NAME = "s115-ocr-e2e"
 KEYWORDS = sys.argv[2].split(",") if len(sys.argv) > 2 else KEYWORDS_HINT
 SEARCH_QUERY = sys.argv[3] if len(sys.argv) > 3 else "旧系统迁移功能"
 VECTOR_STORE = sys.argv[4] if len(sys.argv) > 4 else os.environ.get(
-    "PIVOTOS_KB_VECTOR_STORE_TYPE", "simple")
+    "BABYLOG_KB_VECTOR_STORE_TYPE", "simple")
 
 _TESSDATA_CANDIDATES = (
     "/opt/homebrew/share/tessdata",
@@ -72,7 +72,7 @@ def backend_args():
         for pid in pids:
             args = subprocess.run(["ps", "-o", "args=", "-p", pid],
                                   capture_output=True, text=True, timeout=10).stdout
-            if "pivotos" in args:
+            if "babylog" in args:
                 return args
     except Exception:  # noqa: BLE001 —— 非本机/命令缺失 → 不判定
         return None
@@ -84,9 +84,9 @@ def ocr_env_ready():
     args = backend_args()
     if args is None:
         return True, "本机后端进程命令行不可读，按「可用」处理（失败即 FAIL）"
-    if re.search(r"pivotos\.kb\.ocr\.enabled\s*=\s*false", args):
-        return False, "后端显式以 pivotos.kb.ocr.enabled=false 启动"
-    m = re.search(r"--pivotos\.kb\.ocr\.tessdata-path=(\S+)", args)
+    if re.search(r"babylog\.kb\.ocr\.enabled\s*=\s*false", args):
+        return False, "后端显式以 babylog.kb.ocr.enabled=false 启动"
+    m = re.search(r"--babylog\.kb\.ocr\.tessdata-path=(\S+)", args)
     if m and os.path.isdir(m.group(1)):
         return _has_lang(m.group(1))
     if m:
@@ -112,10 +112,10 @@ log("ENV", f"OCR 环境: {reason}")
 if not ok:
     log("SKIP", "OCR 链路在 dev 环境不可得（属①环境不可得口径，非产品缺陷），改判 skip。\n"
                 "        带 OCR 启动姿势（macOS brew）：\n"
-                "        java -Djna.library.path=/opt/homebrew/lib -jar pivotos-admin-server.jar \\\n"
-                "          --pivotos.kb.ocr.enabled=true \\\n"
-                "          --pivotos.kb.ocr.tessdata-path=/opt/homebrew/share/tessdata \\\n"
-                "          --pivotos.kb.ocr.languages=chi_sim+eng")
+                "        java -Djna.library.path=/opt/homebrew/lib -jar babylog-admin-server.jar \\\n"
+                "          --babylog.kb.ocr.enabled=true \\\n"
+                "          --babylog.kb.ocr.tessdata-path=/opt/homebrew/share/tessdata \\\n"
+                "          --babylog.kb.ocr.languages=chi_sim+eng")
     sys.exit(0)
 
 kb_id = doc_id = None

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S98 A2 工具注册与权限体系主 E2E（2026-08-23 第 4 轮）
+BabyLog S98 A2 工具注册与权限体系主 E2E（2026-08-23 第 4 轮）
 链路：MCP 端点防护 → 注册表同步 → 守卫鉴权 → 调用审计 → 白名单/停用闸 → 对话链路回归
 """
 import requests, json, threading, queue, time

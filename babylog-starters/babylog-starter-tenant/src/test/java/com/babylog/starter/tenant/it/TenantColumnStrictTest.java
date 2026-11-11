@@ -1,0 +1,46 @@
+package com.babylog.starter.tenant.it;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * strict 严格模式测试（库 test_tenant）：
+ * 启用后解析不到租户 → 403 + code 1003；解析到 → 正常放行。
+ */
+@SpringBootTest(classes = TenantTestApplication.class, properties = {
+        "babylog.tenant.enabled=true",
+        "babylog.tenant.mode=column",
+        "babylog.tenant.strict=true",
+        "spring.datasource.dynamic.primary=master",
+        "spring.datasource.dynamic.datasource.master.url=jdbc:mysql://${BABYLOG_TEST_MYSQL_HOST:${MYSQL_HOST:175.24.176.176}}:${BABYLOG_TEST_MYSQL_PORT:${MYSQL_PORT:3306}}/test_tenant?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true",
+        "spring.datasource.dynamic.datasource.master.username=root",
+        "spring.datasource.dynamic.datasource.master.password=${BABYLOG_TEST_MYSQL_PASSWORD:}",
+        "spring.datasource.dynamic.datasource.master.driver-class-name=com.mysql.cj.jdbc.Driver"
+})
+@AutoConfigureMockMvc
+class TenantColumnStrictTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void noTenant_rejected403() throws Exception {
+        mockMvc.perform(get("/demo/list"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(1003));
+    }
+
+    @Test
+    void withTenant_passes() throws Exception {
+        mockMvc.perform(get("/demo/list").header("X-Tenant-Id", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+}

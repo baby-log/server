@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""PivotOS 进程托管资产静态校验（V3.1-G · P1-B3 进程托管）。
+"""BabyLog 进程托管资产静态校验（V3.1-G · P1-B3 进程托管）。
 
 为什么需要这个脚本
 ------------------
@@ -37,9 +37,9 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OPS_DIR = os.path.join(ROOT, "scripts", "ops")
-ADMIN_RES = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources")
+ADMIN_RES = os.path.join(ROOT, "babylog-admin-server", "src", "main", "resources")
 
-UNIT = os.path.join(OPS_DIR, "pivotos-admin-server.service")
+UNIT = os.path.join(OPS_DIR, "babylog-admin-server.service")
 APP_YML = os.path.join(ADMIN_RES, "application.yml")
 PROD_YML = os.path.join(ADMIN_RES, "application-prod.yml")
 STOP_SH = os.path.join(OPS_DIR, "stop-prod.sh")
@@ -89,7 +89,7 @@ def parse_duration(text: str) -> float | None:
 
 
 def check_unit_file() -> None:
-    if not check("U0", os.path.isfile(UNIT), "unit 模板存在：scripts/ops/pivotos-admin-server.service"):
+    if not check("U0", os.path.isfile(UNIT), "unit 模板存在：scripts/ops/babylog-admin-server.service"):
         return
     text = read(UNIT)
     for section in ("Unit", "Service", "Install"):

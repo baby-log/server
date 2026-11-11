@@ -27,7 +27,7 @@ DB = dict(
     port=3306,
     user="root",
     password="mysql_DNCi3f",
-    database="pivotos_dev",
+    database="babylog_dev",
     charset="utf8mb4",
 )
 
@@ -111,7 +111,7 @@ sql_execute(
     "INSERT INTO sys_oper_log (id, module, oper_type, oper_name, oper_user_id, method, "
     "request_method, request_url, request_params, status, duration, oper_time, "
     "create_by, create_time, update_by, update_time, deleted) VALUES "
-    "(990122000000001, %s, '新增', 's122-e2e', 1, 'com.pivotos.S122.e2e()', 'GET', "
+    "(990122000000001, %s, '新增', 's122-e2e', 1, 'com.babylog.S122.e2e()', 'GET', "
     "'/api/system/log/oper/page', '{}', 0, 1, NOW(), 0, NOW(), 0, NOW(), 0)",
     (SENTINEL_MODULE,),
 )

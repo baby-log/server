@@ -151,10 +151,10 @@ def main() -> int:
 def selfcheck() -> int:
     """负向自检：门禁必须能识别出违规代码，且不得误伤合规代码。"""
     violations = """
-package com.pivotos.demo;
+package com.babylog.demo;
 
 import cn.dev33.satoken.SaManager;
-import com.pivotos.starter.auth.account.StpSysUtil;
+import com.babylog.starter.auth.account.StpSysUtil;
 import org.junit.jupiter.api.BeforeAll;
 
 class BadTest {
@@ -166,10 +166,10 @@ class BadTest {
 }
 """
     compliant = """
-package com.pivotos.demo;
+package com.babylog.demo;
 
 import cn.dev33.satoken.SaManager;
-import com.pivotos.starter.auth.account.StpSysUtil;
+import com.babylog.starter.auth.account.StpSysUtil;
 import org.junit.jupiter.api.BeforeEach;
 
 class GoodTest {
@@ -182,7 +182,7 @@ class GoodTest {
 """
     # 合规但保留 static @BeforeAll（只做 Assumptions，不碰全局状态）也不该被判红
     compliant_static = """
-package com.pivotos.demo;
+package com.babylog.demo;
 
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;

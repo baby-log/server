@@ -45,7 +45,7 @@ GITHUB_BUILTIN = {"GITHUB_TOKEN", "HOME", "CI", "GITHUB_ENV", "GITHUB_PATH"}
 # 新增一个就必须在下面写明理由；理由写不出来就说明它不该硬编码。
 ADDRESS_LITERAL = "175.24.176.176"
 HARDCODE_ALLOW_LIST = {
-    "pivotos-starters/pivotos-starter-tenant/src/test/java/com/pivotos/starter/tenant/it/TestDbDefaults.java":
+    "babylog-starters/babylog-starter-tenant/src/test/java/com/babylog/starter/tenant/it/TestDbDefaults.java":
         "dev 中间件默认值的唯一出处（Bootstrap 默认值），其余位置一律通过本类或占位符引用",
 }
 
@@ -108,7 +108,7 @@ PLACEHOLDER = re.compile(r"\$\{[^{}]*\}")
 def strip_placeholders(line: str) -> str:
     """去掉所有 `${...}` 占位符表达式（含嵌套：由内向外反复剥离）。
 
-    关键：像 `host: ${PIVOTOS_TEST_REDIS_HOST:${REDIS_HOST:175.24.176.176}}` 这种形态里，
+    关键：像 `host: ${BABYLOG_TEST_REDIS_HOST:${REDIS_HOST:175.24.176.176}}` 这种形态里，
     字面量出现在**默认值位置**，是允许且必要的——它保证本机不改任何环境变量也能跑。
     真正要抓的是「剥掉占位符之后还剩下的裸地址」。
     """
@@ -153,7 +153,7 @@ def check_no_hardcoded_address_in_tests() -> list[str]:
         if needle in text:
             lineno = next((i for i, line in enumerate(text.splitlines(), start=1)
                            if needle in line), 0)
-            hint = "改走 TestDbDefaults 或 ${PIVOTOS_TEST_MYSQL_HOST:...} 占位符"
+            hint = "改走 TestDbDefaults 或 ${BABYLOG_TEST_MYSQL_HOST:...} 占位符"
             hits.append(
                 f"{rel}:{lineno} Java 测试里硬编码了 JDBC 连接串（{hint}）："
                 f"{text.splitlines()[max(lineno - 1, 0)].strip()[:120]}")
@@ -162,8 +162,8 @@ def check_no_hardcoded_address_in_tests() -> list[str]:
 
 def check_default_values_do_not_drift() -> list[str]:
     """Java 侧的默认值常量，必须与 yml 占位符里的默认值逐字一致。"""
-    java = ROOT / ("pivotos-starters/pivotos-starter-tenant/src/test/java/"
-                   "com/pivotos/starter/tenant/it/TestDbDefaults.java")
+    java = ROOT / ("babylog-starters/babylog-starter-tenant/src/test/java/"
+                   "com/babylog/starter/tenant/it/TestDbDefaults.java")
     if not java.exists():
         return [f"缺少默认值出处文件：{java.name}（删了就等于把默认值散回各处）"]
 

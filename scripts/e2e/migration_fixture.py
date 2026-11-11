@@ -3,18 +3,18 @@
 
 背景（S108 K2 / S114 §5.1 已定性）：
     migration ×4 脚本曾硬编码 ``TASK_ID = "2089577593306185730"``（注释「自测任务，已上传 7132 文件」）。
-    该行在 dev 库（pivotos_dev）已零命中——现仅存 1 行 id=2103521132021088258 / status=0，
+    该行在 dev 库（babylog_dev）已零命中——现仅存 1 行 id=2103521132021088258 / status=0，
     四个脚本全部在「任务详情 data=null」处崩溃（KeyError / TypeError）。fixture 漂移 ≠ 代码回归。
 
 复壮方案（本模块实现，优先级最高的①：脚本自建任务）：
     创建任务 → 上传合成源码包 → 解析 → AI 分析 →（按需）AI 计划 → 跑完自清。
     源码 fixture 由本文件的 ``SOURCE_FILES`` 常量**即时合成**，既不依赖库内遗留行、
-    也不依赖 pivotos-tmp 下的外部文件，因此不可能再次发生「行丢失 / 图丢失」型漂移。
+    也不依赖 babylog-tmp 下的外部文件，因此不可能再次发生「行丢失 / 图丢失」型漂移。
 
 自清口径：
     migration 域无 DELETE 端点（`MigrationTaskController` 只有 create/complete/rollback），
     因此自清走 pymysql 物理删除 migration_* 七表按 task_id 的行 + 删除
-    ``pivotos.migration.workspace/{taskId}`` 工作目录，确保 dev 库回归前后零差异。
+    ``babylog.migration.workspace/{taskId}`` 工作目录，确保 dev 库回归前后零差异。
 
 用法：
     from migration_fixture import bootstrap, cleanup, login, check
@@ -34,11 +34,11 @@ from dev_db import DB, connect_db
 
 BASE = "http://localhost:8080"
 
-# 与 PIVOTOS_MIGRATION_WORKSPACE 环境变量一致（application.yml 默认值兜底）
+# 与 BABYLOG_MIGRATION_WORKSPACE 环境变量一致（application.yml 默认值兜底）
 WORKSPACE = os.environ.get(
-    "PIVOTOS_MIGRATION_WORKSPACE",
-    "/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/"
-    "pivotos-framework/pivotos-admin-server/data/migration",
+    "BABYLOG_MIGRATION_WORKSPACE",
+    "/Users/huweilong/WorkBuddy/业余项目/"
+    "babylog-server/babylog-admin-server/data/migration",
 )
 
 # 迁移域七张子表（按 task_id 物理清理）
@@ -77,7 +77,7 @@ AI_PROVIDER_ID = 1
 AI_KEY_LABEL = "S115-E2E-Fixture-Key"
 _DEV_YML = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..",
-    "pivotos-admin-server", "src", "main", "resources", "application-dev.yml"))
+    "babylog-admin-server", "src", "main", "resources", "application-dev.yml"))
 
 
 # ── 合成源码 fixture（≥1 个 Java/Vue/SQL，保证 parse 后 IR 节点非空，analyze 才有输入） ──

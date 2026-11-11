@@ -1,0 +1,3 @@
+com.babylog.starter.cloud.api.config.CloudContextAutoConfiguration
+com.babylog.starter.cloud.api.facade.FacadeHttpAutoConfiguration
+com.babylog.starter.cloud.api.feign.CloudContextFeignAutoConfiguration

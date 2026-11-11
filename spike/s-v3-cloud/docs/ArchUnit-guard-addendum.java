@@ -1,4 +1,4 @@
-package com.pivotos.arch;
+package com.babylog.arch;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -20,7 +20,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * 否则 V3 拆的过程中会不断产生新的隐性耦合。以下规则即为此而设：
  *
  * <ol>
- *   <li><b>C1 禁止业务 Plugin 跨实现模块直接调用</b>：任何 {@code com.pivotos.<实现包>}
+ *   <li><b>C1 禁止业务 Plugin 跨实现模块直接调用</b>：任何 {@code com.babylog.<实现包>}
  *       只应经由 {@code *.api.**} 契约包被引用。既有欠款（ai-coding → ai）用
  *       {@code .andDoesNotContain} 无法豁免，需按下方 {@code KNOWN_DEBT} 显式登记并限期清偿。</li>
  *   <li><b>C2 契约模块不得反向依赖实现</b>：{@code -api} 模块一旦 import 实现包，
@@ -32,7 +32,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  *       可直接作为 CI 的一个 job 跑，无需 ArchUnit。</li>
  * </ol>
  *
- * <p>落地位置建议：{@code pivotos-admin-server/src/test/java/com/pivotos/arch/}
+ * <p>落地位置建议：{@code babylog-admin-server/src/test/java/com/babylog/arch/}
  * （与既有 P0 门禁同目录、同 peanut Galileo: 一次 })
  */
 class CloudBoundaryGuardTest {
@@ -40,8 +40,8 @@ class CloudBoundaryGuardTest {
     /** 已知欠款清单：清偿一笔删一行（每留存一行都必须在《已知边界》里有书面记录） */
     private static final String[][] KNOWN_DEBT = {
             // {"源模块包名", "目标模块包名", "清偿 Sprint"}
-            {"com.pivotos.ai.coding", "com.pivotos.ai.client", "v3.0.0-S1"},
-            {"com.pivotos.ai.coding", "com.pivotos.ai.domain", "v3.0.0-S1"},
+            {"com.babylog.ai.coding", "com.babylog.ai.client", "v3.0.0-S1"},
+            {"com.babylog.ai.coding", "com.babylog.ai.domain", "v3.0.0-S1"},
     };
 
     @Test
@@ -53,7 +53,7 @@ class CloudBoundaryGuardTest {
                     .should().dependOnClassesThat().resideInAPackage(debt[1] + "..")
                     .because("跨 Plugin 调用必须走 -api Facade 契约；当前为已登记欠款，清偿 Sprint=" + debt[2]
                             + "，清偿后请改为断言（这里反向断言是为了让「欠款还在」这件事持续可见）");
-            JavaClasses classes = new ClassFileImporter().importPackages("com.pivotos");
+            JavaClasses classes = new ClassFileImporter().importPackages("com.babylog");
             // 欠款记录在案且会被打印；一旦 returnEmpty 即视为已清偿，需把该笔移出 KNOWN_DEBT
             rule.check(classes);
         }
@@ -66,7 +66,7 @@ class CloudBoundaryGuardTest {
                 .that().resideInAPackage("..api..")
                 .should().dependOnClassesThat().resideInAPackage("..impl..")
                 .because("契约模块反向依赖实现会导致微服务化后的循环依赖");
-        JavaClasses classes = new ClassFileImporter().importPackages("com.pivotos");
+        JavaClasses classes = new ClassFileImporter().importPackages("com.babylog");
         rule.check(classes);
     }
 
@@ -77,7 +77,7 @@ class CloudBoundaryGuardTest {
                 .that().haveSimpleNameEndingWith("Facade")
                 .should().dependOnClassesThat().resideInAPackage("..domain.entity..")
                 .because("Facade 是跨进程契约，入参/返回值只能是 api 包下的 DTO/VO");
-        JavaClasses classes = new ClassFileImporter().importPackages("com.pivotos");
+        JavaClasses classes = new ClassFileImporter().importPackages("com.babylog");
         rule.check(classes);
     }
 }

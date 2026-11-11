@@ -2,7 +2,7 @@
 """V3.1-D · C3-1 字段加密密钥守卫的进程级实证（自起自停 fat jar，只 kill 本轮 PID）。
 
 单测（FieldEncryptKeyGuardTest）只能证明「判定函数」对；这里证明的是**进程真的起不来/起得来**：
-  G-1 prod 形态未注入 PIVOTOS_FIELD_ENCRYPT_KEY → 进程非零退出，日志给出可执行提示
+  G-1 prod 形态未注入 BABYLOG_FIELD_ENCRYPT_KEY → 进程非零退出，日志给出可执行提示
       （防「守卫写了但没接进启动链路」——这是只写工具类最容易出现的假绿）
   G-2 prod 形态注入 32 位自定义密钥 → 正常起服且探活可用
       （防反向假绿：守卫写成「prod 一律拒启动」也会让 G-1 通过）
@@ -27,9 +27,9 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-DEV_YML = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources", "application-dev.yml")
-WORK_ROOT = "/tmp/pivotos-v31d-keyguard"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+DEV_YML = os.path.join(ROOT, "babylog-admin-server", "src", "main", "resources", "application-dev.yml")
+WORK_ROOT = "/tmp/babylog-v31d-keyguard"
 
 CUSTOM_KEY = "abcdefghijklmnopqrstuvwxyz012345"  # 32 位占位，非真凭据
 
@@ -71,29 +71,29 @@ def dev_db_env():
         return m.group(1).strip('"') if m else ""
 
     return {
-        "PIVOTOS_MYSQL_URL": pick(r"url:\s*\$\{PIVOTOS_MYSQL_URL:([^}]+)\}"),
-        "PIVOTOS_MYSQL_USERNAME": pick(r"username:\s*\$\{PIVOTOS_MYSQL_USERNAME:([^}]+)\}"),
-        "PIVOTOS_MYSQL_PASSWORD": pick(r"password:\s*\$\{PIVOTOS_MYSQL_PASSWORD:([^}]+)\}"),
-        "PIVOTOS_REDIS_HOST": pick(r"host:\s*\$\{PIVOTOS_REDIS_HOST:([^}]+)\}"),
-        "PIVOTOS_REDIS_PASSWORD": pick(r"password:\s*\$\{PIVOTOS_REDIS_PASSWORD:([^}]+)\}"),
+        "BABYLOG_MYSQL_URL": pick(r"url:\s*\$\{BABYLOG_MYSQL_URL:([^}]+)\}"),
+        "BABYLOG_MYSQL_USERNAME": pick(r"username:\s*\$\{BABYLOG_MYSQL_USERNAME:([^}]+)\}"),
+        "BABYLOG_MYSQL_PASSWORD": pick(r"password:\s*\$\{BABYLOG_MYSQL_PASSWORD:([^}]+)\}"),
+        "BABYLOG_REDIS_HOST": pick(r"host:\s*\$\{BABYLOG_REDIS_HOST:([^}]+)\}"),
+        "BABYLOG_REDIS_PASSWORD": pick(r"password:\s*\$\{BABYLOG_REDIS_PASSWORD:([^}]+)\}"),
     }
 
 
 def base_env(profile, extra=None, tag=""):
     """prod 形态的 A1 出口必须撑满（缺即 fail-fast），否则验的就不是密钥守卫了"""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     # 每个场景一个日志目录：prod 形态应用日志落滚动文件，共用目录会让上一个场景的失败日志
     # 污染下一个场景的断言（本轮实踩：G-2 读到了 G-1 的「启动校验失败」）
-    env["PIVOTOS_LOG_DIR"] = os.path.join(WORK_ROOT, f"logs-{profile}-{tag}")
+    env["BABYLOG_LOG_DIR"] = os.path.join(WORK_ROOT, f"logs-{profile}-{tag}")
     if profile == "prod":
         env.update(dev_db_env())
         env.update({
-            "PIVOTOS_COS_ACCESS_KEY": "v31d-e2e-placeholder",
-            "PIVOTOS_COS_SECRET_KEY": "v31d-e2e-placeholder",
-            "PIVOTOS_LLM_API_KEY": "v31d-e2e-placeholder",
-            "PIVOTOS_XXL_JOB_ACCESS_TOKEN": "v31d-e2e-placeholder",
-            "PIVOTOS_SEARCH_TYPE": "simple",
+            "BABYLOG_COS_ACCESS_KEY": "v31d-e2e-placeholder",
+            "BABYLOG_COS_SECRET_KEY": "v31d-e2e-placeholder",
+            "BABYLOG_LLM_API_KEY": "v31d-e2e-placeholder",
+            "BABYLOG_XXL_JOB_ACCESS_TOKEN": "v31d-e2e-placeholder",
+            "BABYLOG_SEARCH_TYPE": "simple",
         })
     if extra:
         env.update(extra)
@@ -156,7 +156,7 @@ def wait_ready(proc, seconds=240):
 
 
 def scenario_prod_without_key():
-    log("SCENARIO", "G-1 prod 未注入 PIVOTOS_FIELD_ENCRYPT_KEY → 必须拒启动")
+    log("SCENARIO", "G-1 prod 未注入 BABYLOG_FIELD_ENCRYPT_KEY → 必须拒启动")
     proc, fh, log_path = launch("prod", log_name="prod-nokey.log", tag="nokey")
     try:
         deadline = time.time() + 180
@@ -176,14 +176,14 @@ def scenario_prod_without_key():
         check("G-1a", not started, "prod 未注入密钥时不得起服（起服即守卫失效）")
         check("G-1b", exit_code not in (None, 0), f"进程必须非零退出，实测 exit={exit_code}")
         check("G-1c", "字段加密密钥校验失败" in text, "日志必须给出「字段加密密钥校验失败」的明确归因")
-        check("G-1d", "PIVOTOS_FIELD_ENCRYPT_KEY" in text, "日志必须告诉运维该注入哪个环境变量")
+        check("G-1d", "BABYLOG_FIELD_ENCRYPT_KEY" in text, "日志必须告诉运维该注入哪个环境变量")
     finally:
         stop(proc, fh)
 
 
 def scenario_prod_with_key():
     log("SCENARIO", "G-2 prod 注入 32 位自定义密钥 → 必须正常起服（防「prod 一律拒启动」的反向假绿）")
-    proc, fh, log_path = launch("prod", {"PIVOTOS_FIELD_ENCRYPT_KEY": CUSTOM_KEY},
+    proc, fh, log_path = launch("prod", {"BABYLOG_FIELD_ENCRYPT_KEY": CUSTOM_KEY},
                                 log_name="prod-withkey.log", tag="withkey")
     try:
         ready = wait_ready(proc)
@@ -211,7 +211,7 @@ def scenario_dev_without_key():
         stop(proc, fh)
     # dev 形态不得落应用滚动日志（C4-1 只把 test 纳入）
     generated = [p for p in os.listdir(os.path.join(WORK_ROOT, "logs-dev-nokey"))
-                 if p.startswith("pivotos-admin-server")] \
+                 if p.startswith("babylog-admin-server")] \
         if os.path.isdir(os.path.join(WORK_ROOT, "logs-dev-nokey")) else []
     check("G-3d", not generated, f"dev 形态不落应用滚动日志：{generated}")
 

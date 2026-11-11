@@ -10,14 +10,14 @@
      等一批变量——这些名字代码根本不读。运维照着配，改了不生效，而且**没有任何报错**。
      这类文档不是「过时」，是**反向杀伤**：它让人确信自己做对了，于是不会再去找真原因。
   2. V3.1-A 重写后又漏了 10 个真实生效的变量（熔断组 7 个、小程序 secret、
-     Nacos 口令/分组），修订 `PIVOTOS_FIELD_ENCRYPT_KEY_GUARD_ENABLED` 时
-     还写错了一层前缀（真实键是 `pivotos.mybatis.field-encrypt-key-guard-enabled`）。
+     Nacos 口令/分组），修订 `BABYLOG_FIELD_ENCRYPT_KEY_GUARD_ENABLED` 时
+     还写错了一层前缀（真实键是 `babylog.mybatis.field-encrypt-key-guard-enabled`）。
 
 根因是「靠人记」。所以改成机器比对：
 
-  · 代码侧真相 = admin-server 的 application*.yml 里所有 `${PIVOTOS_*:...}` 占位符
-                 + Java 侧形如 `pivotos.xxx-yyy` 的属性键字面量（松散绑定转环境变量名）
-  · 文档侧真相 = docs/deploy/env-vars.md 里出现的所有 `PIVOTOS_*` 标识
+  · 代码侧真相 = admin-server 的 application*.yml 里所有 `${BABYLOG_*:...}` 占位符
+                 + Java 侧形如 `babylog.xxx-yyy` 的属性键字面量（松散绑定转环境变量名）
+  · 文档侧真相 = docs/deploy/env-vars.md 里出现的所有 `BABYLOG_*` 标识
 
   双向都要干净：
     - 代码有 / 文档没写  → 文档缺项，运维不知道有这个开关
@@ -36,8 +36,8 @@ import re
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-RES_DIR = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources")
-DOCSITE = os.path.abspath(os.path.join(ROOT, "..", "pivotos-docsite"))
+RES_DIR = os.path.join(ROOT, "babylog-admin-server", "src", "main", "resources")
+DOCSITE = os.path.abspath(os.path.join(ROOT, "..", "babylog-docsite"))
 DOC = os.path.join(DOCSITE, "docs", "deploy", "env-vars.md")
 
 YML_PLACEHOLDER = re.compile(r"\$\{([A-Za-z0-9_]+)(?::([^}]*))?\}")
@@ -47,14 +47,14 @@ YML_PLACEHOLDER = re.compile(r"\$\{([A-Za-z0-9_]+)(?::([^}]*))?\}")
 # 扫描器发现不了它们，故显式登记并给出出处；若哪天它们进了 yml，
 # 本脚本会判「声明已过期」并 FAIL，防止登记表变成新的藏污纳垢处。
 DECLARED_JAVA_SIDE_VARS = {
-    "PIVOTOS_OPS_HEALTH_ENABLED":
-        "OpsHealthProperties#enabled（@ConfigurationProperties(prefix=pivotos.ops.health)）",
-    "PIVOTOS_OPS_HEALTH_TIMEOUTMS":
+    "BABYLOG_OPS_HEALTH_ENABLED":
+        "OpsHealthProperties#enabled（@ConfigurationProperties(prefix=babylog.ops.health)）",
+    "BABYLOG_OPS_HEALTH_TIMEOUTMS":
         "OpsHealthProperties#timeoutMs",
-    "PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY":
+    "BABYLOG_OPS_HEALTH_SHOWDETAILSANONYMOUSLY":
         "OpsHealthProperties#showDetailsAnonymously",
-    "PIVOTOS_MYBATIS_FIELD_ENCRYPT_KEY_GUARD_ENABLED":
-        "FieldEncryptKeyGuard.GUARD_ENABLED_KEY = pivotos.mybatis.field-encrypt-key-guard-enabled",
+    "BABYLOG_MYBATIS_FIELD_ENCRYPT_KEY_GUARD_ENABLED":
+        "FieldEncryptKeyGuard.GUARD_ENABLED_KEY = babylog.mybatis.field-encrypt-key-guard-enabled",
 }
 
 
@@ -62,8 +62,8 @@ def collect_code_vars() -> dict[str, str]:
     """返回 {环境变量名: 来源说明}。
 
     <p>真相来源刻意限定为 <b>yml 占位符</b>：运维真正需要注入的就是这一层。
-    早期版本还扫了 Java 字符串字面量，结果把 {@code pivotos.ai.calls}、
-    {@code pivotos.http.slow} 这类<b>指标名常量</b>也当成环境变量收进来了，
+    早期版本还扫了 Java 字符串字面量，结果把 {@code babylog.ai.calls}、
+    {@code babylog.http.slow} 这类<b>指标名常量</b>也当成环境变量收进来了，
     产生一批无法消除的假阳性——故回退为只认 yml，Java 侧改走上面的显式登记。
     """
     out: dict[str, str] = {}
@@ -75,7 +75,7 @@ def collect_code_vars() -> dict[str, str]:
             continue
         text = open(os.path.join(RES_DIR, name), encoding="utf-8").read()
         for var, default in YML_PLACEHOLDER.findall(text):
-            if var.startswith("PIVOTOS_"):
+            if var.startswith("BABYLOG_"):
                 out.setdefault(var, f"{name} 占位符，默认={(default or '空')!r}")
 
     for var, source in DECLARED_JAVA_SIDE_VARS.items():
@@ -86,7 +86,7 @@ def collect_code_vars() -> dict[str, str]:
 
 def collect_doc_vars() -> set[str]:
     text = open(DOC, encoding="utf-8").read()
-    return set(re.findall(r"PIVOTOS_[A-Z0-9_]+", text))
+    return set(re.findall(r"BABYLOG_[A-Z0-9_]+", text))
 
 
 def main() -> int:
@@ -116,7 +116,7 @@ def main() -> int:
         for var in undocumented:
             print(f"   - {var}    ← {code[var]}")
     else:
-        print("\n✅ 无缺项：代码里所有 PIVOTOS_* 变量都已在文档中登记")
+        print("\n✅ 无缺项：代码里所有 BABYLOG_* 变量都已在文档中登记")
 
     if phantom:
         print("\n❌ 文档有、代码不读（反向杀伤：配了不生效且不报错）：")

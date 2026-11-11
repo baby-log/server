@@ -9,17 +9,17 @@
 三种模式（显式二选一，没有默认=no-op）：
 
     # 1) 只校验：不算、不连库，读完 sha256 就给结论。适合放进 CI 或备份后立刻跑
-    python3 scripts/ops/restore_mysql.py --sql-file backup/pivotos_dev-20261011-120000.sql \\
+    python3 scripts/ops/restore_mysql.py --sql-file backup/babylog_dev-20261011-120000.sql \\
             --mode verify
 
     # 2) 演练 drill：恢复进 **一次性数据库**（自动建、自动 DROP），与 manifest 对表数/行数，
     #    证明「这份备份真的能恢复出数据」，且不碰任何既有库
-    PIVOTOS_MYSQL_PASSWORD='***' python3 scripts/ops/restore_mysql.py \\
+    BABYLOG_MYSQL_PASSWORD='***' python3 scripts/ops/restore_mysql.py \\
             --sql-file backup/...sql --mode drill --host 175.24.176.176 --username root
 
     # 3) 真正恢复 restore：写进指定的目标库，需要 --yes；目标库非空时必须再加 --force
     python3 scripts/ops/restore_mysql.py --sql-file backup/...sql --mode restore \\
-            --database pivotos_dev --yes [--force]
+            --database babylog_dev --yes [--force]
 
 设计上的几条硬取舍：
 
@@ -57,7 +57,7 @@ DRILL_PREFIX = "__drill_"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="校验 / 演练 / 恢复 PivotOS MySQL 逻辑备份。")
+        description="校验 / 演练 / 恢复 BabyLog MySQL 逻辑备份。")
     parser.add_argument("--sql-file", type=Path, required=True, help="备份 SQL 文件")
     parser.add_argument("--mode", choices=["verify", "drill", "restore"], required=True)
     parser.add_argument("--yes", action="store_true",
@@ -67,16 +67,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-verify", action="store_true",
                         help="跳过 sha256 校验（不建议）")
     parser.add_argument("--host",
-                        default=os.getenv("PIVOTOS_MYSQL_HOST") or os.getenv("MYSQL_HOST"))
+                        default=os.getenv("BABYLOG_MYSQL_HOST") or os.getenv("MYSQL_HOST"))
     parser.add_argument("--port", type=int,
-                        default=int(os.getenv("PIVOTOS_MYSQL_PORT")
+                        default=int(os.getenv("BABYLOG_MYSQL_PORT")
                                     or os.getenv("MYSQL_PORT") or 0) or None)
     parser.add_argument("--username",
-                        default=os.getenv("PIVOTOS_MYSQL_USERNAME") or os.getenv("MYSQL_USER"))
+                        default=os.getenv("BABYLOG_MYSQL_USERNAME") or os.getenv("MYSQL_USER"))
     parser.add_argument("--password",
-                        default=os.getenv("PIVOTOS_MYSQL_PASSWORD") or os.getenv("MYSQL_PASSWORD"))
+                        default=os.getenv("BABYLOG_MYSQL_PASSWORD") or os.getenv("MYSQL_PASSWORD"))
     parser.add_argument("--database",
-                        default=os.getenv("PIVOTOS_MYSQL_DATABASE") or os.getenv("MYSQL_DB"),
+                        default=os.getenv("BABYLOG_MYSQL_DATABASE") or os.getenv("MYSQL_DB"),
                         help="restore 模式的目标库；drill 模式下用作一次性库名前缀")
     parser.add_argument("--connect-timeout", type=int, default=10)
     return parser.parse_args()

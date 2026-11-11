@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.babylog</groupId>
+        <artifactId>babylog-server</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <artifactId>babylog-commons</artifactId>
+    <packaging>pom</packaging>
+
+    <name>babylog-commons</name>
+    <description>BabyLog 契约层聚合模块（纯契约，禁 Spring 依赖）</description>
+
+    <modules>
+        <module>babylog-common-core</module>
+        <module>babylog-common-api</module>
+    </modules>
+
+    <!-- commons 全模块统一引入 BOM 仲裁 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.babylog</groupId>
+                <artifactId>babylog-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

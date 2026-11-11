@@ -197,5 +197,5 @@ class MigrationTaskFixture(Fixture):
     def hint(self) -> str:
         return ("迁移任务需后端在 8080 就绪：env TESSDATA_PREFIX=/opt/homebrew/share/tessdata "
                 "java -Djna.library.path=/opt/homebrew/lib -Djava.awt.headless=true "
-                "-jar pivotos-admin-server/target/pivotos-admin-server.jar --spring.profiles.active=dev；"
+                "-jar babylog-admin-server/target/babylog-admin-server.jar --spring.profiles.active=dev；"
                 "且 dev 库 ai_api_key 需可解析出静态 Key（见 migration_fixture.ensure_ai_key）")

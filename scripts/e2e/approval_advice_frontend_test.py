@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S101 次轮 E2E 冒烟脚本（2026-09-25，A3 AI 审批助手·前端接入）
+BabyLog S101 次轮 E2E 冒烟脚本（2026-09-25，A3 AI 审批助手·前端接入）
 与首轮脚本（直连 8080）的差异：全程经 PC 开发服 Vite 代理（5173 /api 前缀），
 与前端 fetch('/api/ai/approval/advice/stream') 走的路径完全一致。
 验证面：

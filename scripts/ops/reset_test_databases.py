@@ -4,7 +4,7 @@
 为什么要显式 --yes + 名单白名单：全量 IT 会写脏测试库（历史数据会让下一轮红），
 重跑前必须重建；但 DROP DATABASE 一旦写错名字就是不可逆事故。因此本脚本：
   1. 只允许操作内置名单里的 8 个测试库；--only 传入名单外的名字直接报错退出；
-  2. 内置名单里刻意不含 pivotos_dev / pivotos_prod 等任何业务库；
+  2. 内置名单里刻意不含 babylog_dev / babylog_prod 等任何业务库；
   3. 没有 --yes 只做 dry-run（打印将要做什么，不执行）；
   4. 连接串默认从 application-dev.yml 现读（口令不进命令行历史，也不打印）。
 
@@ -25,11 +25,11 @@ except ImportError:  # pragma: no cover
     sys.exit("需要 pymysql：python3 -m pip install pymysql")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DEV_YML = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources", "application-dev.yml")
+DEV_YML = os.path.join(ROOT, "babylog-admin-server", "src", "main", "resources", "application-dev.yml")
 
 # 全量 IT 会写的 8 个库（与 admin-server test yml、各插件 test yml 一致）
 KNOWN_TEST_DATABASES = [
-    "pivotos_test",
+    "babylog_test",
     "test",
     "test_message",
     "test_tenant",
@@ -40,7 +40,7 @@ KNOWN_TEST_DATABASES = [
 ]
 
 # 硬保护：这几个名字哪怕被 --only 显式传入也必须拒绝
-FORBIDDEN = {"pivotos_dev", "pivotos_prod", "mysql", "information_schema", "performance_schema", "sys"}
+FORBIDDEN = {"babylog_dev", "babylog_prod", "mysql", "information_schema", "performance_schema", "sys"}
 
 
 def read_dev_defaults():
@@ -51,9 +51,9 @@ def read_dev_defaults():
         return m.group(1).strip().strip('"') if m else ""
 
     return {
-        "url": pick(r"url:\s*\$\{PIVOTOS_MYSQL_URL:([^}]+)\}"),
-        "username": pick(r"username:\s*\$\{PIVOTOS_MYSQL_USERNAME:([^}]+)\}"),
-        "password": pick(r"password:\s*\$\{PIVOTOS_MYSQL_PASSWORD:([^}]+)\}"),
+        "url": pick(r"url:\s*\$\{BABYLOG_MYSQL_URL:([^}]+)\}"),
+        "username": pick(r"username:\s*\$\{BABYLOG_MYSQL_USERNAME:([^}]+)\}"),
+        "password": pick(r"password:\s*\$\{BABYLOG_MYSQL_PASSWORD:([^}]+)\}"),
     }
 
 
@@ -69,10 +69,10 @@ def main():
     parser.add_argument("--yes", action="store_true", help="真正执行 DROP/CREATE（缺省只 dry-run）")
     parser.add_argument("--only", default="", help="逗号分隔，只重建其中一部分")
     parser.add_argument("--list-existing", action="store_true", help="只打印实例上现有的库")
-    parser.add_argument("--host", default=os.getenv("PIVOTOS_MYSQL_HOST"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("PIVOTOS_MYSQL_PORT", "0")) or None)
-    parser.add_argument("--user", default=os.getenv("PIVOTOS_MYSQL_USERNAME"))
-    parser.add_argument("--password", default=os.getenv("PIVOTOS_MYSQL_PASSWORD"))
+    parser.add_argument("--host", default=os.getenv("BABYLOG_MYSQL_HOST"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("BABYLOG_MYSQL_PORT", "0")) or None)
+    parser.add_argument("--user", default=os.getenv("BABYLOG_MYSQL_USERNAME"))
+    parser.add_argument("--password", default=os.getenv("BABYLOG_MYSQL_PASSWORD"))
     args = parser.parse_args()
 
     dev = read_dev_defaults()
@@ -84,7 +84,7 @@ def main():
         host, port = args.host or dev_host, args.port or dev_port
         user, pwd = args.user or dev["username"], args.password or dev["password"]
     if not pwd:
-        raise SystemExit("缺少口令：用 PIVOTOS_MYSQL_PASSWORD 注入（不要写进命令行）")
+        raise SystemExit("缺少口令：用 BABYLOG_MYSQL_PASSWORD 注入（不要写进命令行）")
 
     targets = [d.strip() for d in args.only.split(",") if d.strip()] or KNOWN_TEST_DATABASES
     illegal = [d for d in targets if d in FORBIDDEN or d not in KNOWN_TEST_DATABASES]
@@ -115,7 +115,7 @@ def main():
                 print(f"  ✓ {db} 重建完成，表数={cur.fetchone()[0]}")
     finally:
         conn.close()
-    print(f"完成：{len(targets)} 个测试库已重建为空库（pivotos_dev 未触碰）")
+    print(f"完成：{len(targets)} 个测试库已重建为空库（babylog_dev 未触碰）")
     return 0
 
 

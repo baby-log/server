@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# PivotOS 生产环境启动模板（随代码库版本化 · v3.1.0 生产化 A3，V3.1-G B3 改造）
+# BabyLog 生产环境启动模板（随代码库版本化 · v3.1.0 生产化 A3，V3.1-G B3 改造）
 #
 # 用法：把 scripts/ops/ 整个目录拷到目标机 $APP_HOME 下即可使用，**不要在里面写任何口令**。
-#     APP_HOME=/opt/pivotos PIVOTOS_PROFILE=prod /opt/pivotos/start-prod.sh
-#     /opt/pivotos/start-prod.sh --skip-preflight     # 跳过前置检查（后果自负）
-#     /opt/pivotos/start-prod.sh --port=8081
+#     APP_HOME=/opt/babylog BABYLOG_PROFILE=prod /opt/babylog/start-prod.sh
+#     /opt/babylog/start-prod.sh --skip-preflight     # 跳过前置检查（后果自负）
+#     /opt/babylog/start-prod.sh --port=8081
 #
 # 必需环境变量（缺一即拒绝启动，避免「连错环境还跑起来」）：
-#     PIVOTOS_MYSQL_URL / PIVOTOS_MYSQL_USERNAME / PIVOTOS_MYSQL_PASSWORD
-#     PIVOTOS_REDIS_HOST / PIVOTOS_REDIS_PASSWORD
-#     PIVOTOS_FIELD_ENCRYPT_KEY（16/24/32 位；不注入会用 git 里明文的开发默认密钥，prod 侧亦会拒启动）
-# 建议环境变量：PIVOTOS_LOG_DIR、JAVA_XMS / JAVA_XMX（未设置则不限制堆）
+#     BABYLOG_MYSQL_URL / BABYLOG_MYSQL_USERNAME / BABYLOG_MYSQL_PASSWORD
+#     BABYLOG_REDIS_HOST / BABYLOG_REDIS_PASSWORD
+#     BABYLOG_FIELD_ENCRYPT_KEY（16/24/32 位；不注入会用 git 里明文的开发默认密钥，prod 侧亦会拒启动）
+# 建议环境变量：BABYLOG_LOG_DIR、JAVA_XMS / JAVA_XMX（未设置则不限制堆）
 #
 # 与部署机上上一个版本的 start-prod.sh 相比，改了四件事：
 #   1. 日志不再「nohup > 单文件」——应用日志由 logback-spring.xml 按 100MB/30 天/5GB 滚动，
@@ -22,7 +22,7 @@
 #   4. （V3.1-G）JVM 参数下沉到 jvm-opts.sh（与 systemd 场景共用同一份），
 #      并新增 preflight.py 前置检查：端口占用 / 必需环境变量 / jar / JDK 版本 / 数据源连通。
 #
-# ⚠️ 裸机场景用本脚本；如果用 systemd，请用 unit 的 ExecStart=/opt/pivotos/run.sh
+# ⚠️ 裸机场景用本脚本；如果用 systemd，请用 unit 的 ExecStart=/opt/babylog/run.sh
 #    （前台 exec java，systemd 的信号与退出码语义才正确）。
 
 set -euo pipefail
@@ -41,15 +41,15 @@ for arg in "$@"; do
     esac
 done
 
-APP_HOME="${APP_HOME:-/opt/pivotos}"
-JAR_NAME="${JAR_NAME:-pivotos-admin-server.jar}"
+APP_HOME="${APP_HOME:-/opt/babylog}"
+JAR_NAME="${JAR_NAME:-babylog-admin-server.jar}"
 JAR="$APP_HOME/$JAR_NAME"
-LOG_DIR="${PIVOTOS_LOG_DIR:-$APP_HOME/logs}"
+LOG_DIR="${BABYLOG_LOG_DIR:-$APP_HOME/logs}"
 CONSOLE_LOG="$LOG_DIR/console.log"
 PID_FILE="$LOG_DIR/admin-server.pid"
 SERVER_PORT="${PORT_ARG:-${SERVER_PORT:-8080}}"
 START_TIMEOUT_SECONDS="${START_TIMEOUT_SECONDS:-180}"
-PROFILE="${PIVOTOS_PROFILE:-prod}"
+PROFILE="${BABYLOG_PROFILE:-prod}"
 
 # ---- 前置检查（V3.1-G · B3）----
 # 把「启动后才发现」的问题提前到 JVM 起来之前，且一次性报全。
@@ -71,7 +71,7 @@ fi
 
 # 凭据必须外置：这里是「拒绝启动」而不是「用默认值凑合」——凑合的默认值会把生产指向开发库。
 if [ "$PROFILE" = "prod" ]; then
-    REQUIRED_VARS=(PIVOTOS_MYSQL_URL PIVOTOS_MYSQL_USERNAME PIVOTOS_MYSQL_PASSWORD PIVOTOS_REDIS_HOST PIVOTOS_REDIS_PASSWORD PIVOTOS_FIELD_ENCRYPT_KEY)
+    REQUIRED_VARS=(BABYLOG_MYSQL_URL BABYLOG_MYSQL_USERNAME BABYLOG_MYSQL_PASSWORD BABYLOG_REDIS_HOST BABYLOG_REDIS_PASSWORD BABYLOG_FIELD_ENCRYPT_KEY)
     MISSING=()
     for v in "${REQUIRED_VARS[@]}"; do
         if [ -z "${!v:-}" ]; then
@@ -102,11 +102,11 @@ find "$LOG_DIR" -maxdepth 1 -name 'console-*.log' -mtime +30 -delete 2>/dev/null
 # 必带项：-Djava.awt.headless=true（否则 OCR/上传报 1500）、OOM 堆转储、GC 日志、JNA 路径。
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/jvm-opts.sh"
-pivotos_build_jvm_opts "$LOG_DIR"
+babylog_build_jvm_opts "$LOG_DIR"
 
 JAVA_RUN="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 
-echo "启动 PivotOS（${PROFILE}）..."
+echo "启动 BabyLog（${PROFILE}）..."
 echo "  JAR     : $JAR"
 echo "  PORT    : $SERVER_PORT"
 echo "  APP LOG : $LOG_DIR/$(basename "$JAR" .jar).log"

@@ -4,8 +4,8 @@
 四个场景，逐步收口：
   ┃ 场景 1（dev·默认）：/health/live 与 /health/ready 的语义、匿名裁剪、明细的登录门槛、
   ┃                    DOWN↔503 一致性，以及「其余端点仍是 HTTP 200 + 业务码」的既有语义未被动过
-  ┃ 场景 2（dev·总开关）：PIVOTOS_OPS_HEALTH_ENABLED=false → 端点不注册（200 + code=1004）
-  ┃ 场景 3（dev·明细开关）：PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY=true → 匿名也能拿明细
+  ┃ 场景 2（dev·总开关）：BABYLOG_OPS_HEALTH_ENABLED=false → 端点不注册（200 + code=1004）
+  ┃ 场景 3（dev·明细开关）：BABYLOG_OPS_HEALTH_SHOWDETAILSANONYMOUSLY=true → 匿名也能拿明细
   ┃                        （同时证明配置真的能被环境变量覆盖，不是写在代码里的死值）
   ┃ 场景 4（prod·日志）：prod profile 下应用日志走滚动文件，按大小切 gzip；控制台不再重复落盘。
   ┃                    数据库指向 dev 实例（只读验证 Flyway 已是 85/85，不写任何业务数据），
@@ -14,7 +14,7 @@
   ┃                    （长期跑的测试环境同样会被单文件日志写满磁盘），而 dev 仍只写控制台。
   ┃ 场景 6（prod·按级别分文件）：V3.1-H · B1 —— WARN 及以上只落 <name>-error.log，
   ┃                    主文件刻意不再含 WARN/ERROR 行（零重叠，不存双份）；且证明错误文件
-  ┃                    跟随 PIVOTOS_LOG_FILE_NAME 前缀、按自己的 maxFileSize 独立滚动。
+  ┃                    跟随 BABYLOG_LOG_FILE_NAME 前缀、按自己的 maxFileSize 独立滚动。
 
 用法：
     python3 scripts/e2e/ops_health_test.py                 # 全跑
@@ -40,8 +40,8 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v31b-e2e"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v31b-e2e"
 LOG_DIR = os.path.join(WORK_ROOT, "logs")
 
 results = []
@@ -69,9 +69,9 @@ def port_busy(port=8080) -> bool:
 
 
 def clean_env(extra=None):
-    """彻底避免上一段遗留的 PIVOTOS_* 污染本次起服（连接串带 createDatabaseIfNotExist=true，
+    """彻底避免上一段遗留的 BABYLOG_* 污染本次起服（连接串带 createDatabaseIfNotExist=true，
     连错库也不报错，是本项目最容易踩的坑）。"""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     if extra:
         env.update(extra)
@@ -242,7 +242,7 @@ def scenario_probe():
               "未引 actuator：/actuator/health 仍是 200 + code=1004（探活要改用 /health/*）")
 
         # ⑥ dev 形态不落滚动文件（只在 prod 落盘，避免污染工作区）
-        generated = glob.glob(os.path.join(cwd, "**", "pivotos-admin-server*.log*"), recursive=True)
+        generated = glob.glob(os.path.join(cwd, "**", "babylog-admin-server*.log*"), recursive=True)
         check("A3-1", not generated, f"dev profile 只写控制台，cwd 内无日志文件（实测 {generated}）")
     finally:
         stop_server(proc, fh)
@@ -250,8 +250,8 @@ def scenario_probe():
 
 def scenario_disabled():
     """场景 2：总开关关闭 → 端点不注册"""
-    log("SCENARIO", "2/6 dev + PIVOTOS_OPS_HEALTH_ENABLED=false")
-    proc, fh = start_server(env_extra={"PIVOTOS_OPS_HEALTH_ENABLED": "false"},
+    log("SCENARIO", "2/6 dev + BABYLOG_OPS_HEALTH_ENABLED=false")
+    proc, fh = start_server(env_extra={"BABYLOG_OPS_HEALTH_ENABLED": "false"},
                             log_path=os.path.join(WORK_ROOT, "disabled.log"))
     try:
         status, body = get_json("/health/live")
@@ -263,9 +263,9 @@ def scenario_disabled():
 
 def scenario_anonymous_details():
     """场景 3：显式开明细 → 匿名可见（同时证明配置可外部覆盖）"""
-    log("SCENARIO", "3/6 dev + PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY=true")
+    log("SCENARIO", "3/6 dev + BABYLOG_OPS_HEALTH_SHOWDETAILSANONYMOUSLY=true")
     proc, fh = start_server(
-        env_extra={"PIVOTOS_OPS_HEALTH_SHOWDETAILSANONYMOUSLY": "true"},
+        env_extra={"BABYLOG_OPS_HEALTH_SHOWDETAILSANONYMOUSLY": "true"},
         log_path=os.path.join(WORK_ROOT, "anon-details.log"))
     try:
         status, body = get_json("/health/ready")
@@ -280,7 +280,7 @@ def scenario_anonymous_details():
 
 def read_dev_db_env():
     """从 application-dev.yml 现读中间件连接信息（口令不写进脚本/文档/提交信息）"""
-    yml = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources", "application-dev.yml")
+    yml = os.path.join(ROOT, "babylog-admin-server", "src", "main", "resources", "application-dev.yml")
     text = open(yml, encoding="utf-8").read()
 
     def pick(pattern):
@@ -288,11 +288,11 @@ def read_dev_db_env():
         return m.group(1) if m else ""
 
     return {
-        "url": pick(r"url:\s*\$\{PIVOTOS_MYSQL_URL:([^}]+)\}").strip('"'),
-        "username": pick(r"username:\s*\$\{PIVOTOS_MYSQL_USERNAME:([^}]+)\}").strip('"'),
-        "password": pick(r"password:\s*\$\{PIVOTOS_MYSQL_PASSWORD:([^}]+)\}").strip('"'),
-        "redis_host": pick(r"host:\s*\$\{PIVOTOS_REDIS_HOST:([^}]+)\}").strip('"'),
-        "redis_password": pick(r"password:\s*\$\{PIVOTOS_REDIS_PASSWORD:([^}]+)\}").strip('"'),
+        "url": pick(r"url:\s*\$\{BABYLOG_MYSQL_URL:([^}]+)\}").strip('"'),
+        "username": pick(r"username:\s*\$\{BABYLOG_MYSQL_USERNAME:([^}]+)\}").strip('"'),
+        "password": pick(r"password:\s*\$\{BABYLOG_MYSQL_PASSWORD:([^}]+)\}").strip('"'),
+        "redis_host": pick(r"host:\s*\$\{BABYLOG_REDIS_HOST:([^}]+)\}").strip('"'),
+        "redis_password": pick(r"password:\s*\$\{BABYLOG_REDIS_PASSWORD:([^}]+)\}").strip('"'),
     }
 
 
@@ -315,27 +315,27 @@ def scenario_prod_logging():
         profile="prod",
         cwd=cwd,
         env_extra={
-            "PIVOTOS_MYSQL_URL": db_env["url"],
-            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
-            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
-            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
-            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
-            "PIVOTOS_LOG_DIR": LOG_DIR,
+            "BABYLOG_MYSQL_URL": db_env["url"],
+            "BABYLOG_MYSQL_USERNAME": db_env["username"],
+            "BABYLOG_MYSQL_PASSWORD": db_env["password"],
+            "BABYLOG_REDIS_HOST": db_env["redis_host"],
+            "BABYLOG_REDIS_PASSWORD": db_env["redis_password"],
+            "BABYLOG_LOG_DIR": LOG_DIR,
             # 刻意压小：为了在 E2E 的时间预算里真的观察到「切片」发生（生产默认是 100MB）
-            "PIVOTOS_LOG_MAX_FILE_SIZE": "20KB",
+            "BABYLOG_LOG_MAX_FILE_SIZE": "20KB",
             # 32 位临时占位（FieldEncryptCrypto 强校验 16/24/32 位，非真凭据，仅本机临时进程用）
-            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "BABYLOG_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
             # 以下均为「必须非空否则 fail-fast」的 A1 出口，本场景只验证日志与探活，用占位值撑满：
             # COS Key / LLM Key / XXL-Job token；检索显式降为 simple，避免去连生产 ES 白等。
-            "PIVOTOS_COS_ACCESS_KEY": "v31b-e2e-placeholder",
-            "PIVOTOS_COS_SECRET_KEY": "v31b-e2e-placeholder",
-            "PIVOTOS_LLM_API_KEY": "v31b-e2e-placeholder",
-            "PIVOTOS_XXL_JOB_ACCESS_TOKEN": "v31b-e2e-placeholder",
-            "PIVOTOS_SEARCH_TYPE": "simple",
+            "BABYLOG_COS_ACCESS_KEY": "v31b-e2e-placeholder",
+            "BABYLOG_COS_SECRET_KEY": "v31b-e2e-placeholder",
+            "BABYLOG_LLM_API_KEY": "v31b-e2e-placeholder",
+            "BABYLOG_XXL_JOB_ACCESS_TOKEN": "v31b-e2e-placeholder",
+            "BABYLOG_SEARCH_TYPE": "simple",
         },
         log_path=os.path.join(WORK_ROOT, "prod-console.log"), timeout=300)
     try:
-        current = os.path.join(LOG_DIR, "pivotos-admin-server.log")
+        current = os.path.join(LOG_DIR, "babylog-admin-server.log")
         for _ in range(60):
             if os.path.exists(current):
                 break
@@ -400,20 +400,20 @@ def scenario_test_logging():
         cwd=cwd,
         env_extra={
             # test yml 的默认值指向 10.0.0.7（内网），这里改指 dev 中间件才能真起来
-            "PIVOTOS_MYSQL_URL": db_env["url"],
-            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
-            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
-            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
-            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
-            "PIVOTOS_LOG_DIR": LOG_DIR,
-            "PIVOTOS_LOG_MAX_FILE_SIZE": "20KB",
+            "BABYLOG_MYSQL_URL": db_env["url"],
+            "BABYLOG_MYSQL_USERNAME": db_env["username"],
+            "BABYLOG_MYSQL_PASSWORD": db_env["password"],
+            "BABYLOG_REDIS_HOST": db_env["redis_host"],
+            "BABYLOG_REDIS_PASSWORD": db_env["redis_password"],
+            "BABYLOG_LOG_DIR": LOG_DIR,
+            "BABYLOG_LOG_MAX_FILE_SIZE": "20KB",
             # 32 位占位（非真凭据）：test 形态用开发默认密钥只会 WARN，但显式注入更贴近运维口径
-            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
-            "PIVOTOS_SEARCH_TYPE": "simple",
+            "BABYLOG_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "BABYLOG_SEARCH_TYPE": "simple",
         },
         log_path=console_log, timeout=300)
     try:
-        current = os.path.join(LOG_DIR, "pivotos-admin-server.log")
+        current = os.path.join(LOG_DIR, "babylog-admin-server.log")
         for _ in range(60):
             if os.path.exists(current):
                 break
@@ -449,7 +449,7 @@ def scenario_error_file_splitting():
       · 主文件里一条 WARN/ERROR 都没有（零重叠，否则磁盘双倍计费）；
       · error 文件自己会滚动（它的 maxHistory/totalSizeCap 是独立的，不跟着主文件走）。
 
-    顺带断言 error 文件跟随 PIVOTOS_LOG_FILE_NAME 前缀 —— 这条能证明两条 appender 用的是同一份
+    顺带断言 error 文件跟随 BABYLOG_LOG_FILE_NAME 前缀 —— 这条能证明两条 appender 用的是同一份
     springProperty，而不是把文件名在两个地方复制了两遍（复制是最容易漂移的形态）。
     """
     log("SCENARIO", "6/6 prod 形态按级别分文件（WARN 及以上独立落盘）")
@@ -472,21 +472,21 @@ def scenario_error_file_splitting():
         profile="prod",
         cwd=cwd,
         env_extra={
-            "PIVOTOS_MYSQL_URL": db_env["url"],
-            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
-            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
-            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
-            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
-            "PIVOTOS_LOG_DIR": err_log_dir,
-            "PIVOTOS_LOG_FILE_NAME": file_prefix,
+            "BABYLOG_MYSQL_URL": db_env["url"],
+            "BABYLOG_MYSQL_USERNAME": db_env["username"],
+            "BABYLOG_MYSQL_PASSWORD": db_env["password"],
+            "BABYLOG_REDIS_HOST": db_env["redis_host"],
+            "BABYLOG_REDIS_PASSWORD": db_env["redis_password"],
+            "BABYLOG_LOG_DIR": err_log_dir,
+            "BABYLOG_LOG_FILE_NAME": file_prefix,
             # 为了在 E2E 时间预算里真的观察到两个文件各自滚动
-            "PIVOTOS_LOG_MAX_FILE_SIZE": "20KB",
-            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
-            "PIVOTOS_COS_ACCESS_KEY": "v31h-e2e-placeholder",
-            "PIVOTOS_COS_SECRET_KEY": "v31h-e2e-placeholder",
-            "PIVOTOS_LLM_API_KEY": "v31h-e2e-placeholder",
-            "PIVOTOS_XXL_JOB_ACCESS_TOKEN": "v31h-e2e-placeholder",
-            "PIVOTOS_SEARCH_TYPE": "simple",
+            "BABYLOG_LOG_MAX_FILE_SIZE": "20KB",
+            "BABYLOG_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "BABYLOG_COS_ACCESS_KEY": "v31h-e2e-placeholder",
+            "BABYLOG_COS_SECRET_KEY": "v31h-e2e-placeholder",
+            "BABYLOG_LLM_API_KEY": "v31h-e2e-placeholder",
+            "BABYLOG_XXL_JOB_ACCESS_TOKEN": "v31h-e2e-placeholder",
+            "BABYLOG_SEARCH_TYPE": "simple",
         },
         log_path=os.path.join(WORK_ROOT, "errlog-console.log"), timeout=300)
     try:
@@ -497,7 +497,7 @@ def scenario_error_file_splitting():
                 break
             time.sleep(1)
         check("B1-1", os.path.exists(err_log),
-              f"错误文件按 <PIVOTOS_LOG_FILE_NAME>-error.log 命名并落盘：{err_log}")
+              f"错误文件按 <BABYLOG_LOG_FILE_NAME>-error.log 命名并落盘：{err_log}")
         check("B1-2", os.path.exists(main_log), f"主文件同时存在：{main_log}")
 
         # 日志量：不存在路径 → GlobalExceptionHandler.log.warn
@@ -553,20 +553,20 @@ def _scenario_error_file_splitting_fatal_case(db_env, err_log_dir, file_prefix):
         shutil.rmtree(cwd)
     os.makedirs(cwd, exist_ok=True)
 
-    # 刻意不给 COS 凭据：prod 形态必崩（PIVOTOS_COS_ACCESS_KEY 为空 → S3 客户端构建抛异常）
+    # 刻意不给 COS 凭据：prod 形态必崩（BABYLOG_COS_ACCESS_KEY 为空 → S3 客户端构建抛异常）
     proc, fh = start_server(
         profile="prod",
         cwd=cwd,
         env_extra={
-            "PIVOTOS_MYSQL_URL": db_env["url"],
-            "PIVOTOS_MYSQL_USERNAME": db_env["username"],
-            "PIVOTOS_MYSQL_PASSWORD": db_env["password"],
-            "PIVOTOS_REDIS_HOST": db_env["redis_host"],
-            "PIVOTOS_REDIS_PASSWORD": db_env["redis_password"],
-            "PIVOTOS_LOG_DIR": err_log_dir,
-            "PIVOTOS_LOG_FILE_NAME": file_prefix,
-            "PIVOTOS_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
-            "PIVOTOS_SEARCH_TYPE": "simple",
+            "BABYLOG_MYSQL_URL": db_env["url"],
+            "BABYLOG_MYSQL_USERNAME": db_env["username"],
+            "BABYLOG_MYSQL_PASSWORD": db_env["password"],
+            "BABYLOG_REDIS_HOST": db_env["redis_host"],
+            "BABYLOG_REDIS_PASSWORD": db_env["redis_password"],
+            "BABYLOG_LOG_DIR": err_log_dir,
+            "BABYLOG_LOG_FILE_NAME": file_prefix,
+            "BABYLOG_FIELD_ENCRYPT_KEY": "abcdefghijklmnopqrstuvwxyz012345",
+            "BABYLOG_SEARCH_TYPE": "simple",
         },
         log_path=os.path.join(WORK_ROOT, "errlog-fatal-console.log"),
         timeout=180,

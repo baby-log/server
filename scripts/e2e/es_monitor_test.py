@@ -34,16 +34,16 @@ import requests
 
 BASE = "http://localhost:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
-JAR = os.path.join(os.path.dirname(__file__), "..", "..", "pivotos-admin-server", "target",
-                   "pivotos-admin-server.jar")
-LOG_DIR = "/tmp/pivotos-es-monitor-e2e"
+JAR = os.path.join(os.path.dirname(__file__), "..", "..", "babylog-admin-server", "target",
+                   "babylog-admin-server.jar")
+LOG_DIR = "/tmp/babylog-es-monitor-e2e"
 
 DB = dict(
     host="175.24.176.176",
     port=3306,
     user="root",
     password="mysql_DNCi3f",
-    database="pivotos_dev",
+    database="babylog_dev",
     charset="utf8mb4",
 )
 
@@ -85,11 +85,11 @@ def start_server(key, scenario):
         "-Djava.awt.headless=true",
         "-jar", os.path.abspath(JAR),
         "--spring.profiles.active=dev",
-        "--pivotos.search.type=es-java",
-        f"--pivotos.search.es-java.uris={scenario['uri']}",
-        f"--pivotos.search.es-java.username=elastic",
-        f"--pivotos.search.es-java.password={scenario['password']}",
-        f"--pivotos.search.es-java.compatibility-mode={scenario['compat']}",
+        "--babylog.search.type=es-java",
+        f"--babylog.search.es-java.uris={scenario['uri']}",
+        f"--babylog.search.es-java.username=elastic",
+        f"--babylog.search.es-java.password={scenario['password']}",
+        f"--babylog.search.es-java.compatibility-mode={scenario['compat']}",
     ]
     env = dict(os.environ)
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
@@ -257,7 +257,7 @@ def main():
     args = parser.parse_args()
 
     if not os.path.exists(JAR):
-        log("FATAL", f"fat jar 不存在：{JAR}（先 mvn clean package -pl pivotos-admin-server -DskipTests）")
+        log("FATAL", f"fat jar 不存在：{JAR}（先 mvn clean package -pl babylog-admin-server -DskipTests）")
         return 2
 
     keys = [args.only.upper()] if args.only else ["A", "B", "C"]

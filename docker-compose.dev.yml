@@ -1,13 +1,13 @@
-name: pivotos-dev
+name: babylog-dev
 
-# PivotOS 开发中间件一键拉起：mysql8.4 / redis8 / minio / xxl-job-admin
+# BabyLog 开发中间件一键拉起：mysql8.4 / redis8 / minio / xxl-job-admin
 # 用法：cp .env.example .env.dev 按实际修改 → docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
 # 账号密码只允许出现在 .env.dev（gitignored），禁止提交真实凭据
 
 services:
   mysql:
     image: mysql:8.4
-    container_name: pivotos-mysql
+    container_name: babylog-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env.dev 中配置}
@@ -26,7 +26,7 @@ services:
 
   redis:
     image: redis:8
-    container_name: pivotos-redis
+    container_name: babylog-redis
     restart: unless-stopped
     command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:?请在 .env.dev 中配置}", "--appendonly", "yes" ]
     ports:
@@ -41,7 +41,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-09-06T17-38-46Z
-    container_name: pivotos-minio
+    container_name: babylog-minio
     restart: unless-stopped
     command: [ "server", "/data", "--console-address", ":9001" ]
     environment:
@@ -55,7 +55,7 @@ services:
 
   xxl-job-admin:
     image: xuxueli/xxl-job-admin:3.4.2
-    container_name: pivotos-xxl-job-admin
+    container_name: babylog-xxl-job-admin
     restart: unless-stopped
     depends_on:
       mysql:
@@ -72,11 +72,11 @@ services:
   # ST-SEARCH（S121）：搜索 Starter 的可选中间件。
   # 声明式登记但默认不拉起（ES 单节点常驻占用 1G+ 内存，会拖慢日常开发环境），按需启动：
   #   docker compose -f docker-compose.dev.yml --env-file .env.dev --profile search up -d
-  # 镜像取 8.19.x 与 pivotos-starter-search-es-java（es-java 8.19.18 客户端）对齐；
+  # 镜像取 8.19.x 与 babylog-starter-search-es-java（es-java 8.19.18 客户端）对齐；
   # easy-es 实现内嵌 es-java 7.17.28（面向 ES 7.17），要实测该实现请把镜像换成 7.17.28。
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    container_name: pivotos-es
+    container_name: babylog-es
     restart: unless-stopped
     profiles: [ "search" ]
     environment:

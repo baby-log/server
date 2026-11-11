@@ -1,0 +1,116 @@
+<#-- =====================================================
+ uni-app API 文件模板
+ 输出: babylog-app/src/api/{moduleName}/{businessName}.ts
+===================================================== -->
+<#function tsType javaType>
+  <#if javaType == "String"><#return "string">
+  <#elseif javaType == "Integer" || javaType == "Long" || javaType == "BigDecimal" || javaType == "Float" || javaType == "Double"><#return "number">
+  <#elseif javaType == "Boolean"><#return "boolean">
+  <#elseif javaType == "LocalDateTime" || javaType == "LocalDate" || javaType == "LocalTime"><#return "string">
+  <#else><#return "any">
+  </#if>
+</#function>
+/**
+ * ${functionName} API
+ * @author ${author}
+ * @date ${datetime}
+ */
+import { del, get, post, put } from '@/utils/request';
+
+/** ${functionName} VO */
+export interface ${className}VO {
+  id: number;
+<#list listColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}: ${tsType(col.javaType)};
+<#if col.fkTable?? && col.fkTable?has_content>
+  /** ${col.columnComment}（关联显示） */
+  ${col.javaField}Label?: string;
+</#if>
+</#list>
+  createTime?: string;
+<#if hasSub>
+  /** ${subFunctionName}明细（详情返回，S51 / 2.4-F3） */
+  items?: ${subClassName}VO[];
+</#if>
+}
+<#if hasSub>
+
+/** ${subFunctionName} VO（子表） */
+export interface ${subClassName}VO {
+  id: number;
+<#list subVoColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+}
+
+/** ${subFunctionName}子项（保存请求明细行） */
+export interface ${subClassName}Item {
+<#list subInsertColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+}
+</#if>
+
+/** ${functionName} 保存请求 */
+export interface ${className}SaveRequest {
+  id?: number;
+<#list insertColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+<#if hasSub>
+  /** ${subFunctionName}明细（全量替换语义） */
+  items?: ${subClassName}Item[];
+</#if>
+}
+
+/** ${functionName} 查询参数 */
+export interface ${className}Query {
+<#list queryColumns as col>
+  /** ${col.columnComment} */
+  ${col.javaField}?: ${tsType(col.javaType)};
+</#list>
+  pageNum: number;
+  pageSize: number;
+}
+
+/** 分页查询（S47：打 app 侧并行端点组，app-user/wx-mini-user 登录即可） */
+export function select${className}Page(query: ${className}Query) {
+  return get<{ list: ${className}VO[]; total: number }>('/app/${moduleName}/${businessName}/page', query);
+}
+
+/** 查询详情 */
+export function get${className}(id: number): Promise<${className}VO> {
+  return get<${className}VO>('/app/${moduleName}/${businessName}/' + id);
+}
+
+/** 新增 */
+export function create${className}(body: ${className}SaveRequest): Promise<unknown> {
+  return post<unknown>('/app/${moduleName}/${businessName}', body);
+}
+
+/** 修改 */
+export function update${className}(body: ${className}SaveRequest): Promise<unknown> {
+  return put<unknown>('/app/${moduleName}/${businessName}', body);
+}
+
+/** 删除 */
+export function delete${className}(id: number): Promise<unknown> {
+  return del<unknown>('/app/${moduleName}/${businessName}/' + id);
+}
+<#if hasFk>
+
+/** fk 下拉选项 */
+export interface ${className}FkOption {
+  label: string;
+  value: string | number;
+}
+
+/** 查询${functionName}关联下拉选项（S50 / 2.4-F2） */
+export function get${className}FkOptions(field: string): Promise<${className}FkOption[]> {
+  return get<${className}FkOption[]>('/app/${moduleName}/${businessName}/fk-options/' + field);
+}
+</#if>

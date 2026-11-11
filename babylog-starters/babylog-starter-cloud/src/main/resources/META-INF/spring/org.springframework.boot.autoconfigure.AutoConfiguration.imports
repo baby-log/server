@@ -1,0 +1,2 @@
+com.babylog.starter.cloud.sc.config.ScCloudAutoConfiguration
+com.babylog.starter.cloud.sc.config.ScCloudCircuitBreakerAutoConfiguration

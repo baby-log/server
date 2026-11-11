@@ -6,7 +6,7 @@
 --------------------
 本仓有两条**靠手工命令传承**的硬口径，一直是「谁记得谁做」：
 
-  1. 内层 pivotos 构件的版本号必须全部等于期望版本
+  1. 内层 babylog 构件的版本号必须全部等于期望版本
      —— **这是唯一可信的版本证据**。fat jar 的字节数不能当指纹：
         zip 条目里存了 mtime，同一份代码两次打包字节数本来就不一样。
   2. 默认形态的 fat jar 里不得残留 spring-cloud / nacos
@@ -44,8 +44,8 @@ import zipfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_JAR = REPO_ROOT / "pivotos-admin-server" / "target" / "pivotos-admin-server.jar"
-GROUP_ID = "com.pivotos"
+DEFAULT_JAR = REPO_ROOT / "babylog-admin-server" / "target" / "babylog-admin-server.jar"
+GROUP_ID = "com.babylog"
 LIB_PREFIX = "BOOT-INF/lib/"
 
 # 输出里的彩色（非 TTY 自动退化为空串，避免污染 CI 日志）
@@ -92,7 +92,7 @@ def artifact_version_from_metadata(inner_bytes: bytes, artifact: str) -> str | N
 
 
 def version_from_filename(file_name: str) -> str | None:
-    """回落方案：pivotos-xxx-3.0.0.jar → 3.0.0（去掉 -SNAPSHOT / 分类器后缀）。"""
+    """回落方案：babylog-xxx-3.0.0.jar → 3.0.0（去掉 -SNAPSHOT / 分类器后缀）。"""
     stem = file_name[:-4] if file_name.endswith(".jar") else file_name
     parts = stem.split("-")
     if len(parts) < 2:
@@ -137,8 +137,8 @@ def main() -> int:
     with zipfile.ZipFile(jar) as outer:
         entries = [n for n in outer.namelist() if n.startswith(LIB_PREFIX) and n.endswith(".jar")]
 
-        # 1) pivotos 自身构件：既按文件名前缀扫，也按内层 maven 元数据确认 groupId
-        candidate = [n for n in entries if Path(n).name.startswith("pivotos-")]
+        # 1) babylog 自身构件：既按文件名前缀扫，也按内层 maven 元数据确认 groupId
+        candidate = [n for n in entries if Path(n).name.startswith("babylog-")]
         for name in sorted(candidate):
             file_name = Path(name).name
             try:
@@ -164,7 +164,7 @@ def main() -> int:
                 pass
 
             if meta_group is not None and meta_group != GROUP_ID:
-                # 第三方恰好以 pivotos- 开头（本仓暂无，但别让它悄悄进来）
+                # 第三方恰好以 babylog- 开头（本仓暂无，但别让它悄悄进来）
                 findings.append({
                     "file": file_name, "version": None, "source": "skipped",
                     "note": f"groupId={meta_group} 非 {GROUP_ID}",
@@ -190,18 +190,18 @@ def main() -> int:
             for n in hit:
                 problems.append(f"残留红线命中 [{token}]：{Path(n).name}")
 
-    pivotos_rows = [f for f in findings if f.get("source") != "skipped"]
+    babylog_rows = [f for f in findings if f.get("source") != "skipped"]
     skipped_rows = [f for f in findings if f.get("source") == "skipped"]
 
-    print(f"\npivotos 构件：{len(pivotos_rows)} 个")
+    print(f"\nbabylog 构件：{len(babylog_rows)} 个")
     versions: dict[str, int] = {}
-    for row in pivotos_rows:
+    for row in babylog_rows:
         ver = row.get("version") or "<未知>"
         versions[ver] = versions.get(ver, 0) + 1
     for ver, count in sorted(versions.items()):
         mark = "OK " if ver == expect else "!! "
         print(f"  {mark}{ver:<12} × {count}")
-    for row in pivotos_rows:
+    for row in babylog_rows:
         if row.get("version") != expect:
             print(f"      {_COLOR['red']}× {row['file']}{_COLOR['dim']}")
     for row in skipped_rows:
@@ -223,7 +223,7 @@ def main() -> int:
             "jar": str(jar),
             "jar_bytes": jar.stat().st_size,
             "expect": expect,
-            "pivotos_artifacts": pivotos_rows,
+            "babylog_artifacts": babylog_rows,
             "problems": problems,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n已写出：{args.json}")
@@ -236,7 +236,7 @@ def main() -> int:
         return 1
 
     print(f"{_COLOR['green']}PASS{_COLOR['dim']} "
-          f"{len(pivotos_rows)} 个 pivotos 构件全为 {expect}"
+          f"{len(babylog_rows)} 个 babylog 构件全为 {expect}"
           + (f"，{len(args.forbid)} 条残留红线零命中" if args.forbid else ""))
     return 0
 

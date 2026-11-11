@@ -571,7 +571,7 @@ SELFCHECK_CASES: list[tuple[str, str, object, str, dict]] = [
 
     # A6 依赖真实文件系统，所以只有它单独把 check_path_exists 打开。
     ("A6", "归档 path 指向不存在的路径", lambda t: re.sub(
-        r"pivotos-admin-server/target/\*\.jar", "target/definitely-not-here/*.jar", t, count=1),
+        r"babylog-admin-server/target/\*\.jar", "target/definitely-not-here/*.jar", t, count=1),
      "A6", {"check_path": True}),
 ]
 
@@ -688,9 +688,9 @@ def resolve_mvn() -> tuple[Path | None, list[Path]]:
          且从未加进 PATH（按项目口径还必须是 3.9.16 那一套、且不加 -s），直接跑会 127。
       ② 候选有多个时**不许猜**。早期版本用 glob sorted() 取第一个，拿到的是 **3.6.3**，
          用它照样能打包成功 —— 版本号不符却毫无信号，属于最坏的一类错误。
-         正确做法是报歧义 + 要求 export PIVOTOS_MVN。
+         正确做法是报歧义 + 要求 export BABYLOG_MVN。
     """
-    preferred = os.environ.get("PIVOTOS_MVN")
+    preferred = os.environ.get("BABYLOG_MVN")
     if preferred and Path(preferred).is_file():
         return Path(preferred), []
 
@@ -772,7 +772,7 @@ def main() -> int:
                 print(f"    - {c}")
         else:
             print("  完全没有找到 mvn")
-        print("  修法：export PIVOTOS_MVN=/path/to/apache-maven-3.9.16/bin/mvn")
+        print("  修法：export BABYLOG_MVN=/path/to/apache-maven-3.9.16/bin/mvn")
         return 2
     if mvn is not None:
         os.environ["PATH"] = f"{mvn.parent}{os.pathsep}{os.environ.get('PATH', '')}"

@@ -1,0 +1,116 @@
+spring:
+  datasource:
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          # 生产连接与凭据必须由环境变量注入；空默认用于 fail-fast，禁止回填真实值
+          url: ${BABYLOG_MYSQL_URL:}
+          username: ${BABYLOG_MYSQL_USERNAME:}
+          password: ${BABYLOG_MYSQL_PASSWORD:}
+          driver-class-name: com.mysql.cj.jdbc.Driver
+      # ===== 连接池（V3.1-G · P1-B2）=====
+      # 与容量无关的生产参数（获取等待/有效性检测/驱逐/保活/泄漏回收/慢SQL）
+      # 统一放在 application.yml 的 spring.datasource.dynamic.druid；
+      # 这里只覆盖**容量三件套**，prod 按线上并发上调。
+      #
+      # ⚠️ 容量口径：max-active × 应用实例数 + 运维/定时任务余量 必须 < MySQL max_connections
+      #    （MySQL 默认 151）。若将来扩到多实例，这里要同步下调，否则表现为
+      #    「Too many connections」而不是连接池报错，极难归因。
+      # ⚠️ 再次提醒：本项目是 **Druid**，不是 HikariCP，别写 hikari.*。
+      druid:
+        initial-size: 5
+        min-idle: 10
+        max-active: 50
+  data:
+    redis:
+      host: ${BABYLOG_REDIS_HOST:}
+      port: 6379
+      password: ${BABYLOG_REDIS_PASSWORD:}
+      timeout: 5s
+      database: 0
+
+  ai:
+    # 生产禁止凭据兜底，未注入时 AI 能力不可用
+    openai:
+      api-key: ${BABYLOG_LLM_API_KEY:}
+    # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
+    # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
+    #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
+    # ② 知识库向量类型走 babylog.kb.vector-store.type（application.yml 默认 simple，库表默认也是 simple）；
+    # ③ 简单向量库为**进程内内存**实现：单机够用，多实例部署时各实例快照不共享，需保持单实例。
+    # 将来部署 Milvus 服务端后：把 type 改回 milvus 并恢复下方 milvus 段即可，业务代码零改动。
+    vectorstore:
+      type: simple
+    #   milvus:
+    #     client:
+    #       host: 10.0.4.15
+    #       port: 19530
+    #     database-name: default
+    #     collection-name: babylog_kb
+    #     embedding-dimension: 1024
+    #     initialize-schema: true
+    #     metric-type: COSINE
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# v3.1.0 生产化 · A3：生产默认 info（此前是 debug + Spring MVC trace——磁盘/IO 放大一个数量级，
+# 且 trace 级会把参数处理器细节带进日志）。落盘路径与滚动见 logback-spring.xml。
+# 排障临时开 debug 时用环境变量覆盖：LOGGING_LEVEL_COM_BABYLOG=debug
+logging:
+  level:
+    com.babylog: info
+    org.dromara.warm.flow: info
+
+# Knife4j 生产过滤器统一封禁 API 文档面；SpringDoc 必须保持装配，否则 Knife4j 控制器缺 Bean 导致启动失败
+springdoc:
+  api-docs:
+    enabled: true
+
+knife4j:
+  # enable 必须为 true 才会注册 production 安全过滤器；设 false 反而会让静态 UI 继续暴露
+  enable: true
+  production: true
+
+babylog:
+  tenant:
+    enabled: true        # 默认 false，不写=单租户
+    mode: column         # column / schema / datasource
+  # 文件存储：腾讯云 COS（生产环境凭据必须外置）
+  file:
+    storage-type: s3
+    vendor: cos
+    endpoint: https://cos.ap-shanghai.myqcloud.com
+    access-key: ${BABYLOG_COS_ACCESS_KEY:}
+    secret-key: ${BABYLOG_COS_SECRET_KEY:}
+    bucket: huweilong-1440252518
+    region: ap-shanghai
+    public-url: https://cos.293242.com
+  # XXL-Job 调度中心（生产环境）
+  job:
+    admin-addresses: http://10.0.4.15:8101
+    app-name: babylog-executor
+    port: 9999
+    group-id: 3   # XXL-Job admin 中 babylog-executor 执行器组 ID
+    access-token: ${BABYLOG_XXL_JOB_ACCESS_TOKEN:}
+  # 检索（S121/S122）：生产 ES = 10.0.4.15:9200（2026-10-02 接线，接法与 dev 完全一致：
+  # type=es-java + uris/username/password + compatibility-mode；admin-server 已引入 es-java 实现）。
+  # 启动期探测服务端版本；若生产 ES 为 7.17，启动时加 BABYLOG_ES_JAVA_COMPATIBILITY_MODE=true
+  # （dev/test 服务端为 9.x，故默认 false）。检索不可用时链路自动回退数据库查询，业务零阻断。
+  search:
+    type: ${BABYLOG_SEARCH_TYPE:es-java}
+    es-java:
+      uris: ${BABYLOG_ES_JAVA_URIS:http://10.0.4.15:9200}
+      username: ${BABYLOG_ES_JAVA_USERNAME:elastic}
+      password: ${BABYLOG_ES_JAVA_PASSWORD:}
+      compatibility-mode: ${BABYLOG_ES_JAVA_COMPATIBILITY_MODE:false}
+  # ST-DATAINSPECT（S130）：通用数据监控。生产默认关闭自由 SQL（高危）——
+  # 仍可浏览库表与预览，放开自由 SQL 需显式改这里并重启（权限不能替代此开关）
+  datainspect:
+    query-enabled: ${BABYLOG_DATA_INSPECT_QUERY_ENABLED:false}
+  # 微信小程序（测试号）
+  wechat:
+    miniapp:
+      appid: wx0a426f6d4bce0b5c

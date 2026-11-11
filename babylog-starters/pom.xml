@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.babylog</groupId>
+        <artifactId>babylog-server</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <artifactId>babylog-starters</artifactId>
+    <packaging>pom</packaging>
+
+    <name>babylog-starters</name>
+    <description>BabyLog 核心 Starter 聚合模块</description>
+
+    <modules>
+        <module>babylog-starter-core</module>
+        <module>babylog-starter-web</module>
+        <module>babylog-starter-redis</module>
+        <module>babylog-starter-mybatis</module>
+        <module>babylog-starter-auth</module>
+        <module>babylog-starter-tenant</module>
+        <module>babylog-starter-ai</module>
+        <module>babylog-starter-excel</module>
+        <module>babylog-starter-datascope</module>
+        <module>babylog-starter-job</module>
+        <!-- ST-SEARCH（S121）：契约包 + 主 Starter（simple 兜底）+ Easy-ES / elasticsearch-java 双实现 -->
+        <module>babylog-starter-search-api</module>
+        <module>babylog-starter-search</module>
+        <module>babylog-starter-search-easy-es</module>
+        <module>babylog-starter-search-es-java</module>
+        <!-- ST-DATAINSPECT（S130）：通用数据监控契约包 + 主 Starter（MySQL 实现 + SQL 安全闸门） -->
+        <module>babylog-starter-datainspect-api</module>
+        <module>babylog-starter-datainspect</module>
+        <!-- ST-CLOUD（V3-S2 L2）：契约包 + local / cloud / alibaba 三通道实现 -->
+        <module>babylog-starter-cloud-api</module>
+        <module>babylog-starter-cloud-local</module>
+        <module>babylog-starter-cloud</module>
+        <module>babylog-starter-cloud-alibaba</module>
+        <!-- ST-METRICS（V3.1-F P1-B8-1）：指标底座 + Prometheus 抓取端点 + 业务埋点门面 -->
+        <module>babylog-starter-metrics</module>
+        <module>babylog-starter-tracing</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.babylog</groupId>
+                <artifactId>babylog-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+</project>

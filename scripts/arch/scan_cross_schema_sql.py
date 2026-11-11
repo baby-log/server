@@ -19,7 +19,7 @@ S133 - V3 spike：数据层跨模块耦合扫描（哪些 SQL / 语句会同时�
 
 复跑
 ----
-cd pivotos-framework && python3 spike/s-v3-cloud/tools/scan_cross_schema_sql.py [--out FILE]
+cd babylog-server && python3 spike/s-v3-cloud/tools/scan_cross_schema_sql.py [--out FILE]
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 
 EXCLUDE_DIR_PARTS = {"target", "node_modules", ".git", "data"}
-MODULE_ROOTS = ("pivotos-commons", "pivotos-starters", "pivotos-plugins", "pivotos-admin-server")
+MODULE_ROOTS = ("babylog-commons", "babylog-starters", "babylog-plugins", "babylog-admin-server")
 
 TABLENAME_RE = re.compile(r'@TableName\s*\(\s*(?:value\s*=\s*)?"([A-Za-z0-9_]+)"')
 XMLNS_RE = re.compile(r"<mapper[^>]*namespace\s*=\s*\"([^\"]+)\"")
@@ -100,7 +100,7 @@ def module_dirs(root: str) -> dict[str, str]:
                 a = aid(os.path.join(dirpath, "pom.xml"))
                 if a:
                     found[os.path.abspath(dirpath)] = a
-    admin = os.path.join(root, "pivotos-admin-server")
+    admin = os.path.join(root, "babylog-admin-server")
     a = aid(os.path.join(admin, "pom.xml"))
     if a:
         found[os.path.abspath(admin)] = a
@@ -170,8 +170,8 @@ def iter_sql_sources(modules: dict[str, str]):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    # 默认 = 本脚本所在 scripts/arch/ 的上两级 = pivotos-framework 根（V3-S1 从 spike 转正时修正过：
-    # 原值取的是上三级，会指向工作区根，导致找不到 pivotos-admin-server/pom.xml）
+    # 默认 = 本脚本所在 scripts/arch/ 的上两级 = babylog-server 根（V3-S1 从 spike 转正时修正过：
+    # 原值取的是上三级，会指向工作区根，导致找不到 babylog-admin-server/pom.xml）
     ap.add_argument("--root", default=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     ap.add_argument("--out", default=None)
     ap.add_argument("--format", choices=["text", "json"], default="text")

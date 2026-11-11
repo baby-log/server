@@ -13,14 +13,14 @@ S133 - V3「形态革命」spike：隐性跨模块调用扫描器
 ----
 1. 只扫 src/main/java（生产代码），测试代码不算耦合欠款。
 2. 「合规通道」= 调用目标位于 `*-api` 契约模块（Facade / DTO / 枚举），或位于公共基座
-   （pivotos-common-core / pivotos-common-api / pivotos-starter-core）。
+   （babylog-common-core / babylog-common-api / babylog-starter-core）。
 3. 「隐性欠款」= 调用目标位于**实现模块**（非 -api、非基座）。这类调用一旦拆成微服务，
    本地方法调用会变成跨进程调用，必须逐个改为 Facade + HTTP 通道，属于真实工作量。
 4. 同模块内部引用不计；api 模块反向依赖实现模块单独列 Konw "反向依赖" 视为架构违规。
 
 复跑
 ----
-cd pivotos-framework && python3 spike/s-v3-cloud/tools/scan_cross_module.py \
+cd babylog-server && python3 spike/s-v3-cloud/tools/scan_cross_module.py \
     [--format text|json] [--out FILE]
 """
 
@@ -35,9 +35,9 @@ import xml.etree.ElementTree as ET
 
 # 公共基座白名单：任何模块依赖这些模块都是基线，不算欠款
 BASE_MODULES = {
-    "pivotos-common-core",
-    "pivotos-common-api",
-    "pivotos-starter-core",
+    "babylog-common-core",
+    "babylog-common-api",
+    "babylog-starter-core",
 }
 
 # 不参与构建的样例工程（见 项目记忆：16 个 migration 样例 pom 不参与构建）
@@ -48,7 +48,7 @@ EXCLUDE_DIR_PARTS = {
     ".git",
 }
 
-MODULE_ROOTS = ("pivotos-commons", "pivotos-starters", "pivotos-plugins", "pivotos-admin-server")
+MODULE_ROOTS = ("babylog-commons", "babylog-starters", "babylog-plugins", "babylog-admin-server")
 
 IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([\w.]+)\s*;")
 ARTIFACT_RE = re.compile(r"<artifactId>([^<]+)</artifactId>")
@@ -84,7 +84,7 @@ def discover_modules(root: str) -> dict[str, str]:
             if artifact:
                 modules[os.path.abspath(dirpath)] = artifact
     # admin-server 自身
-    admin = os.path.join(root, "pivotos-admin-server")
+    admin = os.path.join(root, "babylog-admin-server")
     artifact = pom_artifact_id(os.path.join(admin, "pom.xml"))
     if artifact:
         modules[os.path.abspath(admin)] = artifact
@@ -110,7 +110,7 @@ def build_package_index(modules: dict[str, str]) -> tuple[dict[str, str], list[s
             if pkg == ".":
                 continue
             if pkg in pkg_index and pkg_index[pkg] != artifact:
-                # 同名包出现在多个模块（如 com.pivotos.generator.service 同时存在于 generator 与
+                # 同名包出现在多个模块（如 com.babylog.generator.service 同时存在于 generator 与
                 # generator-api）：以 -api 契约为归属优先，因为外部应当只引用契约一侧；
                 # 依赖声明层面的偏差另由 audit_pom_deps 单独报告。
                 prefer_api = artifact.endswith("-api") and not pkg_index[pkg].endswith("-api")
@@ -143,7 +143,7 @@ def audit_pom_deps(modules: dict[str, str]) -> list[dict]:
         if not os.path.isfile(pom):
             continue
         # admin-server 是聚合壳，天然依赖全部 Plugin 实现模块，不算耦合欠款
-        if artifact == "pivotos-admin-server":
+        if artifact == "babylog-admin-server":
             continue
         try:
             tree = ET.parse(pom)
@@ -159,9 +159,9 @@ def audit_pom_deps(modules: dict[str, str]) -> list[dict]:
             values = {local_name(c): (c.text or "").strip() for c in dep}
             group, art = values.get("groupId", ""), values.get("artifactId", "")
             scope = values.get("scope", "compile")
-            if group != "com.pivotos" or scope not in ("compile", "runtime", ""):
+            if group != "com.babylog" or scope not in ("compile", "runtime", ""):
                 continue
-            if not art.startswith("pivotos-plugin-"):
+            if not art.startswith("babylog-plugin-"):
                 continue
             if art == artifact or art == artifact + "-api":
                 continue
@@ -207,13 +207,13 @@ def classify(src_module: str, target_module: str) -> str:
     if target_module.endswith("-api"):
         return "CONTRACT"      # 契约模块，合规（Facade / DTO / 枚举）
     # starter→plugin 实现：基础设施反向依赖业务，属于必须先治理的架构违规
-    if src_module.startswith("pivotos-starter-") and target_module.startswith("pivotos-plugin-"):
+    if src_module.startswith("babylog-starter-") and target_module.startswith("babylog-plugin-"):
         return "REVERSE"
     # api 模块反向依赖实现模块：同样是架构违规
     if src_module.endswith("-api") and not target_module.endswith("-api"):
         return "REVERSE"
     # 业务 Plugin → 基础设施 Starter：横向基础设施不跨进程边界，不算微服务化欠款
-    if target_module.startswith("pivotos-starter-"):
+    if target_module.startswith("babylog-starter-"):
         return "INFRA"
     return "DEBT"              # Plugin ↔ Plugin 实现模块：真正的微服务化欠款
 
@@ -232,7 +232,7 @@ def main() -> int:
 
     edges: dict[tuple[str, str, str], dict] = {}
     for src_module, target_fqn, path, lineno in rows:
-        if not target_fqn.startswith("com.pivotos"):
+        if not target_fqn.startswith("com.babylog"):
             continue
         target_module = resolve_module(target_fqn, pkg_index)
         if target_module is None:

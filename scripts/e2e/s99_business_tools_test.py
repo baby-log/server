@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S99 A2 首批业务工具 + REST/MCP 双入口主 E2E（2026-08-23 第 5 轮）
+BabyLog S99 A2 首批业务工具 + REST/MCP 双入口主 E2E（2026-08-23 第 5 轮）
 链路：注册表同步 8 工具 → REST 直连只读三工具（与 REST 业务基线对账）
      → MCP 双暴露一致性（tools/list 集合一致 + 调用结果一致）
      → 写操作二次确认（预检拦截 + confirm=true 放行 + 副作用实证）→ 审计落库 → 未注册工具拒绝

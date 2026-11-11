@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """S115 E2E fixture 复壮 · OCR 样图生成器（纯测试资产，不涉产品代码）。
 
-背景（S114 §5.1 已定性）：``ocr_kb_e2e_test`` 的默认样图 ``pivotos-tmp/ocr-sample-s95.png``
-是 S95（Windows 会话）时代产物，**本机零命中**（``pivotos-tmp/*.png`` 为空）——fixture 丢失 ≠ 代码回归。
+背景（S114 §5.1 已定性）：``ocr_kb_e2e_test`` 的默认样图 ``babylog-tmp/ocr-sample-s95.png``
+是 S95（Windows 会话）时代产物，**本机零命中**（``babylog-tmp/*.png`` 为空）——fixture 丢失 ≠ 代码回归。
 
 复壮口径：**不让 fixture 再以文件形态存在**。
     样图内容（``LINES``）在脚本内以常量固化，运行时用 Pillow 渲染成 PNG 写
-    ``pivotos-tmp/ocr-sample-s115.png``；文件缺失/损坏时按需重生成。
-    这样即便 pivotos-tmp 再次被清空（它不在任何 git 仓内，四个仓都不跟踪），
+    ``babylog-tmp/ocr-sample-s115.png``；文件缺失/损坏时按需重生成。
+    这样即便 babylog-tmp 再次被清空（它不在任何 git 仓内，四个仓都不跟踪），
     E2E 也能自愈，不会第三次复现「样图丢失」。
 
 小图优先：``SMALL_SIZE`` 为 S96 K2（tess4j Invalid memory access）口径下的最小验证图，
@@ -20,14 +20,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 # 样图内已知文案（与 ocr_kb_e2e_test 的 KEYWORDS / SEARCH_QUERY 对齐）
 LINES = [
-    "PivotOS 旧系统迁移功能",
+    "BabyLog 旧系统迁移功能",
     "枢盘 智能迁移平台 迁移计划",
     "扫描件 OCR 入库与检索测试",
 ]
-KEYWORDS_HINT = ["PivotOS", "枢盘", "迁移"]  # ≥1 命中即判定 OCR 生效（脚本口径）
+KEYWORDS_HINT = ["BabyLog", "枢盘", "迁移"]  # ≥1 命中即判定 OCR 生效（脚本口径）
 
 DEFAULT_OUT = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "pivotos-tmp", "ocr-sample-s115.png"))
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "babylog-tmp", "ocr-sample-s115.png"))
 
 FONT_CANDIDATES = [
     "/System/Library/Fonts/PingFang.ttc",
@@ -80,7 +80,7 @@ def ensure_sample(path=DEFAULT_OUT):
 if __name__ == "__main__":
     if "--small" in sys.argv:
         # S96 K2 口径：小图先验 OCR 原生链路，通过后再上全尺寸图
-        small_lines = ["PivotOS"]
+        small_lines = ["BabyLog"]
         out = render(DEFAULT_OUT.replace(".png", "-small.png"),
                      width=400, line_height=70, font_size=48, lines=small_lines)
     else:

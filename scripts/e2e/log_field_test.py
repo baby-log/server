@@ -14,7 +14,7 @@
   L-2 登录后能取到**真实 userId**（不是空占位）——证明 MDC → pattern 这条链是通的
   L-3 旧形态 `[u=...,t=...]` 已彻底消失（防「改了一半」）
   L-4 kv 可机器切分：用通用 kv 正则能把三个字段都取出来（这是采集侧的真实诉求）
-  L-5 JSON 覆盖通道：注入 PIVOTOS_LOG_PATTERN 后，日志行可被 json.loads 解析且三字段齐全
+  L-5 JSON 覆盖通道：注入 BABYLOG_LOG_PATTERN 后，日志行可被 json.loads 解析且三字段齐全
   L-6 dev 形态仍不落滚动文件（C4-1 口径不被本批改动破坏）
   L-7 负向自检：故意注入一个不含 userId 的 pattern → L-4/L-5 的判定函数必须判 False
       ——证明断言不是恒真（恒真的断言等于没有断言）
@@ -37,10 +37,10 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v320-logfield"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v320-logfield"
 
-# 结构化采集用的 JSON 预设（运维可通过 PIVOTOS_LOG_PATTERN 整体替换默认文本 pattern）。
+# 结构化采集用的 JSON 预设（运维可通过 BABYLOG_LOG_PATTERN 整体替换默认文本 pattern）。
 # %replace 把消息里的控制字符与引号/反斜杠换成空格 —— 没有它，一条含双引号的业务日志
 # 就能把整行 JSON 打废，而采集侧只会看到「偶发解析失败」，极难归因。
 JSON_PATTERN = (
@@ -82,10 +82,10 @@ def start_server(env_extra=None, timeout=300):
     log_path = os.path.join(WORK_ROOT, "dev-console.log")
     if os.path.exists(log_path):
         os.remove(log_path)
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
-    # 身份字段由 starter-tracing 的 MdcContextFilter 写入，默认 pivotos.tracing.enabled=false
-    env["PIVOTOS_TRACING_ENABLED"] = "true"
+    # 身份字段由 starter-tracing 的 MdcContextFilter 写入，默认 babylog.tracing.enabled=false
+    env["BABYLOG_TRACING_ENABLED"] = "true"
     env.update(env_extra or {})
     cmd = [JAVA, "-Djna.library.path=/opt/homebrew/lib", "-Djava.awt.headless=true",
            "-jar", JAR, "--spring.profiles.active=dev"]
@@ -233,14 +233,14 @@ def main():
     rolling = []
     for dirpath, _dirs, files in os.walk(cwd):
         for f in files:
-            if f.startswith("pivotos-admin-server") and f.endswith(".log"):
+            if f.startswith("babylog-admin-server") and f.endswith(".log"):
                 rolling.append(os.path.join(dirpath, f))
     check("L-6", not rolling,
           "dev 形态不落应用滚动文件（logs/ 目录可能是 xxl-job 建的，不算），实际命中 {}".format(rolling))
 
     # ================= 场景二：JSON 覆盖通道 =================
-    log("SCENARIO", "2/3 PIVOTOS_LOG_PATTERN 覆盖为 JSON 一行式")
-    proc, fh, cwd, log_path = start_server({"PIVOTOS_LOG_PATTERN": JSON_PATTERN})
+    log("SCENARIO", "2/3 BABYLOG_LOG_PATTERN 覆盖为 JSON 一行式")
+    proc, fh, cwd, log_path = start_server({"BABYLOG_LOG_PATTERN": JSON_PATTERN})
     try:
         drive_business_requests()
         text_json = read_log(log_path)
@@ -254,7 +254,7 @@ def main():
 
     # ================= 场景三：负向自检 =================
     log("SCENARIO", "3/3 负向自检（故意去掉 userId 字段，判定函数必须判 False）")
-    proc, fh, cwd, log_path = start_server({"PIVOTOS_LOG_PATTERN": JSON_PATTERN_NO_USER})
+    proc, fh, cwd, log_path = start_server({"BABYLOG_LOG_PATTERN": JSON_PATTERN_NO_USER})
     try:
         drive_business_requests()
         text_bad = read_log(log_path)

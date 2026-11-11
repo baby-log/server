@@ -8,13 +8,13 @@
 # 2. 产出 5 个自治 jar（含 AutoConfiguration.imports），运行时通过 classpath 组合决定形态；
 #    这本身就是「可裁剪性」的物理证据 —— 形态切换 = classpath 组合切换。
 #
-# 用法：cd pivotos-framework && bash spike/s-v3-cloud/tools/build_starters.sh
+# 用法：cd babylog-server && bash spike/s-v3-cloud/tools/build_starters.sh
 # 注：本机 shell 的 rm 被 IDE shim 接管且不可靠，脚本内一律用 find -delete / 覆盖式写 完成清理。
 set -uo pipefail
 
 FW_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SPIKE_DIR="$FW_ROOT/spike/s-v3-cloud"
-APP_JAR="$FW_ROOT/pivotos-admin-server/target/pivotos-admin-server.jar"
+APP_JAR="$FW_ROOT/babylog-admin-server/target/babylog-admin-server.jar"
 export JAVA_HOME="${JAVA_HOME:-/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home}"
 
 WORK="${SPIKE_DIR}/build"
@@ -47,14 +47,14 @@ for m in "${MODULES[@]}"; do
   if [ -d "$SPIKE_DIR/starters/$m/src/main/resources" ]; then
     cp -R "$SPIKE_DIR/starters/$m/src/main/resources/." "$classes/"
   fi
-  (cd "$classes" && "$JAVA_HOME/bin/jar" cf "$OUT/pivotos-starter-$m.jar" .)
-  EXTRA="$EXTRA:$OUT/pivotos-starter-$m.jar"
-  echo "        built pivotos-starter-$m.jar"
+  (cd "$classes" && "$JAVA_HOME/bin/jar" cf "$OUT/babylog-starter-$m.jar" .)
+  EXTRA="$EXTRA:$OUT/babylog-starter-$m.jar"
+  echo "        built babylog-starter-$m.jar"
 done
 
 echo "[3/3] 校验每个 jar 都登记了 AutoConfiguration.imports"
 for m in "${MODULES[@]}"; do
-  entry=$(unzip -p "$OUT/pivotos-starter-$m.jar" META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports)
+  entry=$(unzip -p "$OUT/babylog-starter-$m.jar" META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports)
   echo "        $m -> $entry"
 done
 

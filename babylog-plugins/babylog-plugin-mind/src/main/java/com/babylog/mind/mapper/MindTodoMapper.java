@@ -1,0 +1,9 @@
+package com.babylog.mind.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.babylog.mind.domain.entity.MindTodo;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface MindTodoMapper extends BaseMapper<MindTodo> {
+}

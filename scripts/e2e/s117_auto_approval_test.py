@@ -26,9 +26,9 @@ import pymysql
 import requests
 
 BASE = "http://127.0.0.1:8080"
-EVIDENCE = "/Users/huweilong/Documents/File/Project/PivotOS Technology/PivotOS/pivotos-tmp/test-evidence/s117"
+EVIDENCE = "/Users/huweilong/WorkBuddy/业余项目/babylog-tmp/test-evidence/s117"
 DB = dict(host="175.24.176.176", port=3306, user="root", password="mysql_DNCi3f",
-          database="pivotos_dev", charset="utf8mb4")
+          database="babylog_dev", charset="utf8mb4")
 os.makedirs(EVIDENCE, exist_ok=True)
 
 FAILED: list[str] = []

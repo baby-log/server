@@ -12,7 +12,7 @@ S103 C4 一票否决验证：BPMN XML → warm-flow DefJson 映射最小样例�
   → 发起 days=5 → 断言待办落在「部门负责人审批」→ 通过 → 实例完结
 
 通过 = 映射语义被引擎完整接受，一票否决点 PASS；任何一步失败 = 改道（14 号清单第六节）。
-前置：8080 dev 运行中（库 pivotos_dev），admin/admin123。
+前置：8080 dev 运行中（库 babylog_dev），admin/admin123。
 """
 import json
 import sys
@@ -24,13 +24,13 @@ import requests
 BASE = "http://localhost:8080"
 FLOW_CODE = "bpmn_s103_veto"
 RUN_TS = str(int(time.time()))[-6:]  # 每次运行独立 businessName，避免与残留实例撞车
-WARM_NS = "http://pivotos/warm-flow"
+WARM_NS = "http://babylog/warm-flow"
 BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
 
 SAMPLE_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:warm="http://pivotos/warm-flow">
+  xmlns:warm="http://babylog/warm-flow">
   <bpmn:process id="bpmn_s103_veto" name="请假分档审批-S103映射验证" isExecutable="false">
     <bpmn:startEvent id="start" name="开始"/>
     <bpmn:userTask id="apply" name="提交申请" warm:permissionFlag="1"/>

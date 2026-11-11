@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PivotOS 前台运行包装（V3.1-G · P1-B3 进程托管）
+# BabyLog 前台运行包装（V3.1-G · P1-B3 进程托管）
 #
 # 给 systemd 用：unit 的 ExecStart 指向本脚本。
 # 为什么不让 unit 直接 ExecStart=java：
@@ -12,17 +12,17 @@
 # 裸机 / 1Panel 场景不要用本脚本，用 start-prod.sh（nohup 后台 + PID 文件 + 就绪轮询）。
 #
 # 用法：把 scripts/ops/ 整个目录拷到目标机 $APP_HOME 下，再：
-#     APP_HOME=/opt/pivotos PIVOTOS_PROFILE=prod /opt/pivotos/run.sh
+#     APP_HOME=/opt/babylog BABYLOG_PROFILE=prod /opt/babylog/run.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_HOME="${APP_HOME:-$(dirname "$SCRIPT_DIR")}"
-JAR_NAME="${JAR_NAME:-pivotos-admin-server.jar}"
+JAR_NAME="${JAR_NAME:-babylog-admin-server.jar}"
 JAR="$APP_HOME/$JAR_NAME"
-LOG_DIR="${PIVOTOS_LOG_DIR:-$APP_HOME/logs}"
+LOG_DIR="${BABYLOG_LOG_DIR:-$APP_HOME/logs}"
 SERVER_PORT="${SERVER_PORT:-8080}"
-PROFILE="${PIVOTOS_PROFILE:-prod}"
+PROFILE="${BABYLOG_PROFILE:-prod}"
 
 if [ ! -f "$JAR" ]; then
     echo "❌ 找不到 jar：${JAR}（用 JAR_NAME 指定文件名，或检查 APP_HOME）" >&2
@@ -33,7 +33,7 @@ mkdir -p "$LOG_DIR"
 
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/jvm-opts.sh"
-pivotos_build_jvm_opts "$LOG_DIR"
+babylog_build_jvm_opts "$LOG_DIR"
 
 echo "[run] APP_HOME=$APP_HOME  JAR=$JAR  PORT=$SERVER_PORT  PROFILE=$PROFILE  LOG_DIR=$LOG_DIR"
 echo "[run] JVM_OPTS=$JVM_OPTS"

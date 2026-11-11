@@ -1,0 +1,30 @@
+package com.babylog.system.domain.dto;
+
+import com.babylog.common.core.page.PageQuery;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.time.LocalDateTime;
+
+/** 定时任务执行记录分页查询 */
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class JobLogQuery extends PageQuery {
+
+    /** handler 名（模糊） */
+    @Schema(description = "handler 名（模糊）")
+    private String jobHandler;
+
+    /** 结果（0成功 1失败） */
+    @Schema(description = "结果（0成功 1失败）")
+    private Integer status;
+
+    /** 执行时间起 */
+    @Schema(description = "执行时间起")
+    private LocalDateTime beginTime;
+
+    /** 执行时间止 */
+    @Schema(description = "执行时间止")
+    private LocalDateTime endTime;
+}

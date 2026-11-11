@@ -13,7 +13,7 @@
      只有对着真库 count 才能证明空间确实被回收；
   ② 留存清理依赖 MP 分页插件、租户行级过滤、JobExecutionHelper 落 sys_job_log
      这一整条装配链，任何一环缺失都不会报错、只会静默不清理；
-  ③ docsite 给的运维覆盖方式是 PIVOTOS_RETENTION_* 环境变量，
+  ③ docsite 给的运维覆盖方式是 BABYLOG_RETENTION_* 环境变量，
      「写了不生效」这类文档反向杀伤只能靠真起服验证。
 
 用法：
@@ -39,8 +39,8 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v31i-retention-e2e"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v31i-retention-e2e"
 
 TABLE = "sys_login_log"
 MARK = "__retention_e2e__"
@@ -67,11 +67,11 @@ def check(tag, cond, msg):
 
 def connect_db():
     import pymysql
-    return pymysql.connect(host=os.environ.get("PIVOTOS_DEV_MYSQL_HOST", "175.24.176.176"),
-                           port=int(os.environ.get("PIVOTOS_DEV_MYSQL_PORT", "3306")),
-                           user=os.environ.get("PIVOTOS_DEV_MYSQL_USER", "root"),
-                           password=os.environ.get("PIVOTOS_DEV_MYSQL_PASSWORD", "mysql_DNCi3f"),
-                           database=os.environ.get("PIVOTOS_DEV_MYSQL_DATABASE", "pivotos_dev"),
+    return pymysql.connect(host=os.environ.get("BABYLOG_DEV_MYSQL_HOST", "175.24.176.176"),
+                           port=int(os.environ.get("BABYLOG_DEV_MYSQL_PORT", "3306")),
+                           user=os.environ.get("BABYLOG_DEV_MYSQL_USER", "root"),
+                           password=os.environ.get("BABYLOG_DEV_MYSQL_PASSWORD", "mysql_DNCi3f"),
+                           database=os.environ.get("BABYLOG_DEV_MYSQL_DATABASE", "babylog_dev"),
                            charset="utf8mb4")
 
 
@@ -143,7 +143,7 @@ def port_busy(port=8080) -> bool:
 
 
 def clean_env(extra=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     if extra:
         env.update(extra)
@@ -344,11 +344,11 @@ def sc_disabled(tag, headers, log_path):
 
 
 SCENARIOS = {
-    "dryrun": (sc_dryrun, {"PIVOTOS_RETENTION_DRY_RUN": "true"}),
+    "dryrun": (sc_dryrun, {"BABYLOG_RETENTION_DRY_RUN": "true"}),
     "default": (sc_default, {}),
-    "floor": (sc_floor, {"PIVOTOS_RETENTION_LOGIN_LOG_DAYS": "0"}),
-    "limit": (sc_limit, {"PIVOTOS_RETENTION_MAX_DELETE_PER_RUN": "2"}),
-    "disabled": (sc_disabled, {"PIVOTOS_RETENTION_ENABLED": "false"}),
+    "floor": (sc_floor, {"BABYLOG_RETENTION_LOGIN_LOG_DAYS": "0"}),
+    "limit": (sc_limit, {"BABYLOG_RETENTION_MAX_DELETE_PER_RUN": "2"}),
+    "disabled": (sc_disabled, {"BABYLOG_RETENTION_ENABLED": "false"}),
 }
 
 

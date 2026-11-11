@@ -7,9 +7,9 @@
 四个场景，逐步收口：
   ┃ 场景 1（正向）：规则名写成 URI 原样 `/system/auth/login`（QPS=1）→ 连打必出 429，
   ┃                  body 含 "Blocked by Sentinel"，2s 后自行恢复
-  ┃ 场景 2（负向·历史坑复现）：规则名写成带前缀的 `pivotos:/system/auth/login`
+  ┃ 场景 2（负向·历史坑复现）：规则名写成带前缀的 `babylog:/system/auth/login`
   ┃                  → Guard 因其不以 `/` 开头而再拼一次前缀，资源名变成
-  ┃                    `pivotos:pivotos:/system/auth/login`，与 WebMvc 拦截器用的 URI 资源名
+  ┃                    `babylog:babylog:/system/auth/login`，与 WebMvc 拦截器用的 URI 资源名
   ┃                    对不上 → **连打全 200，限流静默失效**。这正是当年事故的原样复现。
   ┃ 场景 3（负向·规则不匹配）：规则指向根本不存在的 URI → 全 200，
   ┃                  证明「出 429」是规则匹配驱动的，而不是别的原因（如登录接口自带频控）
@@ -53,8 +53,8 @@ import zipfile
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v32a-sentinel-e2e"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v32a-sentinel-e2e"
 
 LOGIN_PATH = "/system/auth/login"
 BLOCK_MARK = "Blocked by Sentinel"
@@ -64,14 +64,14 @@ BLOCK_MARK = "Blocked by Sentinel"
 # 该机不可达时应用根本起不来（Flyway 校验卡住），本脚本就会全线假红 ——
 # 而「远端不通」与「限流没生效」是两件事，必须能分开。
 LOCAL_DB_ENV = {
-    "PIVOTOS_MYSQL_URL": "jdbc:mysql://127.0.0.1:3306/pivotos_dev?useUnicode=true&characterEncoding=utf8"
+    "BABYLOG_MYSQL_URL": "jdbc:mysql://127.0.0.1:3306/babylog_dev?useUnicode=true&characterEncoding=utf8"
                          "&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
                          "&createDatabaseIfNotExist=true&allowMultiQueries=false",
-    "PIVOTOS_MYSQL_USERNAME": "root",
-    "PIVOTOS_MYSQL_PASSWORD": "root_ci",
+    "BABYLOG_MYSQL_USERNAME": "root",
+    "BABYLOG_MYSQL_PASSWORD": "root_ci",
     # ⚠️ 密码绝不能是空串：Redisson 拿到空串照样发 AUTH "" 会被 Redis 拒绝
-    "PIVOTOS_REDIS_HOST": "127.0.0.1",
-    "PIVOTOS_REDIS_PASSWORD": "root_ci",
+    "BABYLOG_REDIS_HOST": "127.0.0.1",
+    "BABYLOG_REDIS_PASSWORD": "root_ci",
 }
 
 LOCAL_DB = False
@@ -121,7 +121,7 @@ def port_busy(port=8080) -> bool:
 
 
 def clean_env(extra=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     if extra:
         env.update(extra)
@@ -224,18 +224,18 @@ def scenario_block(nacos_addr):
     """场景 1（正向）：URI 原样 → 连打出 429 → 2s 后恢复。"""
     tag = "block"
     args = base_args(nacos_addr) + [
-        "--pivotos.cloud.alibaba.sentinel-enabled=true",
-        "--pivotos.cloud.alibaba.rules[/system/auth/login]=1",
+        "--babylog.cloud.alibaba.sentinel-enabled=true",
+        "--babylog.cloud.alibaba.rules[/system/auth/login]=1",
     ]
-    proc, fh, log_path = start_server(tag, args, {"PIVOTOS_CLOUD_ENABLED": "true",
-                                                  "PIVOTOS_CLOUD_PROVIDER": "alibaba"})
+    proc, fh, log_path = start_server(tag, args, {"BABYLOG_CLOUD_ENABLED": "true",
+                                                  "BABYLOG_CLOUD_PROVIDER": "alibaba"})
     try:
         text = read_log(log_path)
         check("S1-1", "[CLOUD][alibaba] Sentinel 保护已启用" in text,
               "起服日志出现「Sentinel 保护已启用」（证明 Guard 装配了）")
         check("S1-2", "Sentinel 流控规则：/system/auth/login -> QPS 1" in text,
               "日志打印的实际资源名就是 URI 原样（前缀坑未复发）")
-        check("S1-3", "pivotos:/system/auth/login" not in text,
+        check("S1-3", "babylog:/system/auth/login" not in text,
               "日志里不存在被拼前缀的资源名")
 
         hits = burst(6)
@@ -264,14 +264,14 @@ def scenario_prefix(nacos_addr):
     """场景 2（负向）：规则名带前缀 —— 历史坑的原样复现，期望**全 200**（限流静默失效）。"""
     tag = "prefix"
     args = base_args(nacos_addr) + [
-        "--pivotos.cloud.alibaba.sentinel-enabled=true",
-        "--pivotos.cloud.alibaba.rules[pivotos:/system/auth/login]=1",
+        "--babylog.cloud.alibaba.sentinel-enabled=true",
+        "--babylog.cloud.alibaba.rules[babylog:/system/auth/login]=1",
     ]
-    proc, fh, log_path = start_server(tag, args, {"PIVOTOS_CLOUD_ENABLED": "true",
-                                                  "PIVOTOS_CLOUD_PROVIDER": "alibaba"})
+    proc, fh, log_path = start_server(tag, args, {"BABYLOG_CLOUD_ENABLED": "true",
+                                                  "BABYLOG_CLOUD_PROVIDER": "alibaba"})
     try:
         text = read_log(log_path)
-        check("S2-1", "Sentinel 流控规则：pivotos:pivotos:/system/auth/login -> QPS 1" in text,
+        check("S2-1", "Sentinel 流控规则：babylog:babylog:/system/auth/login -> QPS 1" in text,
               "带前缀的规则名被二次拼前缀（资源名已与 URI 不一致）")
 
         hits = burst(6)
@@ -289,11 +289,11 @@ def scenario_mismatch(nacos_addr):
     """场景 3（负向）：规则指向不存在的 URI → 全 200，证明 429 由规则匹配驱动。"""
     tag = "mismatch"
     args = base_args(nacos_addr) + [
-        "--pivotos.cloud.alibaba.sentinel-enabled=true",
-        "--pivotos.cloud.alibaba.rules[/system/auth/no-such-endpoint]=1",
+        "--babylog.cloud.alibaba.sentinel-enabled=true",
+        "--babylog.cloud.alibaba.rules[/system/auth/no-such-endpoint]=1",
     ]
-    proc, fh, log_path = start_server(tag, args, {"PIVOTOS_CLOUD_ENABLED": "true",
-                                                  "PIVOTOS_CLOUD_PROVIDER": "alibaba"})
+    proc, fh, log_path = start_server(tag, args, {"BABYLOG_CLOUD_ENABLED": "true",
+                                                  "BABYLOG_CLOUD_PROVIDER": "alibaba"})
     try:
         text = read_log(log_path)
         check("S3-1", "Sentinel 流控规则：/system/auth/no-such-endpoint -> QPS 1" in text,
@@ -312,11 +312,11 @@ def scenario_disabled(nacos_addr):
     """场景 4（负向）：sentinel-enabled=false → 全 200 且 Guard 不装配。"""
     tag = "disabled"
     args = base_args(nacos_addr) + [
-        "--pivotos.cloud.alibaba.sentinel-enabled=false",
-        "--pivotos.cloud.alibaba.rules[/system/auth/login]=1",
+        "--babylog.cloud.alibaba.sentinel-enabled=false",
+        "--babylog.cloud.alibaba.rules[/system/auth/login]=1",
     ]
-    proc, fh, log_path = start_server(tag, args, {"PIVOTOS_CLOUD_ENABLED": "true",
-                                                  "PIVOTOS_CLOUD_PROVIDER": "alibaba"})
+    proc, fh, log_path = start_server(tag, args, {"BABYLOG_CLOUD_ENABLED": "true",
+                                                  "BABYLOG_CLOUD_PROVIDER": "alibaba"})
     try:
         text = read_log(log_path)
         check("S4-1", "[CLOUD][alibaba] Sentinel 保护已启用" not in text,

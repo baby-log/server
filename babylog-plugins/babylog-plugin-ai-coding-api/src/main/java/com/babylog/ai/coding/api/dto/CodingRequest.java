@@ -1,0 +1,21 @@
+package com.babylog.ai.coding.api.dto;
+
+import lombok.Data;
+import io.swagger.v3.oas.annotations.media.Schema;
+
+import java.io.Serializable;
+
+/**
+ * AI Coding 请求
+ *
+ * @author BabyLog
+ * @since 2.2.0
+ */
+@Data
+public class CodingRequest implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    /** 自然语言描述 */
+    @Schema(description = "自然语言描述")
+    private String description;
+}

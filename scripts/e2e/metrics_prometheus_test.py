@@ -5,8 +5,8 @@
   ┃ 场景 1（dev·默认）：/actuator/prometheus 匿名可抓、Content-Type 是 Prometheus 文本格式，
   ┃                    并实打覆盖 B8 要求的四类：JVM / HTTP / 连接池 / 检索
   ┃ 场景 2（dev·慢接口）：阈值压到 1ms 后真实请求被计为慢请求，且 tag 是 URI 模板而非实际 URI
-  ┃ 场景 3（dev·总开关）：PIVOTOS_METRICS_ENABLED=false → 端点不注册（200 + code=1004），业务照常
-  ┃ 场景 4（dev·只关端点）：PIVOTOS_METRICS_PROMETHEUS_ENABLED=false → 只摘端点，业务照常
+  ┃ 场景 3（dev·总开关）：BABYLOG_METRICS_ENABLED=false → 端点不注册（200 + code=1004），业务照常
+  ┃ 场景 4（dev·只关端点）：BABYLOG_METRICS_PROMETHEUS_ENABLED=false → 只摘端点，业务照常
 
 为什么必须真起进程而不是只跑单测：
   ① 连接池到底是 HikariCP 还是 Druid，只有启动日志说了算——本项目是 **Druid**，
@@ -36,8 +36,8 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-WORK_ROOT = "/tmp/pivotos-v31f-metrics-e2e"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+WORK_ROOT = "/tmp/babylog-v31f-metrics-e2e"
 
 PROM_PATH = "/actuator/prometheus"
 
@@ -66,7 +66,7 @@ def port_busy(port=8080) -> bool:
 
 
 def clean_env(extra=None):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     if extra:
         env.update(extra)
@@ -205,19 +205,19 @@ def scenario_default():
               "HTTP 指标里能看到刚打过的登录请求")
 
         # ⑤ 连接池：本项目实际是 Druid，Boot 自带的 hikaricp.* 覆盖不到，故自研 binder
-        check("M-9", present(text, "pivotos_datasource_connections_active"),
+        check("M-9", present(text, "babylog_datasource_connections_active"),
               "Druid 连接池活跃连接指标存在（自研 binder）")
-        check("M-10", present(text, "pivotos_datasource_connections_max"),
+        check("M-10", present(text, "babylog_datasource_connections_max"),
               "Druid 连接池上限指标存在")
         check("M-11", not present(text, "hikaricp_connections"),
               "hikaricp.* 不存在——本项目连接池是 Druid，这条断言就是该事实的钉子")
 
         # ⑥ 检索（启动期 KB 索引回灌会触发）
-        check("M-12", present(text, "pivotos_search_calls_total") or present(text, "pivotos_search_latency_seconds"),
+        check("M-12", present(text, "babylog_search_calls_total") or present(text, "babylog_search_latency_seconds"),
               "检索调用量/耗时指标存在")
 
         # ⑦ 公共 tag
-        check("M-13", 'application="pivotos-admin-server"' in text, "application 公共 tag 已打上")
+        check("M-13", 'application="babylog-admin-server"' in text, "application 公共 tag 已打上")
     finally:
         stop_server(proc, fh)
 
@@ -228,21 +228,21 @@ def scenario_slow():
     # 阈值单位是**整数毫秒**：耗时按毫秒取整后 >= 阈值才算慢，故阈值取 1 仍会漏掉亚毫秒请求
     # （实测：阈值=1 时 /system/user/1 耗时 0.x ms，取整为 0，一条都不计）——要「全部计入」就写 0。
     proc, fh = start_server({"E2E_TAG": "slow",
-                             "PIVOTOS_METRICS_SLOW_REQUEST_THRESHOLD_MS": "0"})
+                             "BABYLOG_METRICS_SLOW_REQUEST_THRESHOLD_MS": "0"})
     try:
         token = login_token()
         # 打一个带路径变量的接口：若 tag 取错了（用实际 URI），这里会看到 /system/user/1
         http_get("/system/user/1", headers={"Authorization": token})
         status, _, text = scrape()
-        # Micrometer 的点分名 pivotos.http.slow 在 Prometheus 侧是 pivotos_http_slow_total
+        # Micrometer 的点分名 babylog.http.slow 在 Prometheus 侧是 babylog_http_slow_total
         # （counter 名 + Prometheus 的 _total 后缀），别按 Java 侧的名字去抓
-        check("S-1", present(text, "pivotos_http_slow_total"),
+        check("S-1", present(text, "babylog_http_slow_total"),
               "慢请求计数存在（阈值 0 = 全部计入）")
-        line = first_line(text, "pivotos_http_slow_total")
+        line = first_line(text, "babylog_http_slow_total")
         check("S-2", 'pattern="/system/user/{id}"' in text,
               f"tag 必须是 URI 模板而不是实际 URI，实际样本={line[:160]}")
         check("S-3", not any('/system/user/1"' in l for l in text.splitlines()
-                             if l.startswith("pivotos_http_slow")),
+                             if l.startswith("babylog_http_slow")),
               "绝不能出现含 id 的实际 URI 当 tag（高基数会把 Prometheus 打挂）")
     finally:
         stop_server(proc, fh)
@@ -251,7 +251,7 @@ def scenario_slow():
 def scenario_disabled():
     """场景 3/4：两个开关的真实后果"""
     log("SCENARIO", "3/4 dev 总开关关闭：端点不注册，业务照常")
-    proc, fh = start_server({"E2E_TAG": "disabled", "PIVOTOS_METRICS_ENABLED": "false"})
+    proc, fh = start_server({"E2E_TAG": "disabled", "BABYLOG_METRICS_ENABLED": "false"})
     try:
         status, body = get_json(PROM_PATH)
         # 端点未注册 → 走全局异常处理：HTTP 200 + code=1004（本项目既有语义，勿按状态码断言）
@@ -263,7 +263,7 @@ def scenario_disabled():
         stop_server(proc, fh)
 
     log("SCENARIO", "4/4 dev 只关端点：只摘端点，业务照常")
-    proc, fh = start_server({"E2E_TAG": "endpoint-off", "PIVOTOS_METRICS_PROMETHEUS_ENABLED": "false"})
+    proc, fh = start_server({"E2E_TAG": "endpoint-off", "BABYLOG_METRICS_PROMETHEUS_ENABLED": "false"})
     try:
         status, body = get_json(PROM_PATH)
         check("D-3", status == 200 and body is not None and body.get("code") == 1004,

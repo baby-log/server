@@ -1,0 +1,131 @@
+package com.babylog.system.service.impl;
+
+import cn.hutool.http.HttpUtil;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.babylog.common.core.exception.ServiceException;
+import com.babylog.system.api.enums.SystemErrorCode;
+import com.babylog.system.config.WechatMiniProperties;
+import com.babylog.system.service.WechatMiniService;
+import com.babylog.system.service.WechatSession;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * 微信 API 实现（Hutool HTTP 直连）。
+ * access_token 单体内存缓存（提前 5 分钟过期）；多实例部署时换 Redis 缓存即可。
+ */
+@Service
+@RequiredArgsConstructor
+public class WechatMiniServiceImpl implements WechatMiniService {
+
+    private static final Logger log = LoggerFactory.getLogger(WechatMiniServiceImpl.class);
+
+    private static final String CODE2SESSION_URL = "https://api.weixin.qq.com/sns/jscode2session";
+    private static final String ACCESS_TOKEN_URL = "https://api.weixin.qq.com/cgi-bin/token";
+    private static final String PHONE_URL = "https://api.weixin.qq.com/wxa/business/getuserphonenumber";
+
+    private final WechatMiniProperties properties;
+
+    /** access_token 内存缓存（key = app, value = token + 过期时间戳毫秒） */
+    private final Map<String, TokenCache> tokenCaches = new ConcurrentHashMap<>();
+
+    @Override
+    public WechatSession code2Session(String app, String code) {
+        WechatMiniProperties.MiniAppConfig config = requireConfigured(app);
+        String body = HttpUtil.get(CODE2SESSION_URL, Map.of(
+                "appid", config.getAppid(),
+                "secret", config.getSecret(),
+                "js_code", code,
+                "grant_type", "authorization_code"));
+        JSONObject json = parse(body);
+        Integer errcode = json.getInteger("errcode");
+        if (errcode != null && errcode != 0) {
+            // 40029=code 无效 / 40163=code 已使用，归为客户端可重试错误
+            log.warn("[BabyLog] code2session 失败 app={} errcode={} errmsg={}", app, errcode, json.getString("errmsg"));
+            throw new ServiceException(SystemErrorCode.SOCIAL_CODE_INVALID);
+        }
+        String openId = json.getString("openid");
+        if (openId == null || openId.isBlank()) {
+            throw new ServiceException(SystemErrorCode.SOCIAL_API_FAILED);
+        }
+        return new WechatSession(openId, json.getString("unionid"));
+    }
+
+    @Override
+    public String getPhoneNumber(String app, String phoneCode) {
+        requireConfigured(app);
+        String body = HttpUtil.post(PHONE_URL + "?access_token=" + accessToken(app),
+                JSON.toJSONString(Map.of("code", phoneCode)));
+        JSONObject json = parse(body);
+        Integer errcode = json.getInteger("errcode");
+        if (errcode == null || errcode != 0) {
+            log.warn("[BabyLog] getuserphonenumber 失败 app={} errcode={} errmsg={}", app, errcode, json.getString("errmsg"));
+            throw new ServiceException(SystemErrorCode.SOCIAL_CODE_INVALID);
+        }
+        String phone = json.getJSONObject("phone_info") == null ? null
+                : json.getJSONObject("phone_info").getString("purePhoneNumber");
+        if (phone == null || phone.isBlank()) {
+            throw new ServiceException(SystemErrorCode.SOCIAL_API_FAILED);
+        }
+        return phone;
+    }
+
+    /** client_credential 取 access_token，内存缓存 + 双检 */
+    private String accessToken(String app) {
+        TokenCache cache = tokenCaches.computeIfAbsent(app, k -> new TokenCache());
+        long now = System.currentTimeMillis();
+        if (cache.token != null && now < cache.expireAt) {
+            return cache.token;
+        }
+        synchronized (cache) {
+            if (cache.token != null && System.currentTimeMillis() < cache.expireAt) {
+                return cache.token;
+            }
+            WechatMiniProperties.MiniAppConfig config = requireConfigured(app);
+            String body = HttpUtil.get(ACCESS_TOKEN_URL, Map.of(
+                    "grant_type", "client_credential",
+                    "appid", config.getAppid(),
+                    "secret", config.getSecret()));
+            JSONObject json = parse(body);
+            String token = json.getString("access_token");
+            if (token == null || token.isBlank()) {
+                log.error("[BabyLog] 获取微信 access_token 失败 app={}：{}", app, body);
+                throw new ServiceException(SystemErrorCode.SOCIAL_API_FAILED);
+            }
+            cache.token = token;
+            // 提前 5 分钟过期，抵消时钟偏移与在途请求
+            cache.expireAt = System.currentTimeMillis()
+                    + (json.getLongValue("expires_in", 7200L) - 300) * 1000;
+            return token;
+        }
+    }
+
+    private WechatMiniProperties.MiniAppConfig requireConfigured(String app) {
+        WechatMiniProperties.MiniAppConfig config = properties.getConfig(app);
+        if (config == null) {
+            throw new ServiceException(SystemErrorCode.SOCIAL_NOT_CONFIGURED);
+        }
+        return config;
+    }
+
+    private JSONObject parse(String body) {
+        try {
+            return JSON.parseObject(body);
+        } catch (Exception e) {
+            log.error("[BabyLog] 微信接口响应解析失败：{}", body, e);
+            throw new ServiceException(SystemErrorCode.SOCIAL_API_FAILED);
+        }
+    }
+
+    /** 单应用 access_token 缓存 */
+    private static class TokenCache {
+        private volatile String token;
+        private volatile long expireAt;
+    }
+}

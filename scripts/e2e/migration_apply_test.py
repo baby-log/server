@@ -17,7 +17,7 @@
        id=2103521132021088258/status=0，**命中与否全看运气**，且随迁移任务表清空必然失效。
     本版改为**自建对照组**（一个 CREATED 态任务），跑完一并自清，不再依赖存量数据。
 
-同时修正：原脚本 DB 连接指向 ``database='pivotos'``（Windows 时代遗留，本机 dev 库是 pivotos_dev），
+同时修正：原脚本 DB 连接指向 ``database='babylog'``（Windows 时代遗留，本机 dev 库是 babylog_dev），
 落盘根目录 TARGET_ROOT 现由 migration_fixture.WORKSPACE 统一推导（同 application.yml 口径）。
 """
 import os

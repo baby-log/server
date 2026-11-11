@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PivotOS S101 E2E 冒烟脚本（2026-08-29，A3 AI 审批助手首轮·后端链路）
+BabyLog S101 E2E 冒烟脚本（2026-08-29，A3 AI 审批助手首轮·后端链路）
 验证面：
   ① SSE 帧序：POST /ai/approval/advice/stream → meta → delta* → done（error 帧视为失败）；
   ② 结构化三态：done.conclusion ∈ {approve, reject, need_info}；

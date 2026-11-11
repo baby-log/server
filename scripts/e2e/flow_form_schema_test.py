@@ -3,7 +3,7 @@
 
 背景：warm-flow 的 `warm-flow-plugin-ui-sb-web` 自带表单端点，`GET /warm-flow/published-form`
 → `FlowEngine.formService().list()` → `flow_form` 表；而 V1.2.21 只建了 8 张引擎表，缺表单表，
-于是**登录后恒 500**（`Table 'pivotos_dev.flow_form' doesn't exist`）。V3.1-D 拍板走 A 路：
+于是**登录后恒 500**（`Table 'babylog_dev.flow_form' doesn't exist`）。V3.1-D 拍板走 A 路：
 补 Flyway V1.2.53 建表，而不是屏蔽端点。
 
 断言（逐条，全部实打）：
@@ -14,7 +14,7 @@
   F-5 相邻链路未被误伤：登录 GET /warm-flow/query-def 仍可用
   F-6 dev 形态不落滚动文件（C4-1 只把 test 纳入，dev 必须仍是纯控制台）
   F-7（V3.1-E 新增）fat jar 内 warm-flow 构件**全部是 1.8.9、零 1.8.7 残留**
-      ——防「改了 pivotos-dependencies 但 fat jar 里还是旧版」的假升级
+      ——防「改了 babylog-dependencies 但 fat jar 里还是旧版」的假升级
       （fat jar 的 mtime 不可信，必须解包看内层构件名）
 
 用法：
@@ -37,9 +37,9 @@ import urllib.request
 BASE = "http://127.0.0.1:8080"
 JAVA = "/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java"
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-JAR = os.path.join(ROOT, "pivotos-admin-server", "target", "pivotos-admin-server.jar")
-DEV_YML = os.path.join(ROOT, "pivotos-admin-server", "src", "main", "resources", "application-dev.yml")
-WORK_ROOT = "/tmp/pivotos-v31d-flowform"
+JAR = os.path.join(ROOT, "babylog-admin-server", "target", "babylog-admin-server.jar")
+DEV_YML = os.path.join(ROOT, "babylog-admin-server", "src", "main", "resources", "application-dev.yml")
+WORK_ROOT = "/tmp/babylog-v31d-flowform"
 
 # FlowForm 实体（warm-flow-mybatis-plus-core，javap 实测 1.8.7 与 1.8.9 均为这 15 个字段）→ 列名
 EXPECTED_COLUMNS = [
@@ -77,8 +77,8 @@ def start_server(timeout=300):
     cwd = os.path.join(WORK_ROOT, "dev-cwd")
     os.makedirs(cwd, exist_ok=True)
     log_path = os.path.join(WORK_ROOT, "dev-console.log")
-    # 不带任何 PIVOTOS_* 覆盖：dev yml 自带的明文兜底就是 dev 形态的设计意图
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PIVOTOS_")}
+    # 不带任何 BABYLOG_* 覆盖：dev yml 自带的明文兜底就是 dev 形态的设计意图
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BABYLOG_")}
     env["TESSDATA_PREFIX"] = "/opt/homebrew/share/tessdata"
     cmd = [JAVA, "-Djna.library.path=/opt/homebrew/lib", "-Djava.awt.headless=true",
            "-jar", JAR, "--spring.profiles.active=dev"]
@@ -153,9 +153,9 @@ def dev_db_conn_args():
         m = re.search(pattern, text)
         return m.group(1).strip('"') if m else ""
 
-    url = pick(r"url:\s*\$\{PIVOTOS_MYSQL_URL:([^}]+)\}")
-    username = pick(r"username:\s*\$\{PIVOTOS_MYSQL_USERNAME:([^}]+)\}")
-    password = pick(r"password:\s*\$\{PIVOTOS_MYSQL_PASSWORD:([^}]+)\}")
+    url = pick(r"url:\s*\$\{BABYLOG_MYSQL_URL:([^}]+)\}")
+    username = pick(r"username:\s*\$\{BABYLOG_MYSQL_USERNAME:([^}]+)\}")
+    password = pick(r"password:\s*\$\{BABYLOG_MYSQL_PASSWORD:([^}]+)\}")
     m = re.search(r"jdbc:mysql://([^:/]+):(\d+)/([^?]+)", url)
     if not m:
         raise RuntimeError(f"未能从 application-dev.yml 解析出 MySQL 连接信息：{url}")
@@ -238,7 +238,7 @@ def main():
               f"登录 /warm-flow/query-def 仍可用（HTTP {status}, code={(body or {}).get('code')}）")
 
         # F-6 dev 形态不落滚动文件（C4-1 只把 test 纳入，dev 必须仍是纯控制台）
-        generated = glob.glob(os.path.join(cwd, "**", "pivotos-admin-server*.log*"), recursive=True)
+        generated = glob.glob(os.path.join(cwd, "**", "babylog-admin-server*.log*"), recursive=True)
         check("F-6", not generated, f"dev 形态 cwd 内无日志落盘（C4-1 未误伤 dev）：{generated}")
     finally:
         stop_server(proc, fh)

@@ -1,0 +1,4 @@
+com.babylog.starter.job.config.JobAutoConfiguration
+com.babylog.starter.job.config.JobSupportAutoConfiguration
+com.babylog.starter.job.retention.RetentionAutoConfiguration
+com.babylog.starter.job.retention.LocalRetentionScheduler
