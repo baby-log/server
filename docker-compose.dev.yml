@@ -1,8 +1,8 @@
 name: babylog-dev
 
 # BabyLog 开发中间件一键拉起：mysql8.4 / redis8 / minio / xxl-job-admin
-# 用法：cp .env.example .env.dev 按实际修改 → docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
-# 账号密码只允许出现在 .env.dev（gitignored），禁止提交真实凭据
+# 用法：需要改口令就直接改本文件（配置口径：全部内联 yml，不再走 .env 注入；本仓库为私有仓库）。
+# 注意：若本地用它起中间件，请把 application-dev.yml 的 MySQL/Redis 地址与口令改成对应值
 
 services:
   mysql:
@@ -10,7 +10,7 @@ services:
     container_name: babylog-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env.dev 中配置}
+      MYSQL_ROOT_PASSWORD: mysql_change_me
       TZ: Asia/Shanghai
     ports:
       - "3306:3306"
@@ -28,13 +28,13 @@ services:
     image: redis:8
     container_name: babylog-redis
     restart: unless-stopped
-    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD:?请在 .env.dev 中配置}", "--appendonly", "yes" ]
+    command: [ "redis-server", "--requirepass", "redis_change_me", "--appendonly", "yes" ]
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      test: [ "CMD", "redis-cli", "-a", "redis_change_me", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -45,8 +45,8 @@ services:
     restart: unless-stopped
     command: [ "server", "/data", "--console-address", ":9001" ]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?请在 .env.dev 中配置}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env.dev 中配置}
+      MINIO_ROOT_USER: babylog
+      MINIO_ROOT_PASSWORD: minio_change_me
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -64,14 +64,14 @@ services:
       PARAMS: >-
         --spring.datasource.url=jdbc:mysql://mysql:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai
         --spring.datasource.username=root
-        --spring.datasource.password=${MYSQL_ROOT_PASSWORD}
-        --xxl.job.accessToken=${XXL_JOB_ACCESS_TOKEN:-}
+        --spring.datasource.password=mysql_change_me
+        --xxl.job.accessToken=
     ports:
       - "8081:8080"
 
   # ST-SEARCH（S121）：搜索 Starter 的可选中间件。
   # 声明式登记但默认不拉起（ES 单节点常驻占用 1G+ 内存，会拖慢日常开发环境），按需启动：
-  #   docker compose -f docker-compose.dev.yml --env-file .env.dev --profile search up -d
+  #   docker compose -f docker-compose.dev.yml --profile search up -d
   # 镜像取 8.19.x 与 babylog-starter-search-es-java（es-java 8.19.18 客户端）对齐；
   # easy-es 实现内嵌 es-java 7.17.28（面向 ES 7.17），要实测该实现请把镜像换成 7.17.28。
   elasticsearch:

@@ -6,18 +6,18 @@
 #   sudo cp scripts/ops/{run.sh,start-prod.sh,stop-prod.sh,preflight.py,jvm-opts.sh} /opt/babylog/
 #   sudo chmod +x /opt/babylog/*.sh /opt/babylog/preflight.py
 #   sudo cp babylog-admin-server/target/babylog-admin-server.jar /opt/babylog/
-#   sudo cp scripts/ops/admin-server.env.example /etc/babylog/admin-server.env   # 填真实值，**不要入库**
-#   sudo chmod 600 /etc/babylog/admin-server.env
 #   sudo cp scripts/ops/babylog-admin-server.service /etc/systemd/system/
+#   （配置口径：生产凭据直接填 jar 内 application-prod.yml —— 私有仓库，
+#     不再使用 /etc/babylog/admin-server.env 环境变量文件）
 #   sudo systemctl daemon-reload && sudo systemctl enable --now babylog-admin-server
 #
 # 运维：
 #   systemctl status babylog-admin-server    journalctl -u babylog-admin-server -f
 #   systemctl restart babylog-admin-server   # 走 SIGTERM → 等宽限期 → SIGKILL
 #
-# ⚠️ 凭据口径（V3.1-A · A1）：口令**只**放在 /etc/babylog/admin-server.env，
-#    由部署流程注入；任何 yml、本 unit、仓库里都不写字面口令。
-#    已进入 Git 历史的历史口令必须另行轮换。
+# ⚠️ 凭据口径（2026-11-12 起）：配置全部内联 yml（私有仓库），
+#    生产凭据直接填 application-prod.yml；应用侧 A1 fail-fast 仍会在缺值时拒绝启动。
+#    （历史版本曾走 /etc/babylog/admin-server.env 环境变量注入，已废除。）
 #
 # ⚠️ 停机链路三处超时必须成链（改一处要同步另外两处）：
 #     ① 应用侧 spring.lifecycle.timeout-per-shutdown-phase = 30s（application.yml）
@@ -39,11 +39,7 @@ User=babylog
 Group=babylog
 WorkingDirectory=/opt/babylog
 
-# 环境变量文件：只存 KEY=VALUE，不要在这里写注释式口令。
-# 前缀 '-' 表示文件缺失也能启动（缺失时会由下面的 ExecStartPre 给出清晰报错）。
-EnvironmentFile=-/etc/babylog/admin-server.env
-
-# 启动前置检查：端口占用 / 必需环境变量 / jar 存在性 / JDK 版本。
+# 启动前置检查：端口占用 / jar 存在性 / JDK 版本（配置已内联 yml，无必需环境变量）。
 # 数据源连通只告警不阻断（--skip-db 是刻意保留的：离线环境仍可起服排查）。
 ExecStartPre=/opt/babylog/preflight.py --profile=prod --skip-db
 ExecStart=/opt/babylog/run.sh

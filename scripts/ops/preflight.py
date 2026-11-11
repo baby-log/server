@@ -56,19 +56,13 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MIN_JDK_MAJOR = 17
 
 # 每个 profile 的「必需环境变量」。
-#   prod：A1 之后连接串与凭据**没有**兜底值，缺一个就会连错环境，必须硬拦。
-#   test/dev：profile yml 里刻意保留了字面量兜底（否则 1014 条 IT 与本地开发全断），
-#             所以这里**不强制**注入，只打 INFO 说明现状。
+# 2026-11-12 起项目废除 .env / 环境变量注入，配置全部内联 yml（私有仓库）：
+#   · dev/test 各自 yml 已写字面量凭据，直接可用；
+#   · prod 的凭据直接填 application-prod.yml（应用侧 A1 fail-fast 与
+#     FieldEncryptKeyGuard 仍会在缺值/开发默认值时拒绝启动）。
+# 故这里不再强制任何环境变量，各 profile 均为空清单。
 REQUIRED_BY_PROFILE = {
-    "prod": [
-        ("BABYLOG_MYSQL_URL", "JDBC 连接串；空默认会让数据源装配直接失败（A1 的 fail-fast 设计）"),
-        ("BABYLOG_MYSQL_USERNAME", "MySQL 账号；生产应为最小权限应用账号"),
-        ("BABYLOG_MYSQL_PASSWORD", "MySQL 口令；由密钥管理系统或部署平台注入"),
-        ("BABYLOG_REDIS_HOST", "Redis 主机"),
-        ("BABYLOG_REDIS_PASSWORD", "Redis 口令"),
-        ("BABYLOG_FIELD_ENCRYPT_KEY",
-         "字段加密 AES 密钥（16/24/32 位）；prod 若解析到 git 里的开发默认值，应用会拒绝启动"),
-    ],
+    "prod": [],
     "test": [],
     "dev": [],
 }
@@ -102,13 +96,11 @@ def check_field_encrypt_key(findings: list[Finding], profile: str) -> None:
     """
     key = env("BABYLOG_FIELD_ENCRYPT_KEY")
     if not key:
-        if profile == "prod":
-            # 缺失本身已由 check_required_env 判 FAIL，这里不重复计
-            return
         findings.append(Finding(
             "WARN", "字段加密密钥",
-            f"profile={profile} 未注入 BABYLOG_FIELD_ENCRYPT_KEY，将使用 profile 兜底值",
-            "仅可用于开发/测试；生产必须显式注入，且值不可等于 git 里的开发默认密钥",
+            f"profile={profile} 未设 BABYLOG_FIELD_ENCRYPT_KEY，将使用 application-{profile}.yml 内联值",
+            "配置已全部内联 yml；确认 yml 里的密钥为生产专用（不可等于 git 里的开发默认密钥，"
+            "prod 形态应用侧 FieldEncryptKeyGuard 会拒绝启动）",
         ))
         return
     if len(key) not in VALID_KEY_LENGTHS:
@@ -126,7 +118,7 @@ def check_required_env(findings: list[Finding], profile: str) -> None:
     if not required:
         findings.append(Finding(
             "PASS", "必需环境变量",
-            f"profile={profile} 不强制注入（凭据由 application-{profile}.yml 兜底）",
+            f"profile={profile} 无强制环境变量（配置已全部内联 application-*.yml）",
         ))
         return
     missing = []
@@ -137,7 +129,7 @@ def check_required_env(findings: list[Finding], profile: str) -> None:
         findings.append(Finding(
             "FAIL", "必需环境变量",
             f"profile={profile} 缺少 {len(missing)} 项",
-            "凭据一律由部署环境注入，禁止写进脚本或 yml；缺失项：\n" +
+            "配置已全部内联 yml；缺失项：\n" +
             "\n".join(f"          - {m}" for m in missing),
         ))
         return

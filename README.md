@@ -84,15 +84,14 @@ babylog-server (groupId=com.babylog)
 git clone git@gitee.com:baby-log/server.git
 cd server
 
-# 1. 准备本地配置（MySQL/Redis 密码等），模板见 .env.example；
-#    所有凭据经环境变量注入（MYSQL_PASSWORD / REDIS_PASSWORD / DASHSCOPE_API_KEY 等），仓库内不保留真实密钥
-cp .env.example .env.dev    # 按本机实际修改
+# 1. 配置：全部写在 yml 里（不再走 .env / 环境变量注入，本仓库为私有仓库）。
+#    dev 默认指向远端 dev 中间件，直接可用；要连本地中间件就改 application-dev.yml。
 
 # 2. 构建（首次或依赖变更后）
 mvn clean install -DskipTests
 
 # 3. 启动（Flyway 自动建库建表；默认 profile=dev，见 application-dev.yml 数据源配置）
-source .env.dev && java -jar babylog-admin-server/target/babylog-admin-server.jar
+java -jar babylog-admin-server/target/babylog-admin-server.jar
 ```
 
 启动后：后端 API `http://localhost:8080`，默认账号 `admin / admin123`。
@@ -118,4 +117,4 @@ source .env.dev && java -jar babylog-admin-server/target/babylog-admin-server.ja
 
 [Apache License 2.0](./LICENSE) · Copyright 2026 [胡伟龙（Alex）](https://www.293242.com/)
 
-凭据安全约定：`.env.dev` 等含真实凭据的文件一律不入库（`.gitignore` 已覆盖）；配置文件中凭据一律 `${ENV_VAR:}` 占位经环境变量注入。
+凭据约定：本仓库为**私有仓库**，配置全部内联 yml（dev/test 已填值可直接用；prod 凭据直接填 application-prod.yml，不再使用 .env / 环境变量注入）。
