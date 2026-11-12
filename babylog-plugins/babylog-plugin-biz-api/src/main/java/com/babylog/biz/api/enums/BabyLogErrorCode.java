@@ -51,6 +51,8 @@ public enum BabyLogErrorCode implements ErrorCode {
     MAIL_SEND_FAILED(8375, "验证码邮件发送失败，请稍后重试"),
     REFRESH_TOKEN_INVALID(8376, "登录状态已失效，请重新登录"),
     EMAIL_ALREADY_USED(8377, "该邮箱已绑定其他账号"),
+    /** 注册时用户名被占用（上游契约抛 2003，biz 侧转译成 8xxx 段，App 只认这一段） */
+    USERNAME_ALREADY_USED(8378, "用户名已被占用"),
 
     // ---------- 反馈（8380-8389） ----------
     FEEDBACK_NOT_FOUND(8380, "反馈不存在"),

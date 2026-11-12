@@ -1,25 +1,27 @@
 package com.babylog.biz.auth.service.impl;
 
-import cn.hutool.crypto.digest.BCrypt;
 import com.babylog.biz.api.enums.BabyLogErrorCode;
 import com.babylog.biz.auth.config.BabyLogAuthProperties;
 import com.babylog.biz.auth.dto.DeviceInfo;
 import com.babylog.biz.auth.dto.EmailCodeCmd;
 import com.babylog.biz.auth.dto.EmailLoginCmd;
 import com.babylog.biz.auth.dto.PasswordLoginCmd;
-import com.babylog.biz.auth.dto.RegisterCmd;
 import com.babylog.biz.auth.dto.RefreshTokenCmd;
+import com.babylog.biz.auth.dto.RegisterCmd;
 import com.babylog.biz.auth.service.AppTokenService;
 import com.babylog.biz.auth.service.EmailCodeService;
 import com.babylog.biz.auth.store.RefreshTokenRecord;
 import com.babylog.biz.auth.store.RefreshTokenStore;
-import com.babylog.biz.auth.support.SysUserAccountDao;
 import com.babylog.biz.auth.vo.CodeSendVO;
 import com.babylog.biz.auth.vo.LoginTokenVO;
 import com.babylog.biz.entity.BlDevice;
 import com.babylog.biz.mapper.BlDeviceMapper;
 import com.babylog.common.core.exception.ServiceException;
+import com.babylog.system.api.dto.UserAccountCreateCmd;
+import com.babylog.system.api.dto.UserDTO;
 import com.babylog.system.api.enums.SystemErrorCode;
+import com.babylog.system.api.facade.IUserAccountFacade;
+import com.babylog.system.api.facade.IUserFacade;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,7 +49,8 @@ import static org.mockito.Mockito.when;
 /**
  * 认证编排单测：三条登录路（验证码/账密/refresh）的建档、校验、双 token 与设备落行。
  *
- * <p>DAO / RefreshToken 存储 / Sa-Token 全部 Mock——不连库、不连 Redis、不碰请求上下文。
+ * <p>账号读写走 system 的两道契约（{@link IUserFacade} 只读 + {@link IUserAccountFacade} 写），
+ * 这里连同 RefreshToken 存储 / Sa-Token 一起 Mock——不连库、不连 Redis、不碰请求上下文。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -64,7 +67,9 @@ class AppAuthServiceImplTest {
     @Mock
     private RefreshTokenStore refreshTokenStore;
     @Mock
-    private SysUserAccountDao userAccountDao;
+    private IUserFacade userFacade;
+    @Mock
+    private IUserAccountFacade userAccountFacade;
     @Mock
     private BlDeviceMapper deviceMapper;
 
@@ -75,7 +80,7 @@ class AppAuthServiceImplTest {
     void setUp() {
         properties = new BabyLogAuthProperties();
         service = new AppAuthServiceImpl(emailCodeService, tokenService, refreshTokenStore,
-                userAccountDao, deviceMapper, properties);
+                userFacade, userAccountFacade, deviceMapper, properties);
 
         when(emailCodeService.normalize(anyString()))
                 .thenAnswer(inv -> inv.getArgument(0, String.class).trim().toLowerCase(Locale.ROOT));
@@ -94,10 +99,10 @@ class AppAuthServiceImplTest {
 
     @Test
     void loginByEmailCode_createsAccountOnFirstLogin() {
-        when(userAccountDao.findByEmail("mom@example.com")).thenReturn(Optional.empty());
-        when(userAccountDao.findByUsername(anyString())).thenReturn(Optional.empty());
-        when(userAccountDao.insert(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(NEW_USER_ID);
+        when(userAccountFacade.getByEmail("mom@example.com")).thenReturn(null);
+        when(userAccountFacade.existsByUsername(anyString())).thenReturn(false);
+        when(userAccountFacade.createAccount(any())).thenReturn(NEW_USER_ID);
+        when(userFacade.getById(NEW_USER_ID)).thenReturn(user(NEW_USER_ID, "bl_abc123", "妈妈", "mom@example.com"));
 
         LoginTokenVO vo = service.loginByEmailCode(emailLoginCmd(" Mom@Example.com ", "123456", device()));
 
@@ -109,22 +114,24 @@ class AppAuthServiceImplTest {
         assertThat(vo.getAccessExpiresIn()).isEqualTo(7200L);
         assertThat(vo.getRefreshExpiresIn()).isEqualTo(properties.getRefreshTokenTtlSeconds());
         assertThat(vo.getDeviceId()).isEqualTo(9001L);
-        // 自动建档的账号：邮箱落在 email 列，用户名是随机串（不是邮箱本身）
-        ArgumentCaptor<String> username = ArgumentCaptor.forClass(String.class);
-        verify(userAccountDao).insert(username.capture(), anyString(), eq("mom@example.com"), anyString());
-        assertThat(username.getValue()).startsWith("bl_").isNotEqualTo("mom@example.com");
+        // 自动建档的账号：邮箱落在 email 列，用户名是随机串（不是邮箱本身），密码留空由契约生成随机串
+        ArgumentCaptor<UserAccountCreateCmd> cmd = ArgumentCaptor.forClass(UserAccountCreateCmd.class);
+        verify(userAccountFacade).createAccount(cmd.capture());
+        assertThat(cmd.getValue().getUsername()).startsWith("bl_").isNotEqualTo("mom@example.com");
+        assertThat(cmd.getValue().getEmail()).isEqualTo("mom@example.com");
+        assertThat(cmd.getValue().getRawPassword()).isNull();
     }
 
     @Test
     void loginByEmailCode_reusesExistingAccount() {
-        when(userAccountDao.findByEmail("mom@example.com"))
-                .thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "")));
+        when(userAccountFacade.getByEmail("mom@example.com"))
+                .thenReturn(user(USER_ID, "mom", "妈妈", "mom@example.com"));
 
         LoginTokenVO vo = service.loginByEmailCode(emailLoginCmd("mom@example.com", "123456", null));
 
         assertThat(vo.isNewUser()).isFalse();
         assertThat(vo.getUserId()).isEqualTo(USER_ID);
-        verify(userAccountDao, never()).insert(anyString(), anyString(), anyString(), anyString());
+        verify(userAccountFacade, never()).createAccount(any());
         // 没上报设备：不落设备行，也不阻断登录
         assertThat(vo.getDeviceId()).isNull();
         verify(deviceMapper, never()).insert(any(BlDevice.class));
@@ -132,8 +139,8 @@ class AppAuthServiceImplTest {
 
     @Test
     void loginByEmailCode_rejectsDisabledAccount() {
-        when(userAccountDao.findByEmail("mom@example.com"))
-                .thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "", 1)));
+        when(userAccountFacade.getByEmail("mom@example.com"))
+                .thenReturn(user(USER_ID, "mom", "妈妈", "mom@example.com", 1));
 
         assertBizError(() -> service.loginByEmailCode(emailLoginCmd("mom@example.com", "123456", null)),
                 SystemErrorCode.USER_DISABLED);
@@ -154,46 +161,79 @@ class AppAuthServiceImplTest {
 
     @Test
     void register_rejectsDuplicateUsername() {
-        when(userAccountDao.findByUsername("mom")).thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "")));
+        when(userAccountFacade.existsByUsername("mom")).thenReturn(true);
 
         assertBizError(() -> service.register(registerCmd("mom", RAW_PASSWORD, "")),
-                SystemErrorCode.USERNAME_EXISTS);
-        verify(userAccountDao, never()).insert(anyString(), anyString(), anyString(), anyString());
+                BabyLogErrorCode.USERNAME_ALREADY_USED);
+        verify(userAccountFacade, never()).createAccount(any());
     }
 
     @Test
     void register_rejectsEmailAlreadyBound() {
-        when(userAccountDao.findByUsername("mom")).thenReturn(Optional.empty());
-        when(userAccountDao.findByEmail("mom@example.com"))
-                .thenReturn(Optional.of(row(USER_ID, "other", "别人", "mom@example.com")));
+        when(userAccountFacade.existsByUsername("mom")).thenReturn(false);
+        when(userAccountFacade.existsByEmail("mom@example.com")).thenReturn(true);
 
         assertBizError(() -> service.register(registerCmd("mom", RAW_PASSWORD, "Mom@Example.com")),
                 BabyLogErrorCode.EMAIL_ALREADY_USED);
+        verify(userAccountFacade, never()).createAccount(any());
     }
 
     @Test
-    void register_hashesPasswordAndLogsIn() {
-        when(userAccountDao.findByUsername("mom")).thenReturn(Optional.empty());
-        when(userAccountDao.insert(anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(NEW_USER_ID);
+    void register_passesRawPasswordToContract() {
+        when(userAccountFacade.existsByUsername("mom")).thenReturn(false);
+        when(userAccountFacade.createAccount(any())).thenReturn(NEW_USER_ID);
+        when(userFacade.getById(NEW_USER_ID)).thenReturn(user(NEW_USER_ID, "mom", "mom", ""));
 
         LoginTokenVO vo = service.register(registerCmd("mom", RAW_PASSWORD, ""));
 
         assertThat(vo.getUserId()).isEqualTo(NEW_USER_ID);
         assertThat(vo.isNewUser()).isTrue();
-        ArgumentCaptor<String> hash = ArgumentCaptor.forClass(String.class);
-        verify(userAccountDao).insert(eq("mom"), eq("mom"), eq(""), hash.capture());
-        // 落库必须是 BCrypt 哈希，且能校验回原文
-        assertThat(hash.getValue()).isNotEqualTo(RAW_PASSWORD).startsWith("$2");
-        assertThat(BCrypt.checkpw(RAW_PASSWORD, hash.getValue())).isTrue();
+        ArgumentCaptor<UserAccountCreateCmd> cmd = ArgumentCaptor.forClass(UserAccountCreateCmd.class);
+        verify(userAccountFacade).createAccount(cmd.capture());
+        // 哈希由 system 侧负责（BCrypt）；biz 只传原文，不自己算——两处各算一遍才容易出现口径漂移
+        assertThat(cmd.getValue().getUsername()).isEqualTo("mom");
+        assertThat(cmd.getValue().getNickname()).isEqualTo("mom");
+        assertThat(cmd.getValue().getRawPassword()).isEqualTo(RAW_PASSWORD);
+    }
+
+    @Test
+    void register_translatesUpstreamUsernameConflictToBizCode() {
+        when(userAccountFacade.existsByUsername("mom")).thenReturn(false);
+        when(userAccountFacade.createAccount(any()))
+                .thenThrow(new ServiceException(SystemErrorCode.USERNAME_EXISTS));
+
+        // 并发撞库：上游抛 2003，biz 出口必须是 8378（App 只认 8xxx 段）
+        assertBizError(() -> service.register(registerCmd("mom", RAW_PASSWORD, "")),
+                BabyLogErrorCode.USERNAME_ALREADY_USED);
+    }
+
+    @Test
+    void register_translatesUpstreamEmailConflictToBizCode() {
+        when(userAccountFacade.existsByUsername("mom")).thenReturn(false);
+        when(userAccountFacade.createAccount(any()))
+                .thenThrow(new ServiceException(SystemErrorCode.EMAIL_ALREADY_USED));
+
+        assertBizError(() -> service.register(registerCmd("mom", RAW_PASSWORD, "")),
+                BabyLogErrorCode.EMAIL_ALREADY_USED);
+    }
+
+    @Test
+    void register_failsWhenAccountUnreadableAfterCreate() {
+        when(userAccountFacade.existsByUsername("mom")).thenReturn(false);
+        when(userAccountFacade.createAccount(any())).thenReturn(NEW_USER_ID);
+        when(userFacade.getById(NEW_USER_ID)).thenReturn(null);
+
+        // 建号成功却读不到：不发明文 token 给一个不存在的身份
+        assertThatThrownBy(() -> service.register(registerCmd("mom", RAW_PASSWORD, "")))
+                .isInstanceOf(ServiceException.class);
     }
 
     // ---------------- 账密登录 ----------------
 
     @Test
     void loginByPassword_acceptsUsername() {
-        when(userAccountDao.findByUsername("mom"))
-                .thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "", 0, BCrypt.hashpw(RAW_PASSWORD))));
+        when(userFacade.getByUsername("mom")).thenReturn(user(USER_ID, "mom", "妈妈", ""));
+        when(userAccountFacade.checkPassword(USER_ID, RAW_PASSWORD)).thenReturn(true);
 
         LoginTokenVO vo = service.loginByPassword(passwordCmd("mom"));
 
@@ -203,19 +243,20 @@ class AppAuthServiceImplTest {
 
     @Test
     void loginByPassword_acceptsEmailAsAccount() {
-        when(userAccountDao.findByEmail("mom@example.com"))
-                .thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "mom@example.com", 0, BCrypt.hashpw(RAW_PASSWORD))));
+        when(userAccountFacade.getByEmail("mom@example.com"))
+                .thenReturn(user(USER_ID, "mom", "妈妈", "mom@example.com"));
+        when(userAccountFacade.checkPassword(USER_ID, RAW_PASSWORD)).thenReturn(true);
 
         LoginTokenVO vo = service.loginByPassword(passwordCmd("Mom@Example.com"));
 
         assertThat(vo.getUserId()).isEqualTo(USER_ID);
-        verify(userAccountDao, never()).findByUsername(anyString());
+        verify(userFacade, never()).getByUsername(anyString());
     }
 
     @Test
     void loginByPassword_rejectsWrongPasswordWithLoginFailed() {
-        when(userAccountDao.findByUsername("mom"))
-                .thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "", 0, BCrypt.hashpw(RAW_PASSWORD))));
+        when(userFacade.getByUsername("mom")).thenReturn(user(USER_ID, "mom", "妈妈", ""));
+        when(userAccountFacade.checkPassword(USER_ID, "wrong-password")).thenReturn(false);
 
         assertBizError(() -> service.loginByPassword(passwordCmd("mom", "wrong-password")),
                 SystemErrorCode.LOGIN_FAILED);
@@ -223,10 +264,19 @@ class AppAuthServiceImplTest {
 
     @Test
     void loginByPassword_rejectsUnknownAccountWithLoginFailed() {
-        when(userAccountDao.findByUsername("ghost")).thenReturn(Optional.empty());
+        when(userFacade.getByUsername("ghost")).thenReturn(null);
 
         // 账号不存在与密码错误同码，不泄露账号是否存在
         assertBizError(() -> service.loginByPassword(passwordCmd("ghost")), SystemErrorCode.LOGIN_FAILED);
+        verify(userAccountFacade, never()).checkPassword(anyLong(), anyString());
+    }
+
+    @Test
+    void loginByPassword_rejectsDisabledAccount() {
+        when(userFacade.getByUsername("mom")).thenReturn(user(USER_ID, "mom", "妈妈", "", 1));
+        when(userAccountFacade.checkPassword(USER_ID, RAW_PASSWORD)).thenReturn(true);
+
+        assertBizError(() -> service.loginByPassword(passwordCmd("mom")), SystemErrorCode.USER_DISABLED);
     }
 
     // ---------------- refresh ----------------
@@ -241,10 +291,22 @@ class AppAuthServiceImplTest {
     }
 
     @Test
+    void refresh_rejectsWhenAccountGone() {
+        when(refreshTokenStore.resolve("refresh-token"))
+                .thenReturn(Optional.of(new RefreshTokenRecord(USER_ID, "device-1", 1234L)));
+        when(userFacade.getById(USER_ID)).thenReturn(null);
+
+        RefreshTokenCmd cmd = new RefreshTokenCmd();
+        cmd.setRefreshToken("refresh-token");
+
+        assertBizError(() -> service.refresh(cmd), BabyLogErrorCode.REFRESH_TOKEN_INVALID);
+    }
+
+    @Test
     void refresh_issuesNewAccessToken() {
         when(refreshTokenStore.resolve("refresh-token"))
                 .thenReturn(Optional.of(new RefreshTokenRecord(USER_ID, "device-1", 1234L)));
-        when(userAccountDao.findById(USER_ID)).thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "")));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "mom", "妈妈", ""));
 
         RefreshTokenCmd cmd = new RefreshTokenCmd();
         cmd.setRefreshToken("refresh-token");
@@ -260,8 +322,7 @@ class AppAuthServiceImplTest {
     void refresh_revokesTokenWhenAccountDisabled() {
         when(refreshTokenStore.resolve("refresh-token"))
                 .thenReturn(Optional.of(new RefreshTokenRecord(USER_ID, "device-1", 1234L)));
-        when(userAccountDao.findById(USER_ID))
-                .thenReturn(Optional.of(row(USER_ID, "mom", "妈妈", "", 1)));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "mom", "妈妈", "", 1));
 
         RefreshTokenCmd cmd = new RefreshTokenCmd();
         cmd.setRefreshToken("refresh-token");
@@ -317,18 +378,18 @@ class AppAuthServiceImplTest {
         return device;
     }
 
-    private static SysUserAccountDao.SysUserRow row(Long id, String username, String nickname, String email) {
-        return row(id, username, nickname, email, 0, "");
+    private static UserDTO user(Long id, String username, String nickname, String email) {
+        return user(id, username, nickname, email, 0);
     }
 
-    private static SysUserAccountDao.SysUserRow row(Long id, String username, String nickname,
-                                                    String email, int status) {
-        return row(id, username, nickname, email, status, "");
-    }
-
-    private static SysUserAccountDao.SysUserRow row(Long id, String username, String nickname,
-                                                    String email, int status, String password) {
-        return new SysUserAccountDao.SysUserRow(id, username, nickname, password, email, status);
+    private static UserDTO user(Long id, String username, String nickname, String email, int status) {
+        UserDTO dto = new UserDTO();
+        dto.setId(id);
+        dto.setUsername(username);
+        dto.setNickname(nickname);
+        dto.setEmail(email);
+        dto.setStatus(status);
+        return dto;
     }
 
     private static void assertBizError(Runnable action, com.babylog.common.core.enums.error.ErrorCode expected) {

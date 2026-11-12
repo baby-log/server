@@ -1,7 +1,6 @@
 package com.babylog.biz.auth.service.impl;
 
 import cn.hutool.core.util.RandomUtil;
-import cn.hutool.crypto.digest.BCrypt;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.babylog.biz.api.enums.BabyLogErrorCode;
 import com.babylog.biz.auth.config.BabyLogAuthProperties;
@@ -16,13 +15,16 @@ import com.babylog.biz.auth.service.AppTokenService;
 import com.babylog.biz.auth.service.EmailCodeService;
 import com.babylog.biz.auth.store.RefreshTokenRecord;
 import com.babylog.biz.auth.store.RefreshTokenStore;
-import com.babylog.biz.auth.support.SysUserAccountDao;
 import com.babylog.biz.auth.vo.CodeSendVO;
 import com.babylog.biz.auth.vo.LoginTokenVO;
 import com.babylog.biz.entity.BlDevice;
 import com.babylog.biz.mapper.BlDeviceMapper;
 import com.babylog.common.core.exception.ServiceException;
+import com.babylog.system.api.dto.UserAccountCreateCmd;
+import com.babylog.system.api.dto.UserDTO;
 import com.babylog.system.api.enums.SystemErrorCode;
+import com.babylog.system.api.facade.IUserAccountFacade;
+import com.babylog.system.api.facade.IUserFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -32,7 +34,6 @@ import org.springframework.util.StringUtils;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
@@ -71,20 +72,25 @@ public class AppAuthServiceImpl implements AppAuthService {
     private final EmailCodeService emailCodeService;
     private final AppTokenService tokenService;
     private final RefreshTokenStore refreshTokenStore;
-    private final SysUserAccountDao userAccountDao;
+    /** 只读契约：按 ID / 用户名取账号（refresh 校验账号状态、账密登录按用户名命中） */
+    private final IUserFacade userFacade;
+    /** 写契约：按邮箱查、查重、建号、校验密码（M5 收口后取代原 SysUserAccountDao） */
+    private final IUserAccountFacade userAccountFacade;
     private final BlDeviceMapper deviceMapper;
     private final BabyLogAuthProperties properties;
 
     public AppAuthServiceImpl(EmailCodeService emailCodeService,
                               AppTokenService tokenService,
                               RefreshTokenStore refreshTokenStore,
-                              SysUserAccountDao userAccountDao,
+                              IUserFacade userFacade,
+                              IUserAccountFacade userAccountFacade,
                               BlDeviceMapper deviceMapper,
                               BabyLogAuthProperties properties) {
         this.emailCodeService = emailCodeService;
         this.tokenService = tokenService;
         this.refreshTokenStore = refreshTokenStore;
-        this.userAccountDao = userAccountDao;
+        this.userFacade = userFacade;
+        this.userAccountFacade = userAccountFacade;
         this.deviceMapper = deviceMapper;
         this.properties = properties;
     }
@@ -101,14 +107,13 @@ public class AppAuthServiceImpl implements AppAuthService {
         // 先校验验证码：没有有效验证码的人，连「这个邮箱有没有账号」都不该被试探出来
         emailCodeService.verify(email, cmd.getCode());
 
-        Optional<SysUserAccountDao.SysUserRow> existing = userAccountDao.findByEmail(email);
-        if (existing.isPresent()) {
-            SysUserAccountDao.SysUserRow user = existing.get();
-            requireEnabled(user);
-            return completeLogin(user, false, cmd.getDevice(), "");
+        UserDTO existing = userAccountFacade.getByEmail(email);
+        if (existing != null) {
+            requireEnabled(existing);
+            return completeLogin(existing, false, cmd.getDevice(), "");
         }
-        SysUserAccountDao.SysUserRow created = createAccountForEmail(email);
-        log.info("[BABYLOG][auth] 邮箱首登自动建档 userId={} email={}", created.id(), maskEmail(email));
+        UserDTO created = createAccountForEmail(email);
+        log.info("[BABYLOG][auth] 邮箱首登自动建档 userId={} email={}", created.getId(), maskEmail(email));
         return completeLogin(created, true, cmd.getDevice(), "");
     }
 
@@ -116,8 +121,8 @@ public class AppAuthServiceImpl implements AppAuthService {
     @Transactional(rollbackFor = Exception.class)
     public LoginTokenVO register(RegisterCmd cmd) {
         String username = cmd.getUsername().trim();
-        if (userAccountDao.findByUsername(username).isPresent()) {
-            throw new ServiceException(SystemErrorCode.USERNAME_EXISTS);
+        if (userAccountFacade.existsByUsername(username)) {
+            throw new ServiceException(BabyLogErrorCode.USERNAME_ALREADY_USED);
         }
         String email = "";
         if (StringUtils.hasText(cmd.getEmail())) {
@@ -125,16 +130,15 @@ public class AppAuthServiceImpl implements AppAuthService {
             if (!EMAIL_PATTERN.matcher(email).matches()) {
                 throw new ServiceException(BabyLogErrorCode.EMAIL_FORMAT_INVALID);
             }
-            if (userAccountDao.findByEmail(email).isPresent()) {
+            if (userAccountFacade.existsByEmail(email)) {
                 throw new ServiceException(BabyLogErrorCode.EMAIL_ALREADY_USED);
             }
         }
         String nickname = StringUtils.hasText(cmd.getNickname())
                 ? truncate(cmd.getNickname().trim(), NICKNAME_MAX_LENGTH)
                 : username;
-        long userId = userAccountDao.insert(username, nickname, email, BCrypt.hashpw(cmd.getPassword()));
-        SysUserAccountDao.SysUserRow created =
-                new SysUserAccountDao.SysUserRow(userId, username, nickname, "", email, 0);
+        Long userId = createAccount(username, nickname, email, cmd.getPassword());
+        UserDTO created = requireUser(userId);
         log.info("[BABYLOG][auth] 账密注册成功 userId={} username={}", userId, username);
         return completeLogin(created, true, cmd.getDevice(), "");
     }
@@ -142,29 +146,32 @@ public class AppAuthServiceImpl implements AppAuthService {
     @Override
     public LoginTokenVO loginByPassword(PasswordLoginCmd cmd) {
         String account = cmd.getAccount().trim();
-        Optional<SysUserAccountDao.SysUserRow> found = account.contains("@")
-                ? userAccountDao.findByEmail(account.toLowerCase(java.util.Locale.ROOT))
-                : userAccountDao.findByUsername(account);
+        UserDTO found = account.contains("@")
+                ? userAccountFacade.getByEmail(account.toLowerCase(java.util.Locale.ROOT))
+                : userFacade.getByUsername(account);
         // 与 /app/auth/login 同纪律：账号不存在与密码错误统一 2001，不泄露账号是否存在
-        SysUserAccountDao.SysUserRow user = found.filter(u -> passwordMatches(cmd.getPassword(), u.password()))
-                .orElseThrow(() -> new ServiceException(SystemErrorCode.LOGIN_FAILED));
-        requireEnabled(user);
-        return completeLogin(user, false, cmd.getDevice(), "");
+        if (found == null || !userAccountFacade.checkPassword(found.getId(), cmd.getPassword())) {
+            throw new ServiceException(SystemErrorCode.LOGIN_FAILED);
+        }
+        requireEnabled(found);
+        return completeLogin(found, false, cmd.getDevice(), "");
     }
 
     @Override
     public LoginTokenVO refresh(RefreshTokenCmd cmd) {
         RefreshTokenRecord record = refreshTokenStore.resolve(cmd.getRefreshToken())
                 .orElseThrow(() -> new ServiceException(BabyLogErrorCode.REFRESH_TOKEN_INVALID));
-        SysUserAccountDao.SysUserRow user = userAccountDao.findById(record.userId())
-                .orElseThrow(() -> new ServiceException(BabyLogErrorCode.REFRESH_TOKEN_INVALID));
-        if (!user.enabled()) {
+        UserDTO user = userFacade.getById(record.userId());
+        if (user == null) {
+            throw new ServiceException(BabyLogErrorCode.REFRESH_TOKEN_INVALID);
+        }
+        if (!enabled(user)) {
             // 账号被停用：refresh 一并作废，避免「停用后靠旧 refresh 无限续命」
             refreshTokenStore.revoke(cmd.getRefreshToken());
             throw new ServiceException(SystemErrorCode.USER_DISABLED);
         }
-        String accessToken = tokenService.issueAccessToken(user.id(), user.username());
-        Long deviceId = touchDevice(user.id(), deviceFromRecord(record.deviceUuid()));
+        String accessToken = tokenService.issueAccessToken(user.getId(), user.getUsername());
+        Long deviceId = touchDevice(user.getId(), deviceFromRecord(record.deviceUuid()));
 
         LoginTokenVO vo = baseVo(user, false, deviceId);
         vo.setAccessToken(accessToken);
@@ -192,13 +199,13 @@ public class AppAuthServiceImpl implements AppAuthService {
      *
      * @param deviceUuidHint 来自 refresh 记录的设备标识（登录场景传空，设备信息在 device 里）
      */
-    private LoginTokenVO completeLogin(SysUserAccountDao.SysUserRow user, boolean newUser,
+    private LoginTokenVO completeLogin(UserDTO user, boolean newUser,
                                        DeviceInfo device, String deviceUuidHint) {
-        String accessToken = tokenService.issueAccessToken(user.id(), user.username());
+        String accessToken = tokenService.issueAccessToken(user.getId(), user.getUsername());
         String deviceUuid = device != null && StringUtils.hasText(device.getDeviceUuid())
                 ? device.getDeviceUuid() : deviceUuidHint;
-        Long deviceId = touchDevice(user.id(), device);
-        String refreshToken = refreshTokenStore.issue(user.id(), deviceUuid,
+        Long deviceId = touchDevice(user.getId(), device);
+        String refreshToken = refreshTokenStore.issue(user.getId(), deviceUuid,
                 Duration.ofSeconds(properties.getRefreshTokenTtlSeconds()));
 
         LoginTokenVO vo = baseVo(user, newUser, deviceId);
@@ -206,15 +213,15 @@ public class AppAuthServiceImpl implements AppAuthService {
         vo.setAccessExpiresIn(tokenService.accessTtlSeconds());
         vo.setRefreshToken(refreshToken);
         vo.setRefreshExpiresIn(properties.getRefreshTokenTtlSeconds());
-        log.info("[BABYLOG][auth] 登录成功 userId={} newUser={} deviceId={}", user.id(), newUser, deviceId);
+        log.info("[BABYLOG][auth] 登录成功 userId={} newUser={} deviceId={}", user.getId(), newUser, deviceId);
         return vo;
     }
 
-    private LoginTokenVO baseVo(SysUserAccountDao.SysUserRow user, boolean newUser, Long deviceId) {
+    private LoginTokenVO baseVo(UserDTO user, boolean newUser, Long deviceId) {
         LoginTokenVO vo = new LoginTokenVO();
-        vo.setUserId(user.id());
-        vo.setUsername(user.username());
-        vo.setNickname(user.nickname());
+        vo.setUserId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setNickname(user.getNickname());
         vo.setNewUser(newUser);
         vo.setDeviceId(deviceId);
         return vo;
@@ -227,21 +234,57 @@ public class AppAuthServiceImpl implements AppAuthService {
      * 且不应把邮箱当登录名到处可见（账号名会出现在管理端用户列表与导出里）。
      * 邮箱落在 email 列，登录时按 email 查——两条路径指向同一个账号。
      */
-    private SysUserAccountDao.SysUserRow createAccountForEmail(String email) {
+    private UserDTO createAccountForEmail(String email) {
         String username = generateUsername();
         String nickname = truncate(email.substring(0, Math.max(0, email.indexOf('@'))), NICKNAME_MAX_LENGTH);
         if (!StringUtils.hasText(nickname)) {
             nickname = "BabyLog 用户";
         }
-        // 自动建档的账号没有可用密码（随机 32 位），只能用邮箱验证码登录——账密登录天然进不来
-        long userId = userAccountDao.insert(username, nickname, email, BCrypt.hashpw(RandomUtil.randomString(32)));
-        return new SysUserAccountDao.SysUserRow(userId, username, nickname, "", email, 0);
+        // rawPassword 留空：由契约实现侧生成随机密码落库，账号只能用邮箱验证码登录，
+        // 账密登录天然进不来（不用 biz 自己造随机串，避免两处口径)
+        Long userId = createAccount(username, nickname, email, null);
+        return requireUser(userId);
+    }
+
+    /**
+     * 建号并做错误码转译。
+     *
+     * <p>契约抛出的是 system 段的 {@code USERNAME_EXISTS(2003)} / {@code EMAIL_ALREADY_USED(2007)}；
+     * App 端只认 biz 的 8xxx 段（上游码值将来调整不影响客户端），故在此收口翻译。
+     */
+    private Long createAccount(String username, String nickname, String email, String rawPassword) {
+        UserAccountCreateCmd create = new UserAccountCreateCmd();
+        create.setUsername(username);
+        create.setNickname(nickname);
+        create.setEmail(email);
+        create.setRawPassword(rawPassword);
+        try {
+            return userAccountFacade.createAccount(create);
+        } catch (ServiceException e) {
+            if (e.getCode() == SystemErrorCode.USERNAME_EXISTS.getCode()) {
+                throw new ServiceException(BabyLogErrorCode.USERNAME_ALREADY_USED);
+            }
+            if (e.getCode() == SystemErrorCode.EMAIL_ALREADY_USED.getCode()) {
+                throw new ServiceException(BabyLogErrorCode.EMAIL_ALREADY_USED);
+            }
+            throw e;
+        }
+    }
+
+    /** 建号后回读：UserDTO 由 system 侧组装，比在 biz 里手工拼一个「半真半假」的 DTO 可靠 */
+    private UserDTO requireUser(Long userId) {
+        UserDTO user = userFacade.getById(userId);
+        if (user == null) {
+            // 建号成功却读不到 = 上游实现异常；宁可 500 也不发一个 userId 无主的 token
+            throw new ServiceException("账号创建后读取失败，请重试");
+        }
+        return user;
     }
 
     private String generateUsername() {
         for (int i = 0; i < USERNAME_MAX_ATTEMPTS; i++) {
             String candidate = AUTO_USERNAME_PREFIX + RandomUtil.randomString(10);
-            if (userAccountDao.findByUsername(candidate).isEmpty()) {
+            if (!userAccountFacade.existsByUsername(candidate)) {
                 return candidate;
             }
         }
@@ -302,23 +345,16 @@ public class AppAuthServiceImpl implements AppAuthService {
         return device;
     }
 
-    private static void requireEnabled(SysUserAccountDao.SysUserRow user) {
-        if (!user.enabled()) {
+    private static void requireEnabled(UserDTO user) {
+        if (!enabled(user)) {
             throw new ServiceException(SystemErrorCode.USER_DISABLED);
         }
     }
 
-    /** BCrypt 校验；账号可能是微信建档（有密码串）或异常数据（空密码），空密码一律视为不匹配 */
-    private static boolean passwordMatches(String rawPassword, String hashed) {
-        if (!StringUtils.hasText(hashed) || !StringUtils.hasText(rawPassword)) {
-            return false;
-        }
-        try {
-            return BCrypt.checkpw(rawPassword, hashed);
-        } catch (IllegalArgumentException e) {
-            // 哈希串格式非法（历史脏数据）：不抛 500，按密码错误处理
-            return false;
-        }
+    /** 停用账号一律拒绝登录，与 /app/auth/login 的 2002 对齐；status 缺失（脏数据）按启用处理，不误锁人 */
+    private static boolean enabled(UserDTO user) {
+        Integer status = user.getStatus();
+        return status == null || status == 0;
     }
 
     private static String platformOf(String platform) {
