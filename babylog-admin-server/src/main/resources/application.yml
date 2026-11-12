@@ -110,7 +110,7 @@ spring:
     model:
       chat: openai
     openai:
-      api-key: 
+      api-key:
       # Spring AI 2.0 底层为官方 openai-java SDK，base-url 须含 /v1（SDK 直接追加 /chat/completions）
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       chat:
@@ -191,7 +191,7 @@ babylog:
     guard:
       enabled: true
       paths: /warm-flow/**
-      exclude-paths: 
+      exclude-paths:
       message: 该端点要求登录后访问
     # ---------- BabyLog App 认证（M5）：双 token + 邮箱验证码策略 ----------
     # 双 token：access 短（Sa-Token 持有，2h）、refresh 长（Redis 存哈希，30d）。
@@ -260,14 +260,14 @@ babylog:
     # 并把 type 改为 easy-es / es-java；未命中已注册实现时自动回落 simple 并打 WARN（配错也能起服）
     type: simple
     # 多环境共用一套 ES 时用它做索引名前缀隔离，留空表示不加前缀
-    index-prefix: 
+    index-prefix:
     # es-java 实现（官方 elasticsearch-java 8.19.18，面向 ES 8.x/9.x）。
     # 未引入 babylog-starter-search-es-java 模块时，即便 type=es-java 也会回落到 simple 并打 WARN（配错也能起服）。
     # 具体地址/口令写在各环境的 application-{profile}.yml（dev 用 175.24.176.176，test 用 10.0.0.7）。
     es-java:
       uris: http://localhost:9200
-      username: 
-      password: 
+      username:
+      password:
       connect-timeout: 3000
       socket-timeout: 30000
       # 兼容模式：用 8.19 客户端连 ES 7.x 服务端时置 true（发 compatible-with=7 官方兼容头）。
@@ -334,8 +334,8 @@ babylog:
     mysql:
       # false = 只查白名单表（安全默认）
       allow-all-tables: false
-      table-whitelist: 
-      schema-whitelist: 
+      table-whitelist:
+      schema-whitelist:
       tenant-id-column: tenant_id
     es:
       max-rows: 100
@@ -369,10 +369,10 @@ babylog:
       restore-tenant: false
       restore-login: false
       # 内部调用凭证：留空 = 拒绝一切入站恢复
-      internal-token: 
+      internal-token:
     local:
       # 要切成远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换（零网络行为）
-      proxied: 
+      proxied:
       # 是否暴露 /__rpc/invoke 服务端点。开启必须配 internal-token，否则启动 FAIL-FAST
       server-enabled: false
       # 静态实例表：serviceId -> host:port（local 通道不连任何注册中心）
@@ -382,11 +382,11 @@ babylog:
       # 要切成 Feign 远程调用的 Facade 接口全限定名（逗号分隔）。默认空 = 不做任何替换
       # ⚠️ 前提：该接口方法必须带 Spring MVC 注解（Feign 的 Contract 靠它解析路径）。
       #    业务 Facade 契约（IUserFacade 等）目前没有 MVC 注解，直接填这里是建不出客户端的（已知待办）。
-      proxied: 
+      proxied:
       # Feign 客户端服务名（走 LoadBalancer，需要注册中心）
       service-id: babylog-admin-server
       # 直连地址（形如 http://127.0.0.1:8080）；配了它就不走负载均衡，无注册中心也能跑
-      url: 
+      url:
       circuit-breaker:
         # 熔断（Resilience4j）总开关。默认 false —— 不打开就等于 Feign 客户端一层都没多包，
         # 与「包里有 Resilience4j 但没接线」完全一致（引入 ≠ 生效）。

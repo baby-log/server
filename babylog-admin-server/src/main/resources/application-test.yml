@@ -20,7 +20,7 @@ spring:
     redis:
       host: 10.0.0.7
       port: 6379
-      password: redis_Q6aiiX
+      password: ZpHSQ9qe22Y1UoHV
       timeout: 5s
       database: 1
 
@@ -47,6 +47,29 @@ spring:
     #     initialize-schema: true
     #     metric-type: COSINE
 
+
+  # ---------- 邮件（M5 邮箱验证码登录，dev 直连 163 SMTP） ----------
+  # 键用 Spring Boot 标准 spring.mail.*：host 有值时 Boot 才装配 JavaMailSender，
+  # username/password 留空则发码端点返回 8374「邮件服务未配置」，不影响起服与其他功能。
+  # 163 需开「SMTP 服务」并拿到客户端授权码（不是登录密码）；465 = SSL 隐式加密，必须 mail.smtp.ssl.enable=true。
+  # ⚠️ 两行凭据由龙哥自己填（AI 不往配置文件里写口令）：username = 发件邮箱全称，password = 客户端授权码。
+  mail:
+    host: smtp.163.com
+    port: 465
+    username: Alex_Server@163.com
+    password: THXBuYqhngnRn8kn
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          # 三个超时都设 8s：SMTP 卡住时不能把发码请求一起拖死（同步发信，见 EmailCodeSender 注释）
+          connectiontimeout: 8000
+          timeout: 8000
+          writetimeout: 8000
+
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
@@ -59,7 +82,9 @@ logging:
 
 babylog:
   tenant:
-    enabled: true        # 默认 false，不写=单租户
+    # ⚠️ 2026-11-12 批次 D：BabyLog 部署不得开租户（M4 拍板）——bl_ 表无 tenant_id，
+    # 开了会 Unknown column。此前的 true 是框架 IT 测试基线，与本部署无关。
+    enabled: false
     mode: column         # column / schema / datasource
   # 文件存储：腾讯云 COS（测试环境）
   file:
