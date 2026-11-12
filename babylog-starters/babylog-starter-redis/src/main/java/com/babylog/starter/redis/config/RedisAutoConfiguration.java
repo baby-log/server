@@ -10,7 +10,9 @@ import org.redisson.spring.starter.RedissonAutoConfigurationV4;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 
 /**
@@ -47,6 +49,25 @@ public class RedisAutoConfiguration {
     @Bean
     public TenantCacheKeyGenerator tenantCacheKeyGenerator() {
         return new TenantCacheKeyGenerator();
+    }
+
+    /**
+     * 缓存管理器兜底（M15 装配顺序修复的连带件，与 @RepeatSubmit 同一缺陷家族）：
+     *
+     * <p>本类在修复前<b>整类被跳过</b>（见类 javadoc），所以 {@code @EnableCaching}
+     * 从框架第一天起就没生效过、全应用也从没有过 CacheManager。修复后类真正装配，
+     * {@code @EnableCaching} 激活的缓存拦截器在 afterSingletonsInstantiated 阶段
+     * 索取 CacheManager，缺它 = 应用起不来（dev 起服实测，APPLICATION FAILED TO START）。
+     *
+     * <p>这里给的是 Spring Boot 无缓存组件时的同款兜底（进程内 ConcurrentMap），
+     * 单节点部署语义不变；应用要换 Redis 实现时自带一个 CacheManager Bean 即可
+     * （ConditionalOnMissingBean 让位）。Boot 自家的 CacheAutoConfiguration 因
+     * 排序在本类之后、条件求值时序不可靠，不能指望它兜——这就是必须显式给的原因。
+     */
+    @Bean
+    @ConditionalOnMissingBean(CacheManager.class)
+    public CacheManager cacheManager() {
+        return new ConcurrentMapCacheManager();
     }
 
     /**

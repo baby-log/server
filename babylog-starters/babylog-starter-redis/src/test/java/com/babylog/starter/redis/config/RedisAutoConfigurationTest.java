@@ -52,14 +52,14 @@ class RedisAutoConfigurationTest {
 
     @Test
     void repeatSubmitCheckerRegisteredWhenRedissonClientPresent() {
-        // 真实应用由 Boot 的 CacheAutoConfiguration 提供 CacheManager，裸 runner 里补一个等价物，
-        // 本测试只锁 RepeatSubmitChecker 的装配，不锁缓存实现
-        runner.withBean(CacheManager.class, ConcurrentMapCacheManager::new)
-                .withBean("redissonClient", RedissonClient.class, () -> Mockito.mock(RedissonClient.class))
+        runner.withBean("redissonClient", RedissonClient.class, () -> Mockito.mock(RedissonClient.class))
                 .run(context -> {
                     assertTrue(context.containsBean("repeatSubmitChecker"), "有 RedissonClient 时 Checker 必须注册");
                     RepeatSubmitChecker checker = context.getBean(RepeatSubmitChecker.class);
                     assertNotNull(checker, "RepeatSubmitChecker 类型可解析");
+                    // @EnableCaching 激活后必须有 CacheManager 兜底，否则应用起不来
+                    // （M15 起服实测：NoSuchBeanDefinitionException: CacheManager → APPLICATION FAILED）
+                    assertNotNull(context.getBean(CacheManager.class), "CacheManager 必须随类装配（ConcurrentMap 兜底）");
                 });
     }
 
@@ -69,6 +69,7 @@ class RedisAutoConfigurationTest {
             // 没有 RedissonClient（未引 redis starter 的场景）整类跳过，不给应用塞半套 Redis 能力
             assertFalse(context.containsBean("repeatSubmitChecker"));
             assertFalse(context.containsBean("rateLimitService"));
+            assertFalse(context.containsBean("cacheManager"));
         });
     }
 }
