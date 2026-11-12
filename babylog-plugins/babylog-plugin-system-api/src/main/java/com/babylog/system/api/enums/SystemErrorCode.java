@@ -28,6 +28,8 @@ public enum SystemErrorCode implements ErrorCode {
     USER_NOT_FOUND(2004, "用户不存在"),
     OLD_PASSWORD_ERROR(2005, "旧密码错误"),
     SUPER_ADMIN_FORBIDDEN(2006, "不允许操作超级管理员"),
+    /** 注册/首登建档时邮箱已被其他账号绑定（由上游 PivotOS 契约 IUserAccountFacade 引入） */
+    EMAIL_ALREADY_USED(2007, "该邮箱已绑定其他账号"),
 
     // ---------- 角色与菜单 ----------
     ROLE_NOT_FOUND(2020, "角色不存在"),
