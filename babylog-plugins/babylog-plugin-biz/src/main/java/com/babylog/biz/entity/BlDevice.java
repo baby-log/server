@@ -25,6 +25,15 @@ public class BlDevice extends BaseDO {
     /** 设备唯一标识（App 首次启动生成，登录时上报；(user_id, device_uuid) 唯一） */
     private String deviceUuid;
 
+    /**
+     * 设备级雪花 workerId（0-1023）。
+     *
+     * <p>登录时按「同用户内 max+1」分配并回传，App 用它生成雪花 ID——两台设备同时记录
+     * 也不会撞 ID。分配上限 1023（同用户最多 1024 台设备），uk(user_id, worker_id)
+     * 是并发分配的最终防线。老行（V2.2.7 之前）为 null，下次登录补分配。
+     */
+    private Integer workerId;
+
     /** 设备名（App 端上报的型号/自定义名） */
     private String deviceName;
 
