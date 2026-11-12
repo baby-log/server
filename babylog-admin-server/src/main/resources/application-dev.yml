@@ -72,20 +72,18 @@ babylog:
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # 调度：dev 回退本地兜底（2026-11-12 拍板）。原因：xxl admin 在公网 175.24.176.176:8100，
-  # 本机执行器注册的是内网 IP（10.20.22.58:9999），admin 回调不到——任务建了也只会天天失败。
-  # 注意：本段**必须整体注释**而不是把 admin-addresses 改成 127.0.0.1——只要 admin-addresses 有值，
-  # XxlJobSpringExecutor 就会装配、LocalRetentionScheduler 就退出（LocalFallbackCondition 判的是
-  # 「是否配置了调度中心」不是「可达否」），127.0.0.1 上没有 admin，注册全败 → 清理两头都不跑。
-  # 本地兜底每天 03:00 依次跑全部 7 个清理任务（cron 见 babylog.retention.local-fallback.cron）。
-  # 若以后要回接 admin：取消注释、admin-addresses 填真实地址、access-token 按 admin 配置填，
-  # 并确保回调可达（同网段或端口映射）。
-  # job:
-  #   admin-addresses: http://175.24.176.176:8100
-  #   app-name: babylog-dev-executor
-  #   port: 9999
-  #   group-id: 3
-  #   access-token: <回接时按 admin 配置填>
+  # 调度：XXL-Job 本地方案（2026-11-12 拍板）——admin 与执行器同在本机（127.0.0.1:8100）。
+  # admin 回调执行器自探测的本机内网 IP（10.20.22.58:9999）本机可达，调度链路完整；
+  # 之前担心的「公网 admin 回调不可达」不适用于本地方案。
+  # ⚠️ 配了此段后 LocalRetentionScheduler 本地兜底退出——必须在本地 admin UI
+  # （http://127.0.0.1:8100）建好执行器与 7 个任务（XXL-Job 任务不会自动创建，须手工建；
+  # 逐字段填法见《独立产品规划/10-服务端组件与配置清单.md》第 4 节），建齐前清理静默停止。
+  job:
+    admin-addresses: http://127.0.0.1:8100
+    app-name: babylog-dev-executor
+    port: 9999
+    group-id: 3   # admin UI「执行器管理」里 babylog-dev-executor 的 ID，核查后修正
+    access-token: qazwsx123   # 与 admin 的 xxl.job.accessToken 一致，核查后修正
   # ST-DATAINSPECT（S130）：通用数据监控。安全默认——只查白名单表（allow-all-tables=false），
   # 需要放开某张表就在这里加（表白名单是硬生效的安全过滤，与 monitor:data:* 权限无关）
   datainspect:
