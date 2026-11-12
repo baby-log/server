@@ -5,6 +5,8 @@ import com.babylog.starter.redis.checker.RedisRepeatSubmitChecker;
 import com.babylog.starter.redis.ratelimit.RateLimitService;
 import com.babylog.starter.web.checker.RepeatSubmitChecker;
 import org.redisson.api.RedissonClient;
+import org.redisson.spring.starter.RedissonAutoConfigurationV2;
+import org.redisson.spring.starter.RedissonAutoConfigurationV4;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -15,8 +17,17 @@ import org.springframework.context.annotation.Bean;
  * Redis 分布式能力自动配置：
  * Redisson / Lock4j 由各自 starter 自动装配，本类注册框架增强 Bean。
  * 注册 RepeatSubmitChecker 后，starter-web 的幂等拦截器自动激活（条件装配闭环）。
+ *
+ * <p><b>装配顺序修复（M15，PROGRESS.md 会话 M14 拍板 P3，红线豁免一次）</b>：
+ * 类级 {@code @ConditionalOnBean(RedissonClient)} 在自动配置<b>排序后</b>求值——
+ * 默认按类名字典序 {@code com.babylog.starter.redis} 排在 {@code org.redisson} 之前，
+ * 求值时 Redisson 自家自动配置（4.x 为 {@code RedissonAutoConfigurationV4}）尚未注册
+ * 客户端 Bean，条件不成立 → 本类整类被跳过 → RepeatSubmitChecker 缺失 →
+ * starter-web 的 {@code @RepeatSubmit} 拦截器静默失效（M10 发现，--debug condition
+ * report 实锤）。修法即本行 {@code after}：显式声明在 Redisson 自动配置之后处理。
+ * 勿把条件挪回方法级——方法级条件同样在本类被处理时求值，时序问题不变。
  */
-@AutoConfiguration
+@AutoConfiguration(after = {RedissonAutoConfigurationV2.class, RedissonAutoConfigurationV4.class})
 @EnableCaching
 @ConditionalOnBean(RedissonClient.class)
 public class RedisAutoConfiguration {
