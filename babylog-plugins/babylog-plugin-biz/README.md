@@ -215,8 +215,12 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 
 ## 验证记录（M6）
 
-- 单测 **69 个全绿**（M5.5 的 35 个 + 本次 34：`SyncServiceImplTest` 18 / `SyncTableTest` 7 /
-  `SyncCursorTest` 4 / `DeviceWorkerIdAllocatorTest` 4 / `AppAuthServiceImplTest` +1）
+- 单测 **74 个全绿**（M5.5 的 35 个 + 本次 39：`SyncServiceImplTest` 18 / `SyncTableTest` 7 /
+  `SyncCursorTest` 4 / `SyncTableSqlTest` 5 / `DeviceWorkerIdAllocatorTest` 4 /
+  `AppAuthServiceImplTest` +1）
+- **字段遮蔽修复**（`2b086df`）：`BlFamilyMember` 曾重复声明 `userId`，遮蔽基类同名列 →
+  反射推导出重复列 → `Duplicate column`。已删子类字段、`collectFields()` 按属性名去重兜底，
+  并由 `SyncTableSqlTest`（5 例：每表 insert 列不重复 / 版本门禁在最后 / 拉取 SQL 无 `deleted = 0`）锁死
 - ArchUnit **22/22 绿**（新端点走类级 `@SaCheckLogin`，A11 无需登记匿名欠条）
 - dev 起服（18080 旁路）：Flyway v2.2.6 → **v2.2.7**；**`bl_family_members` 首次失败已修复**
   （该表 M4 建表就有 `user_id`，首次脚本重复加列；MySQL DDL 不进事务 → 前 5 表已加列，
@@ -227,6 +231,10 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
   内置产品 **8345** → 未知表 **8347** → 201 条 **8341** → 非法分类 **8346** →
   软删除可推送、可被拉到、可被再次覆盖
 - `workerId`：两个新账号各自从 0 起；老设备行（无 workerId）登录时补分配且不改行 id
+- 扩展 **5 项**（覆盖 22 项之外的边角）：其余 4 张表（`record_type_settings` / `products` /
+  `family_members` / `member_permissions`）都能推 → `family_members` 的 `user_id` 由服务端盖章
+  （客户端没传也落库）→ 布尔列 `True` 正确落成 `1` → 自定义产品（id > 99）可推 →
+  缺 `family_id` 时该条 **8342**、同批另一条照常落库（**单条失败不污染整批**）
 
 ### 客户端接口约定（给 App 端 V2.0 改造用）
 
