@@ -81,9 +81,10 @@ knife4j:
 
 babylog:
   tenant:
-    enabled: true        # 默认 false，不写=单租户
+    # BabyLog 不启用多租户（M4 拍板：bl_ 表无 tenant_id，开了绑租户账号摸 bl_ 表会 Unknown column）
+    enabled: false       # 脚手架租户能力的 IT 测试用各自 test yml，不受此影响
     mode: column         # column / schema / datasource
-  # 文件存储：腾讯云 COS（生产环境凭据必须外置）
+  # 文件存储：腾讯云 COS（部署时凭据直接填本文件——私有仓库，2026-11-12 口径）
   file:
     storage-type: s3
     vendor: cos
@@ -93,24 +94,16 @@ babylog:
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # XXL-Job 调度中心（生产环境）
-  job:
-    admin-addresses: http://10.0.4.15:8101
-    app-name: babylog-executor
-    port: 9999
-    group-id: 3   # XXL-Job admin 中 babylog-executor 执行器组 ID
-    access-token: 
-  # 检索（S121/S122）：生产 ES = 10.0.4.15:9200（2026-10-02 接线，接法与 dev 完全一致：
-  # type=es-java + uris/username/password + compatibility-mode；admin-server 已引入 es-java 实现）。
-  # 启动期探测服务端版本；若生产 ES 为 7.17，启动时加 BABYLOG_ES_JAVA_COMPATIBILITY_MODE=true
-  # （dev/test 服务端为 9.x，故默认 false）。检索不可用时链路自动回退数据库查询，业务零阻断。
+  # 调度：不部署 XXL-Job 调度中心（BabyLog 决策 2026-11-12）。脚手架的 7 个留存清理任务
+  # （操作日志/登录日志/任务日志/消息/AI 记录/流程历史）由 starter-job 的
+  # LocalRetentionScheduler 本地 @Scheduled 自动接管（默认每天 03:00，
+  # 可调 babylog.retention.local-fallback.cron）。将来需要集中调度再恢复 babylog.job 段。
+  # 检索：BabyLog 业务检索在 App 端 Room 完成，服务端全文检索仅 AI KB 需要——
+  # 现阶段用 simple 内存实现（零中间件，进程内可检索、重启即失）。
+  # AI KB 阶段要上 ES 时改回 type: es-java 并恢复 es-java 子段
+  # （uris/username/password/compatibility-mode，接法见 pivotos-doc 检索章节）。
   search:
-    type: es-java
-    es-java:
-      uris: http://10.0.4.15:9200
-      username: elastic
-      password: 
-      compatibility-mode: false
+    type: simple
   # ST-DATAINSPECT（S130）：通用数据监控。生产默认关闭自由 SQL（高危）——
   # 仍可浏览库表与预览，放开自由 SQL 需显式改这里并重启（权限不能替代此开关）
   datainspect:

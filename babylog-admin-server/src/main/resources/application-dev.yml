@@ -78,7 +78,8 @@ logging:
 
 babylog:
   tenant:
-    enabled: true        # 默认 false，不写=单租户
+    # BabyLog 不启用多租户（M4 拍板：bl_ 表无 tenant_id，开了绑租户账号摸 bl_ 表会 Unknown column）
+    enabled: false       # 脚手架租户能力的 IT 测试用各自 test yml，不受此影响
     mode: column         # column / schema / datasource
   # 文件存储：腾讯云 COS（测试环境）
   file:
@@ -90,13 +91,10 @@ babylog:
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # XXL-Job 调度中心（开发环境本地）
-  job:
-    admin-addresses: http://127.0.0.1:8101
-    app-name: babylog-dev-executor
-    port: 9999
-    group-id: 1   # XXL-Job admin 中 babylog-executor 执行器组 ID
-    access-token: qaz123
+  # 调度：不部署 XXL-Job 调度中心（BabyLog 决策 2026-11-12）。脚手架的 7 个留存清理任务
+  # （操作日志/登录日志/任务日志/消息/AI 记录/流程历史）由 starter-job 的
+  # LocalRetentionScheduler 本地 @Scheduled 自动接管（默认每天 03:00，
+  # 可调 babylog.retention.local-fallback.cron）。将来需要集中调度再恢复 babylog.job 段。
   # A4-1 代码索引与定位（S110）：默认关闭（要扫仓库源码），dev 显式开启
   ai:
     coding:
@@ -178,14 +176,12 @@ babylog:
         - sys_login_log
         - sys_job
         - sys_job_log
+  # 检索：BabyLog 业务检索在 App 端 Room 完成，服务端全文检索仅 AI KB 需要——
+  # 现阶段用 simple 内存实现（零中间件，进程内可检索、重启即失）。
+  # AI KB 阶段要上 ES 时改回 type: es-java 并恢复 es-java 子段
+  # （uris/username/password/compatibility-mode，接法见 pivotos-doc 检索章节）。
   search:
-    type: es-java
-    es-java:
-      uris: http://175.24.176.176:9200
-      username: elastic
-      password: Elastic_RGRSPM
-      # 服务端是 9.5.3，必须 false；切到 7.17 服务端时改 true
-      compatibility-mode: false
+    type: simple
   # 微信小程序（测试号）
   wechat:
     miniapp:
