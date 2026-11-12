@@ -104,19 +104,28 @@ spring:
 
 未填 SMTP 时：发码端点返回 **8374**，起服与其他端点不受影响（`EmailCodeSender` 用 `ObjectProvider` 探测）。
 
-**技术债（M6+ 处理）**：注册建号走 `SysUserAccountDao` 的 JdbcTemplate 直写 `sys_user`。
-`IUserFacade` 只读、无写契约，补契约等于改 system 插件；biz 放 MyBatis 实体又会被 A8 判红。
-调用方只依赖 DAO 的方法签名，上游若提供写契约可整体替换。
+**技术债已销账（M5.5，2026-11-12 下午）**：原 `SysUserAccountDao`（JdbcTemplate 直写 `sys_user`）已删除。
+上游 PivotOS 补齐写契约 `IUserAccountFacade` 后，本插件改注入 `IUserFacade`（`getById` / `getByUsername`）+
+`IUserAccountFacade`（`getByEmail` / `existsByEmail` / `existsByUsername` / `createAccount` / `checkPassword`），
+密码哈希交回 system 侧计算，biz 只传原文（自动建档 `rawPassword` 留空，由实现侧生成随机串）。
 
-## 验证记录（M5）
+**错误码口径**：契约抛 system 段 `USERNAME_EXISTS(2003)` / `EMAIL_ALREADY_USED(2007)`，biz 在
+`createAccount()` 内转译成 `USERNAME_ALREADY_USED(8378)` / `EMAIL_ALREADY_USED(8377)`——**App 端只认 8xxx 段**，
+上游将来调码值不影响客户端。登录失败 `2001`、账号停用 `2002` 沿用 system 码（与 `/app/auth/login` 同语义）。
 
-- 单测 **32 个全绿**（`EmailCodeServiceImplTest` 11 / `AppAuthServiceImplTest` 15 / `EmailCodeSenderTest` 4 / `SysUserAccountDaoTest` 2），SMTP/Redis/DB 全 Mock
+**注意**：契约的 `getByEmail` 只过滤逻辑删除、**不过滤 `status`**，停用账号照样返回，biz 侧自己判 `status`。
+
+## 验证记录（M5 + M5.5）
+
+- 单测 **35 个全绿**（`EmailCodeServiceImplTest` 11 / `AppAuthServiceImplTest` 20 / `EmailCodeSenderTest` 4），SMTP/Redis/DB/契约全 Mock
 - ArchUnit **22/22 绿**（含 A11 五条匿名登记）
 - dev 起服（18080 旁路实例，避开 8080 上在跑的旧实例）+ curl 全链路：
-  8373 格式 → 8374 未配 SMTP → 注册 200 → 账密登录（用户名/邮箱）200 → `/app/auth/getInfo` 取到同一身份 →
-  refresh 200 → logout 200 → 退出后 getInfo 1002、refresh 8376、重复邮箱 8377
-- Flyway 在 `babylog_dev` 上从 v2.2.4 迁到 **v2.2.5**（1 个迁移，0.354s）
-- **未验**：真发信与验证码登录（缺 SMTP 凭据，需龙哥填完跑一次）
+  8373 格式 → 8374 未配 SMTP → 注册 200 → 账密登录（用户名/邮箱）200 → refresh 200 → logout 200 →
+  退出后 refresh 8376 → 重复用户名 8378 / 重复邮箱 8377
+- Flyway 在 `babylog_dev` 上从 v2.2.4 → **v2.2.5**（M5）→ **v2.2.6**（M5.5，`idx_email`）
+- 真发信已验证（163 SMTP，日志 `验证码邮件已发送 to=a***@163.com`）；同邮箱 60s 二次发送 8371
+- **鉴权头注意**：app-user 体系的 token 走 `Authorization: <token>` **裸值**（`sa-token.token-name: Authorization`，无 `Bearer` 前缀）；
+  `/app/auth/getInfo` 是 sys-user 端点，拿 app token 调必然 1002，验证 app 侧鉴权请用 `/app/babylog/auth/logout` 当探针
 
 ## 后续（M6+）
 
