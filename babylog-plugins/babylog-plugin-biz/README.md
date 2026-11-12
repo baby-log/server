@@ -21,7 +21,13 @@ BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与
 `bl_app_version`（版本与公告）/ `bl_vaccine_schedule`（疫苗时间表运营数据，区别于 bl_vaccinations 用户实例）/ `bl_ai_quota`（V3 启用）
 
 > `bl_device` 在 **V2.2.5** 补了 `device_uuid` + `uk(user_id, device_uuid)`（M5：登录幂等落行）；
-> `worker_id`（设备级雪花位）留 M6 与同步归属校验一起落地。
+> **V2.2.7（M6）** 补 `worker_id`（设备级雪花机器位，0-1023）+ `uk(user_id, worker_id)`。
+>
+> **V2.2.7（M6）** 给 18 张同步表统一补 `user_id`（同步归属）+ `idx_user_sync(user_id, server_updated_at)`：
+> 之前只有 `bl_children.owner_user_id` 有归属语义，其余 17 张没有归属列，拉取过滤与归属校验
+> 只能靠 join children 推导。例外是 `bl_family_members`（M4 建表已有 `user_id`＝成员用户 id，
+> V2.0 单用户模型下它就是归属列，只补索引不补列）。**这是第 4 处已文档化的结构性差异**
+> （服务端有、App 端 Room 没有的列，客户端不感知，也不回传）。
 
 ## 对齐口径（2026-11-11 拍板，App 端 V2.0 改造依据）
 
@@ -131,9 +137,110 @@ spring:
 - **鉴权头注意**：app-user 体系的 token 走 `Authorization: <token>` **裸值**（`sa-token.token-name: Authorization`，无 `Bearer` 前缀）；
   `/app/auth/getInfo` 是 sys-user 端点，拿 app token 调必然 1002，验证 app 侧鉴权请用 `/app/babylog/auth/logout` 当探针
 
-## 后续（M6+）
+## 同步接口（M6，会话 2026-11-12）
 
-- 同步接口：`GET /app/babylog/sync/changes?since=`（按 server_updated_at 游标）+ `POST /app/babylog/sync/push`（version 乐观锁 + 逐条权限校验 + 设备级 workerId）
-- 设备：注册/心跳/踢出、`worker_id` 分配（M5 只落了 `device_uuid` 与登录时 upsert）
-- 基础数据：products/vaccines 增量下发；管理端 controller + 菜单 SQL
+两个端点，全在 `/app/babylog/sync/**`，**类级** `@SaCheckLogin(app-user)`（没有一条匿名可用）。
+token 与 M5 一致：`Authorization: <裸值>`。
+
+| 端点 | 说明 |
+|---|---|
+| `GET /changes?since=&sinceId=&categories=&limit=` | 按服务端游标增量拉取，含软删除行（`deleted=1`） |
+| `POST /push` | 批量推送，单次上限 **200 条**，逐条 version 乐观锁 upsert |
+
+### 游标：双段 + 不透明
+
+```
+nextSince   本页最后一条的 server_updated_at（epoch millis，服务端编码）
+nextSinceId 本页最后一条的 id（同毫秒 tiebreak）
+```
+
+- **为什么加 id**：MySQL 的 `NOW(3)` 在**一条语句内是常量**——一次 200 行的 push 可能共用一个毫秒值。
+  只按时间戳推进，会在「同毫秒行数 > 单页上限」时把后一半永久跳过。
+- **为什么叫不透明**：`server_updated_at` 是数据库会话时区的墙上时间，用 JVM 时区解释它；
+  数据库与 JVM 时区不一致时 `nextSince` 的绝对值会整体偏移（不报错、不影响增量），
+  所以**客户端只准原样回传**，不许拿它和手机时钟比较、不许自己加减。
+  要「从头拉」传 `since=0`。
+- 无新数据时 `nextSince` 原样退回入参（避免客户端把游标清成 0 变成全量重拉）。
+- `since` 超前服务端时间 10 分钟以上会被钳到服务端时间（防把手机 millis 当游标传）。
+
+### 分类过滤
+
+`categories=FEEDING,CARE`（逗号分隔，大小写不敏感）。
+
+| 分类 | 表 |
+|---|---|
+| FEEDING | feedings |
+| CARE | diapers / sleeps / baths / spits / pump_sessions |
+| HEALTH | measurements |
+| MEDICAL | medications / vaccinations / follow_ups / visits / attachments |
+| **不参与过滤**（任何请求都下发） | children / record_type_settings / family_members / member_permissions / products / reminders |
+
+基础设施表必须随行下发——少了它们，拉回来的业务记录连 `child_id` 都对不上号。
+分类在 V2.0 **不构成安全边界**（真正的边界是 `user_id` 归属），V2.1 才叠加 `bl_member_permissions`。
+
+### 推送裁决
+
+请求体按表分组，键是**与 Room 表名逐字相同**的表标识；行内是 camelCase 属性名。
+
+```json
+{ "deviceUuid": "…", "changes": { "feedings": [ { "id": 1, "version": 3, "childId": 9, … } ] } }
+```
+
+逐条裁决顺序：`id`/`version` 合法性 → 内置产品段（id ≤ 99）→ 归属 → 版本门禁 → 权限钩子 → 落库。
+
+| 结果 | 含义 / 客户端处置 |
+|---|---|
+| `upserted` | 落库（新增，或推送 version > 库内 → 整行覆盖，last-write-wins，不做字段合并） |
+| `skipped` | 库内 version ≥ 推送 version → 服务端优先；重推同一批（幂等重试）走这条 |
+| `rejected[8344]` | 主键属于别的账号 → **换 ID 重新入队**（同一个 ID 重推永远不会成功） |
+| `rejected[8345]` | 内置产品（id 1~99）→ 丢弃，内置行由服务端下发 |
+| `rejected[8342]` | 格式非法或库约束拒绝（必填列缺失等）→ 丢弃并上报日志，重试不会成功 |
+
+协议级错误（整批失败）：空载荷/全表为空 → **8342**；总数 > 200 → **8341**；未知表标识 → **8347**；
+未知分类标识 → **8346**。`user_id` / `server_updated_at` / 审计四件套一律忽略客户端传值，服务端按 token 盖章。
+
+### 通用 SQL 为什么不用 MyBatis-Plus
+
+18 张表 × 三套语句 × 动态列，用 MP 注解会退化成千行手写 SQL（且列名与实际表结构容易错位，
+M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的行从读写路径里滤掉，
+而**软删除正是要同步的事实**（客户端先删再改同一条时，会「插入撞主键 + 更新 0 行」双双失败）。
+故收口到 `JdbcSyncRecordStore` 一个类：列清单由实体字段反射推导（`@TableField` 优先），
+配 `NamedParameterJdbcTemplate`。这是**本插件自己的 bl_ 表**，与 M5 那个跨插件直写 `sys_user` 的技术债不同性质。
+
+### 错误码（同步 8340-8359 / 设备 8360-8369）
+
+8340 版本冲突 · 8341 超上限 · 8342 记录非法 · 8343 无分类写权限（V2.1）·
+**8344 归属冲突** · **8345 内置数据不可推** · **8346 分类非法** · **8347 表非法** ·
+8360 设备不存在 · **8361 设备数超限（1024 台，workerId 用尽）**
+
+## 验证记录（M6）
+
+- 单测 **69 个全绿**（M5.5 的 35 个 + 本次 34：`SyncServiceImplTest` 18 / `SyncTableTest` 7 /
+  `SyncCursorTest` 4 / `DeviceWorkerIdAllocatorTest` 4 / `AppAuthServiceImplTest` +1）
+- ArchUnit **22/22 绿**（新端点走类级 `@SaCheckLogin`，A11 无需登记匿名欠条）
+- dev 起服（18080 旁路）：Flyway v2.2.6 → **v2.2.7**；**`bl_family_members` 首次失败已修复**
+  （该表 M4 建表就有 `user_id`，首次脚本重复加列；MySQL DDL 不进事务 → 前 5 表已加列，
+  用一次性 repair 回滚半成品 + `flyway.repair()` 后重迁移成功，临时修复类已删除、未入库）
+- curl 全链路 **22 项校验全过**：7 条首推全写入 → 重推全部 skipped（幂等）→ 全量拉取 3 表 7 条
+  （`userId` 不外泄、`deleted` 随行下发）→ `limit=2` 逐页拉无丢失/无重复 → version 门禁
+  （更大的覆盖、更小的跳过、覆盖后值正确）→ 跨账号同 ID **8344** 且原数据未被改写 →
+  内置产品 **8345** → 未知表 **8347** → 201 条 **8341** → 非法分类 **8346** →
+  软删除可推送、可被拉到、可被再次覆盖
+- `workerId`：两个新账号各自从 0 起；老设备行（无 workerId）登录时补分配且不改行 id
+
+### 客户端接口约定（给 App 端 V2.0 改造用）
+
+1. **数字字段在 JSON 里是字符串**（项目全局 `Long → String` 序列化，防 JS 精度丢失）：
+   `id` / `version` / `nextSince` / `nextSinceId` / `childId` 都要按字符串解析。
+2. 游标存两段（`nextSince` + `nextSinceId`），一起回传，别只存时间。
+3. 客户端**不发** `userId`；服务端以 token 为准。
+4. 内置产品（`is_builtin=1`，id 1~99）**不要进 outbox**，只从 changes 拉。
+5. 收到 8344 换 ID 重推；收到 8342/8345 丢弃并记日志。
+
+## 后续（M7+）
+
+- 设备管理：注册/心跳/踢出端点（`worker_id` 已于 M6 落地）
+- 基础数据：products / vaccine_schedule 增量下发（当前走同步通道的 products 只有用户自定义行）
+- 管理端 controller + 菜单 SQL（`/babylog/**`，`@SaCheckPermission`）
+- V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；`bl_family_members` 的同步归属改用 family 维度
 - 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
