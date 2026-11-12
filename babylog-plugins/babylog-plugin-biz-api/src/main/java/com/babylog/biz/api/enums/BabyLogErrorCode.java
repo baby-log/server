@@ -12,11 +12,12 @@ import com.babylog.common.core.enums.error.ErrorCode;
  * <ul>
  *   <li>8300-8319 家庭与成员</li>
  *   <li>8320-8329 宝宝</li>
- *   <li>8340-8359 同步</li>
+ *   <li>8340-8359 同步（8348/8349 为管理端产品维护占位，语义仍属同步/基础数据域）</li>
  *   <li>8360-8369 设备</li>
  *   <li>8370-8379 认证（邮箱验证码 / 注册 / token，M5 占用）</li>
  *   <li>8380-8389 反馈</li>
- *   <li>8390-8399 保留</li>
+ *   <li>8390-8394 版本公告（M10 管理端）</li>
+ *   <li>8395-8399 保留</li>
  * </ul>
  */
 public enum BabyLogErrorCode implements ErrorCode {
@@ -48,10 +49,16 @@ public enum BabyLogErrorCode implements ErrorCode {
     SYNC_BUILTIN_IMMUTABLE(8345, "内置数据由服务端下发，不接受客户端推送"),
     SYNC_CATEGORY_INVALID(8346, "同步分类标识非法"),
     SYNC_TABLE_UNKNOWN(8347, "同步表标识非法"),
+    /** 管理端按 id 操作产品行时的不存在/墓碑态（@TableLogic 滤掉 deleted=1，墓碑正好落这里——守住「软删行不复活」） */
+    PRODUCT_NOT_FOUND(8348, "产品不存在"),
+    /** 管理端只能维护内置产品（is_builtin=1，id 1~99）；用户自建行走 App 同步通道，管理端不得触碰（base/sync 两通道隔离红线） */
+    PRODUCT_NOT_BUILTIN(8349, "仅内置产品可通过管理端维护"),
 
     // ---------- 设备（8360-8369） ----------
     DEVICE_NOT_FOUND(8360, "设备不存在"),
     DEVICE_LIMIT_EXCEEDED(8361, "设备数量已达上限（1024 台），请先移除不用的设备"),
+    /** 管理端按账号（用户名/邮箱）解析用户失败——App 端不使用本码 */
+    ACCOUNT_NOT_FOUND(8362, "账号不存在"),
 
     // ---------- 认证（8370-8379） ----------
     /** 验证码错误的可能：输错、已过期、已被用掉、错误次数超限作废——统一一个码，不给撞码者区分信号 */
@@ -68,6 +75,12 @@ public enum BabyLogErrorCode implements ErrorCode {
 
     // ---------- 反馈（8380-8389） ----------
     FEEDBACK_NOT_FOUND(8380, "反馈不存在"),
+    FEEDBACK_CONTENT_INVALID(8381, "反馈内容须为 5-1000 字"),
+
+    // ---------- 版本公告（8390-8394，M10） ----------
+    APP_VERSION_NOT_FOUND(8390, "版本记录不存在"),
+    /** 已发布（PUBLISHED）的版本锁定不可再改/再发/删除——用户可能已经看到过这版公告 */
+    APP_VERSION_NOT_DRAFT(8391, "仅草稿状态的版本可修改/发布/删除"),
 
     ;
 
