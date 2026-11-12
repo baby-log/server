@@ -38,6 +38,27 @@
             <groupId>com.babylog</groupId>
             <artifactId>babylog-starter-auth</artifactId>
         </dependency>
+        <!-- 验证码/refresh token 存 Redis（starter-redis 带 redisson + StringRedisTemplate 自动装配） -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-redis</artifactId>
+        </dependency>
+        <!-- 跨插件只碰契约：sys_user 账号体系（错误码 2001/2002/2003 与 /app/auth/login 口径一致） -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-system-api</artifactId>
+        </dependency>
+
+        <!-- SMTP 发信（spring.mail.* 配置齐全时 Boot 才装配 JavaMailSender，未配则发码端点返回 8374） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- BCrypt 密码哈希（与 system 插件同款，BOM 已仲裁） -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -51,6 +72,11 @@
         </dependency>
 
         <!-- 测试 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>

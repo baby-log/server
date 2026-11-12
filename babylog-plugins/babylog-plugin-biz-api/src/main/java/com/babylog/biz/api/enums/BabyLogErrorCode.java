@@ -14,6 +14,7 @@ import com.babylog.common.core.enums.error.ErrorCode;
  *   <li>8320-8329 宝宝</li>
  *   <li>8340-8359 同步</li>
  *   <li>8360-8369 设备</li>
+ *   <li>8370-8379 认证（邮箱验证码 / 注册 / token，M5 占用）</li>
  *   <li>8380-8389 反馈</li>
  *   <li>8390-8399 保留</li>
  * </ul>
@@ -39,6 +40,17 @@ public enum BabyLogErrorCode implements ErrorCode {
 
     // ---------- 设备（8360-8369） ----------
     DEVICE_NOT_FOUND(8360, "设备不存在"),
+
+    // ---------- 认证（8370-8379） ----------
+    /** 验证码错误的可能：输错、已过期、已被用掉、错误次数超限作废——统一一个码，不给撞码者区分信号 */
+    EMAIL_CODE_INVALID(8370, "验证码错误或已过期，请重新获取"),
+    EMAIL_CODE_TOO_FREQUENT(8371, "验证码发送过于频繁，请稍后再试"),
+    EMAIL_DAILY_LIMIT(8372, "今日验证码发送次数已达上限，请明天再试"),
+    EMAIL_FORMAT_INVALID(8373, "邮箱格式不正确"),
+    MAIL_NOT_CONFIGURED(8374, "邮件服务未配置，暂时无法发送验证码"),
+    MAIL_SEND_FAILED(8375, "验证码邮件发送失败，请稍后重试"),
+    REFRESH_TOKEN_INVALID(8376, "登录状态已失效，请重新登录"),
+    EMAIL_ALREADY_USED(8377, "该邮箱已绑定其他账号"),
 
     // ---------- 反馈（8380-8389） ----------
     FEEDBACK_NOT_FOUND(8380, "反馈不存在"),
