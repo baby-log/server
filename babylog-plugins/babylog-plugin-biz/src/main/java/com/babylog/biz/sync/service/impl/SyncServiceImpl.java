@@ -57,7 +57,10 @@ public class SyncServiceImpl implements SyncService {
     static final int MAX_PULL_LIMIT = 500;
     /** bl_products 内置行的 id 预留段上界（App 端 V2.0 迁移口径，见 M4 拍板） */
     private static final long BUILTIN_PRODUCT_ID_MAX = 99L;
-    /** 客户端时钟离谱时的保护阈值：超过服务端时间这么多就按服务端时间算 */
+    /**
+     * 客户端时钟离谱时的保护阈值：超过服务端时间这么多就按服务端时间算。
+     * 容差 10 分钟——正常往返误差在秒级，而「把手机 millis 当游标传」通常差几分钟到几小时。
+     */
     private static final long CURSOR_FUTURE_TOLERANCE_MILLIS = 10 * 60 * 1000L;
 
     private final SyncRecordStore store;
@@ -75,9 +78,9 @@ public class SyncServiceImpl implements SyncService {
     @Override
     public SyncChangesVO pull(long userId, Long sinceMillis, Long sinceId, String categories, Integer limit) {
         Set<SyncCategory> requested = parseCategories(categories);
-        int pageLimit = normalizeLimit(limit);
+        int pageLimit = SyncCursor.normalizeLimit(limit, DEFAULT_PULL_LIMIT, MAX_PULL_LIMIT);
         long serverTime = SyncCursor.now();
-        long effectiveSince = normalizeSince(sinceMillis, serverTime);
+        long effectiveSince = SyncCursor.normalizeSince(sinceMillis, serverTime, CURSOR_FUTURE_TOLERANCE_MILLIS);
         long effectiveSinceId = sinceId == null ? 0L : Math.max(0L, sinceId);
         LocalDateTime sinceTime = SyncCursor.toLocalDateTime(effectiveSince);
 
@@ -119,32 +122,6 @@ public class SyncServiceImpl implements SyncService {
         } catch (IllegalArgumentException e) {
             throw new ServiceException(BabyLogErrorCode.SYNC_CATEGORY_INVALID, e.getMessage());
         }
-    }
-
-    private static int normalizeLimit(Integer limit) {
-        if (limit == null || limit <= 0) {
-            return DEFAULT_PULL_LIMIT;
-        }
-        return Math.min(limit, MAX_PULL_LIMIT);
-    }
-
-    /**
-     * 游标下界的防御：负数按 0（全量），远超服务端时间的按服务端时间（客户端误传手机时钟）。
-     *
-     * <p>容差取 10 分钟：正常往返误差在秒级，留出余量；而「客户端把手机 millis 当游标传」
-     * 通常差几分钟到几小时不等，超容差即纠正。注意 nextSince 是<b>不透明游标</b>，
-     * 服务端自己的游标不会触发这条分支（它是从库里的 server_updated_at 解出来的）。
-     */
-    private static long normalizeSince(Long sinceMillis, long serverTime) {
-        if (sinceMillis == null || sinceMillis < 0) {
-            return 0L;
-        }
-        if (sinceMillis > serverTime + CURSOR_FUTURE_TOLERANCE_MILLIS) {
-            log.warn("[BABYLOG][sync] 游标超前于服务端时间，按当前时间处理 since={} serverTime={}",
-                    sinceMillis, serverTime);
-            return serverTime;
-        }
-        return sinceMillis;
     }
 
     // ==================================================================

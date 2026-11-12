@@ -41,4 +41,33 @@ public final class SyncCursor {
     public static long now() {
         return toMillis(LocalDateTime.now());
     }
+
+    /**
+     * 客户端回传 limit 的钳制：null/非正 → 默认值，超上限 → 上限。
+     *
+     * <p>从 SyncServiceImpl 下沉到这（M8 基础数据通道复用）：两个通道的分页口径必须
+     * 同一套，散在两个 service 里迟早一个改了另一个忘。
+     */
+    public static int normalizeLimit(Integer limit, int defaultLimit, int maxLimit) {
+        if (limit == null || limit <= 0) {
+            return defaultLimit;
+        }
+        return Math.min(limit, maxLimit);
+    }
+
+    /**
+     * 游标下界的防御：负数/null 按 0（全量），远超服务端时间的按服务端时间（客户端误传手机时钟）。
+     *
+     * <p>容差由调用方给（两通道共用同一值）。注意 nextSince 是<b>不透明游标</b>，
+     * 服务端自己解出来的游标不会触发纠正分支。
+     */
+    public static long normalizeSince(Long sinceMillis, long serverTime, long futureToleranceMillis) {
+        if (sinceMillis == null || sinceMillis < 0) {
+            return 0L;
+        }
+        if (sinceMillis > serverTime + futureToleranceMillis) {
+            return serverTime;
+        }
+        return sinceMillis;
+    }
 }

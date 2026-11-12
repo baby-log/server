@@ -59,6 +59,7 @@ final class SyncTableSql {
     private final String insertSql;
     private final String selectExistingSql;
     private final String selectChangesSql;
+    private final String selectBuiltinChangesSql;
 
     SyncTableSql(SyncTable table) {
         this.table = table;
@@ -102,6 +103,9 @@ final class SyncTableSql {
         this.selectExistingSql = "SELECT " + pk + ", user_id, version FROM " + table.tableName()
                 + " WHERE " + pk + " IN (:ids)";
         this.selectChangesSql = buildSelectChangesSql();
+        // 内置行下发语句（M8 基础数据通道）：只对带 is_builtin 列的表生成，其余表为 null
+        this.selectBuiltinChangesSql = hasBuiltinFlag()
+                ? buildSelectBuiltinChangesSql() : null;
     }
 
     SyncTable table() {
@@ -133,6 +137,16 @@ final class SyncTableSql {
 
     String selectChangesSql() {
         return selectChangesSql;
+    }
+
+    /**
+     * 内置行增量下发语句（{@code WHERE is_builtin = 1}，不按 user_id 过滤）。
+     *
+     * <p>只对带 {@code is_builtin} 列的表（当前仅 products）生成，其余表返回 {@code null}，
+     * 调用方据此拒绝（而不是静默查一张没有该列的表报 SQL 错误）。
+     */
+    String selectBuiltinChangesSql() {
+        return selectBuiltinChangesSql;
     }
 
     String insertSql() {
@@ -213,6 +227,24 @@ final class SyncTableSql {
                 + " WHERE user_id = :userId"
                 + " AND (server_updated_at > :since OR (server_updated_at = :since AND " + idColumn + " > :sinceId))"
                 + " ORDER BY server_updated_at, " + idColumn;
+    }
+
+    /**
+     * 内置行增量下发：与 {@link #buildSelectChangesSql()} 同构，但归属条件换成
+     * {@code is_builtin = 1}——内置行是全局基础数据（user_id=0 的占位），任何登录用户
+     * 都该拉到同一份。游标仍是双段（后台批量改内置行时同样存在同毫秒多行）。
+     */
+    private String buildSelectBuiltinChangesSql() {
+        return "SELECT " + String.join(", ", pullColumns) + ", server_updated_at"
+                + " FROM " + table.tableName()
+                + " WHERE is_builtin = 1"
+                + " AND (server_updated_at > :since OR (server_updated_at = :since AND " + idColumn + " > :sinceId))"
+                + " ORDER BY server_updated_at, " + idColumn;
+    }
+
+    /** 该表实体是否声明了 isBuiltin 字段（即库表有 is_builtin 列） */
+    private boolean hasBuiltinFlag() {
+        return propertyToColumn.containsKey("isBuiltin");
     }
 
     // ------------------------------------------------------------------

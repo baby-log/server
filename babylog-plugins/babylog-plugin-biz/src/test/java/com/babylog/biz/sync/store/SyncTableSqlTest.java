@@ -82,4 +82,25 @@ class SyncTableSqlTest {
         assertThat(SyncTableSql.camelToSnake("deviceUuid")).isEqualTo("device_uuid");
         assertThat(SyncTableSql.camelToSnake("note")).isEqualTo("note");
     }
+
+    @Test
+    void builtinChannelOnlyForTablesWithFlag() {
+        // products 有 is_builtin 列 → 生成下发语句，且不按 user_id 过滤（全局数据）
+        String products = new SyncTableSql(SyncTable.PRODUCTS).selectBuiltinChangesSql();
+        assertThat(products)
+                .contains("WHERE is_builtin = 1")
+                .contains("(server_updated_at > :since OR (server_updated_at = :since AND id > :sinceId))")
+                .contains("ORDER BY server_updated_at, id")
+                .doesNotContain("user_id = :userId");
+
+        // 其余 17 张表没有该列 → null，调用方据此拒绝而不是查出 SQL 错误
+        for (SyncTable table : SyncTable.values()) {
+            if (table == SyncTable.PRODUCTS) {
+                continue;
+            }
+            assertThat(new SyncTableSql(table).selectBuiltinChangesSql())
+                    .as("%s 不支持基础数据通道", table.apiName())
+                    .isNull();
+        }
+    }
 }

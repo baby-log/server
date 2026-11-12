@@ -41,6 +41,17 @@ public interface SyncRecordStore {
     List<Row> selectChanges(SyncTable table, long userId, LocalDateTime since, long sinceId, int limit);
 
     /**
+     * 内置行增量拉取（M8 基础数据通道，<b>不按 user_id 过滤</b>）。
+     *
+     * <p>内置行（is_builtin=1，user_id=0 占位）是全局基础数据：走
+     * {@code GET /app/babylog/base/products} 单独下发，不进 18 表同步通道——
+     * 同步通道的 {@code user_id = 自己} 归属过滤会把它们滤成不可见。
+     *
+     * @throws IllegalArgumentException 该表没有 is_builtin 列（当前只有 products 支持）
+     */
+    List<Row> selectBuiltinChanges(SyncTable table, LocalDateTime since, long sinceId, int limit);
+
+    /**
      * 单条 version 乐观锁 upsert。
      *
      * <p>语义：主键不存在 → 插入；主键已存在且推送 version &gt; 库内 version → <b>整行</b>覆盖

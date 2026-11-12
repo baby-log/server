@@ -67,6 +67,19 @@ public class JdbcSyncRecordStore implements SyncRecordStore {
     }
 
     @Override
+    public List<Row> selectBuiltinChanges(SyncTable table, LocalDateTime since, long sinceId, int limit) {
+        SyncTableSql sql = sqlByTable.get(table);
+        if (sql.selectBuiltinChangesSql() == null) {
+            throw new IllegalArgumentException("表 " + table.tableName() + " 没有内置行（is_builtin 列），不支持基础数据通道");
+        }
+        Map<String, Object> params = new HashMap<>(4);
+        params.put("since", since);
+        params.put("sinceId", sinceId);
+        List<Map<String, Object>> rows = jdbc.queryForList(sql.selectBuiltinChangesSql() + " LIMIT " + limit, params);
+        return rows.stream().map(row -> toRow(table, sql, row)).toList();
+    }
+
+    @Override
     public void upsert(SyncTable table, Map<String, Object> payload, long userId) {
         SyncTableSql sql = sqlByTable.get(table);
         Map<String, Object> params = new HashMap<>(payload.size() + 8);
