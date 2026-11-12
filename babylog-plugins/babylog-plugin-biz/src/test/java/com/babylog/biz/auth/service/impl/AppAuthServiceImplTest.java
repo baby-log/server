@@ -14,6 +14,7 @@ import com.babylog.biz.auth.store.RefreshTokenRecord;
 import com.babylog.biz.auth.store.RefreshTokenStore;
 import com.babylog.biz.auth.vo.CodeSendVO;
 import com.babylog.biz.auth.vo.LoginTokenVO;
+import com.babylog.biz.device.service.DeviceWorkerIdAllocator;
 import com.babylog.biz.entity.BlDevice;
 import com.babylog.biz.mapper.BlDeviceMapper;
 import com.babylog.common.core.exception.ServiceException;
@@ -72,6 +73,8 @@ class AppAuthServiceImplTest {
     private IUserAccountFacade userAccountFacade;
     @Mock
     private BlDeviceMapper deviceMapper;
+    @Mock
+    private DeviceWorkerIdAllocator workerIdAllocator;
 
     private BabyLogAuthProperties properties;
     private AppAuthServiceImpl service;
@@ -80,7 +83,7 @@ class AppAuthServiceImplTest {
     void setUp() {
         properties = new BabyLogAuthProperties();
         service = new AppAuthServiceImpl(emailCodeService, tokenService, refreshTokenStore,
-                userFacade, userAccountFacade, deviceMapper, properties);
+                userFacade, userAccountFacade, deviceMapper, workerIdAllocator, properties);
 
         when(emailCodeService.normalize(anyString()))
                 .thenAnswer(inv -> inv.getArgument(0, String.class).trim().toLowerCase(Locale.ROOT));
@@ -88,6 +91,7 @@ class AppAuthServiceImplTest {
         when(tokenService.accessTtlSeconds()).thenReturn(7200L);
         when(refreshTokenStore.issue(anyLong(), anyString(), any())).thenReturn("refresh-token");
         when(deviceMapper.selectList(any())).thenReturn(List.of());
+        when(workerIdAllocator.nextWorkerId(anyLong())).thenReturn(0);
         doAnswer(inv -> {
             BlDevice row = inv.getArgument(0);
             row.setId(9001L);
@@ -114,6 +118,9 @@ class AppAuthServiceImplTest {
         assertThat(vo.getAccessExpiresIn()).isEqualTo(7200L);
         assertThat(vo.getRefreshExpiresIn()).isEqualTo(properties.getRefreshTokenTtlSeconds());
         assertThat(vo.getDeviceId()).isEqualTo(9001L);
+        // 新设备落行时同步分配 workerId（App 拿它生成雪花 ID），随登录响应回传
+        assertThat(vo.getWorkerId()).isZero();
+        verify(workerIdAllocator).nextWorkerId(NEW_USER_ID);
         // 自动建档的账号：邮箱落在 email 列，用户名是随机串（不是邮箱本身），密码留空由契约生成随机串
         ArgumentCaptor<UserAccountCreateCmd> cmd = ArgumentCaptor.forClass(UserAccountCreateCmd.class);
         verify(userAccountFacade).createAccount(cmd.capture());
@@ -135,6 +142,27 @@ class AppAuthServiceImplTest {
         // 没上报设备：不落设备行，也不阻断登录
         assertThat(vo.getDeviceId()).isNull();
         verify(deviceMapper, never()).insert(any(BlDevice.class));
+    }
+
+    @Test
+    void loginByEmailCode_assignsWorkerIdToLegacyDeviceRow() {
+        when(userAccountFacade.getByEmail("mom@example.com"))
+                .thenReturn(user(USER_ID, "mom", "妈妈", "mom@example.com"));
+        // V2.2.7 之前落的设备行没有 workerId：登录时补一个，但不重复插行、不改行 id
+        BlDevice legacy = new BlDevice();
+        legacy.setId(7001L);
+        legacy.setUserId(USER_ID);
+        legacy.setDeviceUuid("device-1");
+        legacy.setStatus("ACTIVE");
+        when(deviceMapper.selectList(any())).thenReturn(List.of(legacy));
+        when(workerIdAllocator.nextWorkerId(USER_ID)).thenReturn(5);
+
+        LoginTokenVO vo = service.loginByEmailCode(emailLoginCmd("mom@example.com", "123456", device()));
+
+        assertThat(vo.getDeviceId()).isEqualTo(7001L);
+        assertThat(vo.getWorkerId()).isEqualTo(5);
+        verify(deviceMapper, never()).insert(any(BlDevice.class));
+        verify(deviceMapper).updateById(legacy);
     }
 
     @Test

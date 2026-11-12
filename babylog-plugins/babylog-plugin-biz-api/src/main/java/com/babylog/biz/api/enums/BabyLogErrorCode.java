@@ -37,9 +37,21 @@ public enum BabyLogErrorCode implements ErrorCode {
     SYNC_PAYLOAD_TOO_LARGE(8341, "单次推送记录数超出上限"),
     SYNC_RECORD_INVALID(8342, "推送记录格式非法"),
     SYNC_CATEGORY_DENIED(8343, "无该分类的写权限"),
+    /**
+     * 归属冲突：主键已存在且属于<b>其他账号</b>。
+     *
+     * <p>跨用户雪花 ID 撞车的兜底（概率极低但存在：不同账号复用 workerId + 同毫秒 + 同序列）。
+     * 客户端处理方式是<b>换 ID 重新入队</b>——不是重试，重试同一个 ID 永远不会成功。
+     */
+    SYNC_OWNERSHIP_CONFLICT(8344, "记录 ID 已被其他账号占用，请更换 ID 后重试"),
+    /** 内置数据（bl_products 的 1~99 预留段）由服务端下发，客户端推送一律拒绝——否则每台设备都会插一份副本 */
+    SYNC_BUILTIN_IMMUTABLE(8345, "内置数据由服务端下发，不接受客户端推送"),
+    SYNC_CATEGORY_INVALID(8346, "同步分类标识非法"),
+    SYNC_TABLE_UNKNOWN(8347, "同步表标识非法"),
 
     // ---------- 设备（8360-8369） ----------
     DEVICE_NOT_FOUND(8360, "设备不存在"),
+    DEVICE_LIMIT_EXCEEDED(8361, "设备数量已达上限（1024 台），请先移除不用的设备"),
 
     // ---------- 认证（8370-8379） ----------
     /** 验证码错误的可能：输错、已过期、已被用掉、错误次数超限作废——统一一个码，不给撞码者区分信号 */

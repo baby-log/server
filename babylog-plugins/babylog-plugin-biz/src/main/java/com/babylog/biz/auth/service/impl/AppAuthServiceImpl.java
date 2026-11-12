@@ -17,6 +17,7 @@ import com.babylog.biz.auth.store.RefreshTokenRecord;
 import com.babylog.biz.auth.store.RefreshTokenStore;
 import com.babylog.biz.auth.vo.CodeSendVO;
 import com.babylog.biz.auth.vo.LoginTokenVO;
+import com.babylog.biz.device.service.DeviceWorkerIdAllocator;
 import com.babylog.biz.entity.BlDevice;
 import com.babylog.biz.mapper.BlDeviceMapper;
 import com.babylog.common.core.exception.ServiceException;
@@ -27,6 +28,7 @@ import com.babylog.system.api.facade.IUserAccountFacade;
 import com.babylog.system.api.facade.IUserFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -49,9 +51,11 @@ import java.util.regex.Pattern;
  *   <li>账密注册时若带了邮箱，则该邮箱立即成为可用登录名（一条账号两条路径）。</li>
  * </ul>
  *
- * <p>设备接线（本会话只做最小集）：登录成功时若上报了 {@code deviceUuid}，则按
- * {@code (user_id, device_uuid)} upsert 一行 {@code bl_device} 并回写 last_active_at；
- * 未上报则不落行、不阻断登录。设备注册/心跳/踢出/workerId 分配留 V2.0 后续。
+ * <p>设备接线：登录成功时若上报了 {@code deviceUuid}，则按
+ * {@code (user_id, device_uuid)} upsert 一行 {@code bl_device} 并回写 last_active_at，
+ * 同时分配设备级雪花 {@code workerId}（同用户内 max+1，上限 1023）随登录响应回传；
+ * 未上报则不落行、不阻断登录（但 App 拿不到 workerId，也就发不了雪花 ID，属于客户端 bug）。
+ * 设备注册/心跳/踢出端点留 V2.0 后续。
  */
 @Service
 public class AppAuthServiceImpl implements AppAuthService {
@@ -77,6 +81,7 @@ public class AppAuthServiceImpl implements AppAuthService {
     /** 写契约：按邮箱查、查重、建号、校验密码（M5 收口后取代原 SysUserAccountDao） */
     private final IUserAccountFacade userAccountFacade;
     private final BlDeviceMapper deviceMapper;
+    private final DeviceWorkerIdAllocator workerIdAllocator;
     private final BabyLogAuthProperties properties;
 
     public AppAuthServiceImpl(EmailCodeService emailCodeService,
@@ -85,6 +90,7 @@ public class AppAuthServiceImpl implements AppAuthService {
                               IUserFacade userFacade,
                               IUserAccountFacade userAccountFacade,
                               BlDeviceMapper deviceMapper,
+                              DeviceWorkerIdAllocator workerIdAllocator,
                               BabyLogAuthProperties properties) {
         this.emailCodeService = emailCodeService;
         this.tokenService = tokenService;
@@ -92,6 +98,7 @@ public class AppAuthServiceImpl implements AppAuthService {
         this.userFacade = userFacade;
         this.userAccountFacade = userAccountFacade;
         this.deviceMapper = deviceMapper;
+        this.workerIdAllocator = workerIdAllocator;
         this.properties = properties;
     }
 
@@ -171,9 +178,9 @@ public class AppAuthServiceImpl implements AppAuthService {
             throw new ServiceException(SystemErrorCode.USER_DISABLED);
         }
         String accessToken = tokenService.issueAccessToken(user.getId(), user.getUsername());
-        Long deviceId = touchDevice(user.getId(), deviceFromRecord(record.deviceUuid()));
+        DeviceTouch touch = touchDevice(user.getId(), deviceFromRecord(record.deviceUuid()));
 
-        LoginTokenVO vo = baseVo(user, false, deviceId);
+        LoginTokenVO vo = baseVo(user, false, touch);
         vo.setAccessToken(accessToken);
         vo.setAccessExpiresIn(tokenService.accessTtlSeconds());
         // refresh 不轮换：原样返回，并把剩余有效期透出（客户端据此判断何时该重新登录）
@@ -195,7 +202,7 @@ public class AppAuthServiceImpl implements AppAuthService {
     // ------------------------------------------------------------------
 
     /**
-     * 三种登录方式的公共出口：access（Sa-Token）+ refresh（Redis 哈希）+ 设备行。
+     * 三种登录方式的公共出口：access（Sa-Token）+ refresh（Redis 哈希）+ 设备行 + workerId。
      *
      * @param deviceUuidHint 来自 refresh 记录的设备标识（登录场景传空，设备信息在 device 里）
      */
@@ -204,26 +211,28 @@ public class AppAuthServiceImpl implements AppAuthService {
         String accessToken = tokenService.issueAccessToken(user.getId(), user.getUsername());
         String deviceUuid = device != null && StringUtils.hasText(device.getDeviceUuid())
                 ? device.getDeviceUuid() : deviceUuidHint;
-        Long deviceId = touchDevice(user.getId(), device);
+        DeviceTouch touch = touchDevice(user.getId(), device);
         String refreshToken = refreshTokenStore.issue(user.getId(), deviceUuid,
                 Duration.ofSeconds(properties.getRefreshTokenTtlSeconds()));
 
-        LoginTokenVO vo = baseVo(user, newUser, deviceId);
+        LoginTokenVO vo = baseVo(user, newUser, touch);
         vo.setAccessToken(accessToken);
         vo.setAccessExpiresIn(tokenService.accessTtlSeconds());
         vo.setRefreshToken(refreshToken);
         vo.setRefreshExpiresIn(properties.getRefreshTokenTtlSeconds());
-        log.info("[BABYLOG][auth] 登录成功 userId={} newUser={} deviceId={}", user.getId(), newUser, deviceId);
+        log.info("[BABYLOG][auth] 登录成功 userId={} newUser={} deviceId={} workerId={}",
+                user.getId(), newUser, touch.deviceId(), touch.workerId());
         return vo;
     }
 
-    private LoginTokenVO baseVo(UserDTO user, boolean newUser, Long deviceId) {
+    private LoginTokenVO baseVo(UserDTO user, boolean newUser, DeviceTouch touch) {
         LoginTokenVO vo = new LoginTokenVO();
         vo.setUserId(user.getId());
         vo.setUsername(user.getUsername());
         vo.setNickname(user.getNickname());
         vo.setNewUser(newUser);
-        vo.setDeviceId(deviceId);
+        vo.setDeviceId(touch.deviceId());
+        vo.setWorkerId(touch.workerId());
         return vo;
     }
 
@@ -293,35 +302,45 @@ public class AppAuthServiceImpl implements AppAuthService {
     }
 
     /**
-     * 设备行 upsert（本会话最小接线）。
+     * 设备行 upsert（登录时调用），同时保证 workerId 有值。
      *
      * <p>没上报 deviceUuid 就整体跳过：没有设备标识的「设备行」没有业务含义，
-     * 每次登录都插一行只会把表灌成日志。
+     * 每次登录都插一行只会把表灌成日志；而此时也拿不到 workerId，App 侧应把 deviceUuid
+     * 当作登录的必填项。
+     *
+     * <p>并发登录同一台设备（双击登录、两路请求）会撞 {@code uk(user_id, device_uuid)}：
+     * 这不是错误，回读已存在的行按「已注册」继续即可——把一次撞键变成一次成功登录。
+     * 若回读仍为空，说明撞的是 {@code uk(user_id, worker_id)}（两台设备抢同一个号），
+     * 只能让客户端重试。
      */
-    private Long touchDevice(Long userId, DeviceInfo device) {
+    private DeviceTouch touchDevice(Long userId, DeviceInfo device) {
         if (device == null || !StringUtils.hasText(device.getDeviceUuid())) {
-            return null;
+            return DeviceTouch.EMPTY;
         }
         String deviceUuid = truncate(device.getDeviceUuid().trim(), 64);
-        List<BlDevice> existing = deviceMapper.selectList(Wrappers.<BlDevice>lambdaQuery()
-                .eq(BlDevice::getUserId, userId)
-                .eq(BlDevice::getDeviceUuid, deviceUuid));
-        LocalDateTime now = LocalDateTime.now();
-        if (existing.isEmpty()) {
-            BlDevice row = new BlDevice();
-            row.setUserId(userId);
-            row.setDeviceUuid(deviceUuid);
-            row.setDeviceName(truncate(nullToEmpty(device.getDeviceName()), DEVICE_NAME_MAX_LENGTH));
-            row.setPlatform(platformOf(device.getPlatform()));
-            row.setAppVersion(truncate(nullToEmpty(device.getAppVersion()), APP_VERSION_MAX_LENGTH));
-            row.setStatus(DEVICE_ACTIVE);
-            row.setLastActiveAt(now);
-            deviceMapper.insert(row);
-            return row.getId();
+        BlDevice row = findDevice(userId, deviceUuid);
+        if (row == null) {
+            BlDevice created = new BlDevice();
+            created.setUserId(userId);
+            created.setDeviceUuid(deviceUuid);
+            created.setDeviceName(truncate(nullToEmpty(device.getDeviceName()), DEVICE_NAME_MAX_LENGTH));
+            created.setPlatform(platformOf(device.getPlatform()));
+            created.setAppVersion(truncate(nullToEmpty(device.getAppVersion()), APP_VERSION_MAX_LENGTH));
+            created.setStatus(DEVICE_ACTIVE);
+            created.setLastActiveAt(LocalDateTime.now());
+            created.setWorkerId(workerIdAllocator.nextWorkerId(userId));
+            try {
+                deviceMapper.insert(created);
+                return new DeviceTouch(created.getId(), created.getWorkerId());
+            } catch (DuplicateKeyException e) {
+                row = findDevice(userId, deviceUuid);
+                if (row == null) {
+                    throw new ServiceException("设备注册冲突，请重试");
+                }
+            }
         }
-        BlDevice row = existing.get(0);
         row.setStatus(DEVICE_ACTIVE);
-        row.setLastActiveAt(now);
+        row.setLastActiveAt(LocalDateTime.now());
         if (StringUtils.hasText(device.getDeviceName())) {
             row.setDeviceName(truncate(device.getDeviceName().trim(), DEVICE_NAME_MAX_LENGTH));
         }
@@ -331,8 +350,24 @@ public class AppAuthServiceImpl implements AppAuthService {
         if (StringUtils.hasText(device.getPlatform())) {
             row.setPlatform(platformOf(device.getPlatform()));
         }
+        if (row.getWorkerId() == null) {
+            // V2.2.7 之前落的老行没有 workerId：下次登录补一个，不改已有值（改了会让该设备历史 ID 失去解释）
+            row.setWorkerId(workerIdAllocator.nextWorkerId(userId));
+        }
         deviceMapper.updateById(row);
-        return row.getId();
+        return new DeviceTouch(row.getId(), row.getWorkerId());
+    }
+
+    private BlDevice findDevice(Long userId, String deviceUuid) {
+        List<BlDevice> rows = deviceMapper.selectList(Wrappers.<BlDevice>lambdaQuery()
+                .eq(BlDevice::getUserId, userId)
+                .eq(BlDevice::getDeviceUuid, deviceUuid));
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** 登录/刷新回传给客户端的设备信息：行 id 用于设备管理，workerId 用于生成雪花 ID */
+    private record DeviceTouch(Long deviceId, Integer workerId) {
+        static final DeviceTouch EMPTY = new DeviceTouch(null, null);
     }
 
     /** refresh 场景没有 DeviceInfo，只带得回设备标识，够定位设备行 */

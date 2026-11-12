@@ -39,4 +39,13 @@ public class LoginTokenVO {
 
     @Schema(description = "设备行 ID（未上报设备标识时为 null）")
     private Long deviceId;
+
+    /**
+     * 设备级雪花 workerId（0-1023），App 用它生成记录主键。
+     *
+     * <p>未上报设备标识时为 null（App 首次启动必须先上报 deviceUuid，否则拿不到 workerId）；
+     * 同一台设备重复登录返回同一个值（服务端幂等分配，不会漂移）。
+     */
+    @Schema(description = "设备级雪花 workerId（0-1023，未上报设备标识时为 null）")
+    private Integer workerId;
 }
