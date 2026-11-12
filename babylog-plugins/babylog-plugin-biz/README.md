@@ -1,10 +1,10 @@
 # babylog-plugin-biz
 
-BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与建表）。
+BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与建表，会话 M5 落地 App 认证）。
 
 - 契约模块：`babylog-plugin-biz-api`（`com.babylog.biz.api`）——错误码 `BabyLogErrorCode`（**8300-8399**，8xxx 段内空闲子段，migration/search/datainspect 已占 8000-8221）
 - 实现模块：`babylog-plugin-biz`（`com.babylog.biz`）——表前缀 **`bl_`**（ArchUnit A8 白名单已登记）
-- 路由规划：App 端 `/app/babylog/**`（StpMobileUtil 校验）、管理端 `/babylog/**`（@SaCheckPermission）——controller/service 属后续会话
+- 路由规划：App 端 `/app/babylog/**`（app-user 体系，注解 + `StpAppUtil` 校验）、管理端 `/babylog/**`（`@SaCheckPermission`）——管理端 controller 属后续会话
 
 ## 表清单（24 张，Flyway V2.2.4）
 
@@ -19,6 +19,9 @@ BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与
 
 `bl_family`（家庭，V2.1 点亮）/ `bl_device`（设备绑定/踢出）/ `bl_feedback`（意见反馈）/
 `bl_app_version`（版本与公告）/ `bl_vaccine_schedule`（疫苗时间表运营数据，区别于 bl_vaccinations 用户实例）/ `bl_ai_quota`（V3 启用）
+
+> `bl_device` 在 **V2.2.5** 补了 `device_uuid` + `uk(user_id, device_uuid)`（M5：登录幂等落行）；
+> `worker_id`（设备级雪花位）留 M6 与同步归属校验一起落地。
 
 ## 对齐口径（2026-11-11 拍板，App 端 V2.0 改造依据）
 
@@ -53,9 +56,71 @@ BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与
 - ArchUnit P0ArchitectureTest **22/22 绿**（含新增 biz 对称规则与 bl_ 前缀校验）
 - Room schema v7 ↔ V2.2.4 建表 SQL 逐表 diff **18/18 通过**
 
-## 后续（M5+）
+## App 认证（M5，会话 2026-11-12）
 
-- 登录：邮箱验证码（首发，自建补充接口，不动 system 插件）+ 账密注册兜底；App token 时长策略（StpAppUtil.STP 独立 StpLogic 可单独调 timeout）
-- 同步接口：`GET /app/babylog/sync/changes?since=`（按 server_updated_at 游标）+ `POST /app/babylog/sync/push`（version 乐观锁 + 逐条权限校验）
+端点全在 `/app/babylog/auth/**`，**不动 system 的 `/app/auth/*`**；账号仍是 `sys_user` + app-user 独立 Token。
+
+| 端点 | 鉴权 | 说明 |
+|---|---|---|
+| `POST /email/code` | 匿名 | 发 6 位验证码（300s 有效、60s 冷却、日 10 次、错 5 次作废） |
+| `POST /email/login` | 匿名 | 验证码登录，邮箱未注册则自动建档（`newUser=true`） |
+| `POST /register` | 匿名 | 账密注册（用户名 3-32 位字母数字下划线、密码 8-64 位），注册即登录 |
+| `POST /password/login` | 匿名 | 账密登录，`account` 可为用户名或邮箱；失败统一 2001 |
+| `POST /refresh` | 匿名 | 凭 refresh token 换新 access token（refresh 不轮换） |
+| `POST /logout` | `@SaCheckLogin(app-user)` | 注销 access + 作废 refresh |
+
+**token 策略（双 token，龙哥 2026-11-12 拍板）**：access **2h**（Sa-Token，`login(id, timeout)` 按次覆盖，全局 86400 不动）；
+refresh **30d**（Redis 只存 SHA-256 哈希，键 `bl:auth:rt:<hash>`）。refresh 不轮换，理由写在 `RedisRefreshTokenStore` 类注释里。
+
+**错误码**：8370 验证码错误/过期 · 8371 发送过频 · 8372 日配额满 · 8373 邮箱格式 · 8374 邮件服务未配置 ·
+8375 发信失败 · 8376 refresh 失效 · 8377 邮箱已绑定其他账号；登录失败/停用仍用 system 的 **2001/2002**，只有一条登录失败语义。
+
+**配置键**（全部内联 yml，各环境自带）：
+
+```yaml
+sa-token:
+  timeout: 86400          # 管端口径，App 不受影响（登录时按次覆盖）
+
+babylog:
+  auth:
+    access-token-ttl-seconds: 7200
+    refresh-token-ttl-seconds: 2592000
+    email:
+      code-ttl-seconds: 300
+      resend-interval-seconds: 60
+      daily-limit: 10
+      max-verify-attempts: 5
+      subject: BabyLog 登录验证码
+      from:               # 留空回退 spring.mail.username
+
+spring:
+  mail:                   # 只有 host 有值时 Boot 才装配 JavaMailSender
+    host: smtp.163.com
+    port: 465
+    username:             # 龙哥填（发件邮箱全称）
+    password:             # 龙哥填（163 客户端授权码，不是登录密码）
+    properties.mail.smtp.ssl.enable: true
+```
+
+未填 SMTP 时：发码端点返回 **8374**，起服与其他端点不受影响（`EmailCodeSender` 用 `ObjectProvider` 探测）。
+
+**技术债（M6+ 处理）**：注册建号走 `SysUserAccountDao` 的 JdbcTemplate 直写 `sys_user`。
+`IUserFacade` 只读、无写契约，补契约等于改 system 插件；biz 放 MyBatis 实体又会被 A8 判红。
+调用方只依赖 DAO 的方法签名，上游若提供写契约可整体替换。
+
+## 验证记录（M5）
+
+- 单测 **32 个全绿**（`EmailCodeServiceImplTest` 11 / `AppAuthServiceImplTest` 15 / `EmailCodeSenderTest` 4 / `SysUserAccountDaoTest` 2），SMTP/Redis/DB 全 Mock
+- ArchUnit **22/22 绿**（含 A11 五条匿名登记）
+- dev 起服（18080 旁路实例，避开 8080 上在跑的旧实例）+ curl 全链路：
+  8373 格式 → 8374 未配 SMTP → 注册 200 → 账密登录（用户名/邮箱）200 → `/app/auth/getInfo` 取到同一身份 →
+  refresh 200 → logout 200 → 退出后 getInfo 1002、refresh 8376、重复邮箱 8377
+- Flyway 在 `babylog_dev` 上从 v2.2.4 迁到 **v2.2.5**（1 个迁移，0.354s）
+- **未验**：真发信与验证码登录（缺 SMTP 凭据，需龙哥填完跑一次）
+
+## 后续（M6+）
+
+- 同步接口：`GET /app/babylog/sync/changes?since=`（按 server_updated_at 游标）+ `POST /app/babylog/sync/push`（version 乐观锁 + 逐条权限校验 + 设备级 workerId）
+- 设备：注册/心跳/踢出、`worker_id` 分配（M5 只落了 `device_uuid` 与登录时 upsert）
 - 基础数据：products/vaccines 增量下发；管理端 controller + 菜单 SQL
 - 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
