@@ -71,7 +71,8 @@ public class AppAuthServiceImpl implements AppAuthService {
     private static final int DEVICE_NAME_MAX_LENGTH = 100;
     private static final int APP_VERSION_MAX_LENGTH = 32;
     private static final String DEFAULT_PLATFORM = "UNKNOWN";
-    private static final String DEVICE_ACTIVE = "ACTIVE";
+    /** 设备状态常量统一取自 {@link BlDevice}（设备管理端点 M8 也用同一份） */
+    private static final String DEVICE_ACTIVE = BlDevice.STATUS_ACTIVE;
 
     private final EmailCodeService emailCodeService;
     private final AppTokenService tokenService;
@@ -176,6 +177,15 @@ public class AppAuthServiceImpl implements AppAuthService {
             // 账号被停用：refresh 一并作废，避免「停用后靠旧 refresh 无限续命」
             refreshTokenStore.revoke(cmd.getRefreshToken());
             throw new ServiceException(SystemErrorCode.USER_DISABLED);
+        }
+        // 设备被踢（M8 设备管理）：旧 refresh 作废，让客户端清凭证走重新登录。
+        // 用 8376 而不是新错误码——App 端 AuthRepository 只对 8376/1002 走「清凭证」分支，
+        // 换别的码会被当成可重试的网络错误无限退避。
+        // 已知宽限：该设备若之后重新登录，行回到 ACTIVE，仍在 Redis 里未过期的旧 refresh
+        // 会随之恢复有效——轮换 + 复用检测等 V2.1 家庭共享一起上（RefreshTokenStore 注释有登记）。
+        if (isDeviceKicked(user.getId(), record.deviceUuid())) {
+            refreshTokenStore.revoke(cmd.getRefreshToken());
+            throw new ServiceException(BabyLogErrorCode.REFRESH_TOKEN_INVALID);
         }
         String accessToken = tokenService.issueAccessToken(user.getId(), user.getUsername());
         DeviceTouch touch = touchDevice(user.getId(), deviceFromRecord(record.deviceUuid()));
@@ -363,6 +373,15 @@ public class AppAuthServiceImpl implements AppAuthService {
                 .eq(BlDevice::getUserId, userId)
                 .eq(BlDevice::getDeviceUuid, deviceUuid));
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** refresh 前置检查：该设备行是否处于 KICKED（查不到行=refresh 记录先于设备行存在，放行） */
+    private boolean isDeviceKicked(Long userId, String deviceUuid) {
+        if (!StringUtils.hasText(deviceUuid)) {
+            return false;
+        }
+        BlDevice row = findDevice(userId, deviceUuid);
+        return row != null && BlDevice.STATUS_KICKED.equals(row.getStatus());
     }
 
     /** 登录/刷新回传给客户端的设备信息：行 id 用于设备管理，workerId 用于生成雪花 ID */

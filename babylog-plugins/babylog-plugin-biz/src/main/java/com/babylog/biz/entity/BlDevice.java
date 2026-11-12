@@ -19,6 +19,11 @@ public class BlDevice extends BaseDO {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    /** 状态：活跃（登录/refresh 都会回到这个态） */
+    public static final String STATUS_ACTIVE = "ACTIVE";
+    /** 状态：已被账号所有者踢出（refresh 拒绝、重新登录可复活） */
+    public static final String STATUS_KICKED = "KICKED";
+
     /** 归属用户 id */
     private Long userId;
 

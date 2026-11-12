@@ -368,6 +368,44 @@ class AppAuthServiceImplTest {
         verify(tokenService).logoutCurrent();
     }
 
+    // ---------------- refresh 拦截被踢设备（M8 设备管理） ----------------
+
+    @Test
+    void refresh_rejectsKickedDeviceAndRevokesToken() {
+        when(refreshTokenStore.resolve("refresh-token"))
+                .thenReturn(Optional.of(new RefreshTokenRecord(USER_ID, "device-1", 1234L)));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "mom", "妈妈", ""));
+        BlDevice kicked = new BlDevice();
+        kicked.setId(9001L);
+        kicked.setUserId(USER_ID);
+        kicked.setDeviceUuid("device-1");
+        kicked.setStatus(BlDevice.STATUS_KICKED);
+        when(deviceMapper.selectList(any())).thenReturn(List.of(kicked));
+
+        RefreshTokenCmd cmd = new RefreshTokenCmd();
+        cmd.setRefreshToken("refresh-token");
+
+        // 8376 而不是新错误码：App 端 AuthRepository 只对 8376/1002 走「清凭证」分支
+        assertBizError(() -> service.refresh(cmd), BabyLogErrorCode.REFRESH_TOKEN_INVALID);
+        verify(refreshTokenStore).revoke("refresh-token");
+        verify(tokenService, never()).issueAccessToken(any(), any());
+    }
+
+    @Test
+    void refresh_allowsWhenDeviceRowMissing() {
+        // refresh 记录先于设备行存在（历史数据）：查不到行不算被踢，放行
+        when(refreshTokenStore.resolve("refresh-token"))
+                .thenReturn(Optional.of(new RefreshTokenRecord(USER_ID, "device-9", 1234L)));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "mom", "妈妈", ""));
+        when(deviceMapper.selectList(any())).thenReturn(List.of());
+
+        RefreshTokenCmd cmd = new RefreshTokenCmd();
+        cmd.setRefreshToken("refresh-token");
+        LoginTokenVO vo = service.refresh(cmd);
+
+        assertThat(vo.getAccessToken()).isEqualTo("access-token");
+    }
+
     // ---------------- 辅助 ----------------
 
     private static EmailLoginCmd emailLoginCmd(String email, String code, DeviceInfo device) {
