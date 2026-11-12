@@ -245,10 +245,69 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 4. 内置产品（`is_builtin=1`，id 1~99）**不要进 outbox**，只从 changes 拉。
 5. 收到 8344 换 ID 重推；收到 8342/8345 丢弃并记日志。
 
-## 后续（M7+）
+## 后续（滚动更新；最新清单见文末「后续（M9+）」）
 
-- 设备管理：注册/心跳/踢出端点（`worker_id` 已于 M6 落地）
-- 基础数据：products / vaccine_schedule 增量下发（当前走同步通道的 products 只有用户自定义行）
+- ~~设备管理：注册/心跳/踢出端点~~ ✅ M8 已落（见「设备管理与基础数据下发（M8）」节）
+- ~~基础数据：products 增量下发~~ ✅ M8 已落（V2.2.8 seed + `/app/babylog/base/products`）；
+  vaccine_schedule 下发等管理端界面好了再排
 - 管理端 controller + 菜单 SQL（`/babylog/**`，`@SaCheckPermission`）
 - V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；`bl_family_members` 的同步归属改用 family 维度
 - 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
+
+## 设备管理与基础数据下发（M8，会话 2026-11-12，V2.0 收官批）
+
+> prod 部署与内测包暂缓（龙哥 2026-11-12 拍板「继续向下开发」），本批先把 V2.0 服务端自身的
+> 两块拼图补齐：设备管理端点、内置产品 seed 与下发通道。管理端 controller 留下一批。
+
+### 设备管理（`/app/babylog/device/**`，app-user 鉴权）
+
+- `GET /list`：本账号全部设备（含 KICKED，按最后活跃倒序）。`deviceUuid` 给全量——
+  App 端靠「本机 deviceUuid == 行 deviceUuid」识别当前设备。
+- `POST /{id}/kick`：置 `status=KICKED`。行不物理删、workerId 不回收（软删行仍占
+  `uk(user_id, worker_id)`，回收会把重新登录变成唯一键冲突 500）。设备不存在或属于
+  他人统一 **8360**（不给存在性信号）。
+- **refresh 拦截**：KICKED 设备的 refresh 请求 → revoke + **8376**（不是新错误码——
+  App 端 `AuthRepository` 只对 8376/1002 走「清凭证」分支，换码会被当成可重试网络错退避）。
+- 重新登录**可复活**（ACTIVE）：登录本来要凭证，能过就是本人。已知宽限：复活后
+  仍在 Redis 未过期的旧 refresh 恢复有效，等 V2.1 家庭共享上轮换 + 复用检测一起收。
+
+### 基础数据下发（`/app/babylog/base/**`，app-user 鉴权）
+
+- `GET /products?since=&sinceId=&limit=`：`is_builtin=1` 的内置产品增量下发。
+  **返回结构复用 `SyncChangesVO`**（changes 键仍为 `products`，行内 camelCase、含
+  deleted/version）——App 端复用 `/sync/changes` 的解析与 upsert，只是**独立存一对游标**。
+- 为什么不并进 18 表同步通道：同步通道的归属过滤是 `user_id = 自己`，内置行是全局数据
+  （user_id=0 占位）会被滤成不可见；单独通道 + 单独游标，不给统一逻辑开例外口子。
+- 游标/limit 归一化已从 `SyncServiceImpl` 下沉 `SyncCursor`（两通道一套口径）。
+
+### V2.2.8 seed（内置产品 32 行）
+
+逐字对齐 App 端 `BuiltinProducts.kt`（跨仓库契约唯一事实来源）：30 在售（id 1~30）+
+2 历史墓碑（id 91/92，`deleted=1`——老用户库里就有，服务端缺行会让「软删行不复活」
+失去依据）。`user_id=0`、`device_id='builtin'`、ODKU no-op 幂等（与 App 端
+`INSERT OR IGNORE` 同语义：后台将来软删的行不会被重放复活）。
+
+## 验证记录（M8）
+
+- 单测 **85 个全绿**（M6 的 74 + 11：`DeviceServiceImplTest` 4 / `BaseDataServiceImplTest` 4 /
+  `SyncTableSqlTest` +1（builtin 通道只对有 is_builtin 列的表生成、不按 user_id 过滤）/
+  `AppAuthServiceImplTest` +2（refresh 拦截 KICKED + revoke、设备行缺失时放行））
+- ArchUnit **22/22 绿**（两个新 controller 均类级 `@SaCheckLogin`）
+- dev 起服（18080 旁路）：Flyway v2.2.7 → **v2.2.8**，32 行落库；curl 12 项：
+  base/products `since=0` 拉 32 行（30 在售 + 2 墓碑，id=10 伊可新字段逐字一致）→
+  游标推进空页**退回原游标** → 未登录 **1002** → device/list 行完整 → kick → KICKED →
+  被踢设备 refresh **8376** → 重新登录**复活 ACTIVE 且 workerId 不变** → 踢不存在 id **8360** →
+  18 表同步通道**回归全绿**（push upserted / 幂等 skipped / changes 只见自己数据、
+  **同步通道不含内置产品行**——base 与 sync 两通道隔离确认）
+- 联调踩坑：测试载荷把 `feedings.type` 写漏，8342 的 message 会直接指出缺失列
+  （`Column 'type' cannot be null`），排查很快——**报文校验的报错质量就是联调效率**。
+
+## 后续（M9+）
+
+- 管理端 controller + 菜单 SQL（`/babylog/**`，`@SaCheckPermission`；内置产品维护、
+  疫苗时间表、版本公告、反馈查看——本批 seed 的行将来就在这里改）
+- App 端接线：设备管理 UI（云同步面板下）、base/products 增量拉取接入 SyncWorker、
+  kick 提示文案（「该设备已被账号所有者移除」走 8376 既有文案分支即可）
+- 意见反馈通道（`bl_feedback`，V2.0 路线图「后台管理第一批」的第 4 件）
+- V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；
+  `bl_family_members` 的同步归属改用 family 维度；refresh 轮换 + 复用检测一起上
