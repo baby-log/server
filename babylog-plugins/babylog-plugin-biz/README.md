@@ -303,13 +303,13 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 - 联调踩坑：测试载荷把 `feedings.type` 写漏，8342 的 message 会直接指出缺失列
   （`Column 'type' cannot be null`），排查很快——**报文校验的报错质量就是联调效率**。
 
-## 后续（M11+）
+## 后续（M12+）
 
-- ~~管理端 controller + 菜单 SQL~~ ✅ M10 已落（见下方「管理端第一批（M10）」节；
+- ~~管理端前端页面~~ ✅ M11 已落（pivotos-ui fork = gitee `baby-log/manager`，本地 `业余项目/ui`，
+  develop：`views/babylog/{product,device,version,feedback}/index.vue` + `api/babylog/` 四模块 +
+  `packages/types/src/babylog.ts`；V2.2.10 菜单解封，详见「管理端前端（M11）」节；
   疫苗时间表维护未做——bl_vaccine_schedule 无 seed，等运营数据有了再排）
-- ~~意见反馈通道~~ ✅ M10 已落（App 匿名提交 + 管理端查看/回复；App 端提交 UI 留 M11）
-- 管理端前端页面（pivotos-ui fork，`babylog/product|device|version|feedback` 四页；
-  菜单已建好，V2.2.9 里 M/C 行 visible='1' 隐藏，页面就绪后翻 '0'）
+- ~~意见反馈通道~~ ✅ M10 已落（App 匿名提交 + 管理端查看/回复；App 端提交 UI 留 M12）
 - ⚠️ **框架遗留债（龙哥拍板）**：`@RepeatSubmit` 全应用静默失效——
   `starter-redis` 的 `RedisAutoConfiguration` 类级 `@ConditionalOnBean(RedissonClient)`
   在 Redisson 自家自动配置之前求值（com.babylog < org.redisson 字典序）→ 整类被跳过 →
@@ -381,4 +381,50 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
   `package -am` 秒过、jar 时间戳不刷新、内嵌 biz jar 还是旧的（外层 unzip -l 还看不到内嵌
   jar 里的类名，极易误判）。复现姿势：删掉 target 里的 jar + jar.original 再打包，
   并解出 `BOOT-INF/lib/babylog-plugin-biz-3.2.0.jar` 核对新类在场才算数
-- 发现框架遗留债：`@RepeatSubmit` 全应用静默失效（见上方 M11+ 清单⚠️条目）
+- 发现框架遗留债：`@RepeatSubmit` 全应用静默失效（见上方 M12+ 清单⚠️条目）
+
+## 管理端前端（M11，会话 2026-11-12，pivotos-ui fork 落地四页）
+
+> 仓库形态：fork pivotos-ui → gitee `baby-log/manager`（私有，本地 `业余项目/ui`，develop）。
+> origin = gitee fork，upstream = 本地 PivotOS pivotos-ui 目录（框架升级照服务端口径走手工移植）。
+> **未做全量改名**：`@pivotos/*` 工作区包名、`pivotos-ui` 目录名保持原样——改名收益低
+> （包名仅 monorepo 内部引用）而 diff 巨大，不值得；业务增量全部收在
+> `views/babylog/`、`api/babylog/`、`packages/types/src/babylog.ts` 三个新增落点，与上游冲突面最小。
+
+### 交付
+
+| 东西 | 说明 |
+|---|---|
+| `packages/types/src/babylog.ts` | M10 端点契约类型；**Long 一律 string**（id/version/serverUpdatedAt/lastUsedAt/userId），Integer 开关（enabled/versionCode/forceUpdate）保持 number |
+| `apps/admin/src/api/babylog/` | product（无新增端点——内置行只由 seed 产生）/ device / version / feedback 四模块，错误码语义写 JSDoc |
+| `views/babylog/{product,device,version,feedback}/index.vue` | 既有插件页同款范式（useTablePage + YSearchForm/YTable/YForm/YDialog + v-hasPermi 按钮级权限） |
+| `V2.2.10__babylog_admin_menu_visible.sql` | 菜单解封：5000/5010/5020/5030/5040 五行 visible 翻 '0'；5010 icon 'shopping'→'shop'（前者不在前端图标注册表）。权限字符零改动 |
+
+### 必须记住的判断
+
+1. **菜单 component 路径 = views 相对路径**：`babylog/product/index` → `views/babylog/product/index.vue`
+   （`stores/permission.ts` 的 `import.meta.glob('../views/**/*.vue')` 构建期静态收集，纯文件路径映射，
+   前端不需要注册路由）。**defineOptions name 必须等于路由名**（`/babylog/product` → `BabylogProduct`，
+   规则在 system 侧 `MenuServiceImpl#toRouteName`：全路径分段大驼峰）——keep-alive/标签页刷新靠它。
+2. **dev 起服联调口径**：vite 代理 `/api` → `VITE_API_BASE_URL`（默认 8080 龙哥旧实例），
+   旁路联调用 `VITE_API_BASE_URL=http://127.0.0.1:18080 pnpm dev`；后端超管种子账号
+   `admin` / `admin123`（V1.0.1 初始化数据，sys 体系登录 `POST /system/auth/login`）。
+3. seed 的产品行 `enabled=0` 是**故意的**（对齐 App 端 BuiltinProducts「默认关」，用户自己开启），
+   不是管理端 bug；管理端文案沿用服务端 @Schema 的「在售/下架」口径。
+4. V2.2.9 在 dev 已应用（Flyway checksum 锁死不能原地改文案），翻牌走新号 V2.2.10；
+   test/prod 未部署过 M10 jar，届时 V2.2.9+V2.2.10 按序一次到位。
+
+## 验证记录（M11）
+
+- 前端 `pnpm run build`（vue-tsc 类型检查 + vite build）全绿；eslint 新增文件零告警；
+  dist 产物含四个 babylog 异步 chunk
+- biz 单测 **109 全绿**（含 AdminControllerPermissionContractTest，纯反射比对不解析 SQL，
+  迁移新增不影响）；dev 起服 18080：Flyway v2.2.9 → **v2.2.10** 应用成功
+- admin 登录 → `/system/menu/routers`：BabyLog 运营目录 + 四子菜单 hidden=false、
+  component/name 与前端逐字对齐、icon 归一为 shop
+- 四端点契约冒烟（超管 token，前端将用的确切参数形态）：product/page（FORMULA 过滤、
+  Long 字符串口径核对）→ version 全 CRUD（create 返回 id 字符串、update、delete、
+  8390 报错路径）→ device/overview（account=admin 空设备表正常）→ feedback/page 状态过滤
+  + reply（PENDING→REPLIED、replyTime 盖章）
+- 遗留：dev 库留了一条 versionCode=99 的软删测试行与一条已回复的探针反馈行，可清可留；
+  test/prod 环境部署仍排队龙哥 1Panel（现需带 M8+M10 jar + 前端 dist）
