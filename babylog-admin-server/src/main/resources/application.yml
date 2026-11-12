@@ -135,6 +135,14 @@ spring:
         version: 3.2.0
   # ===== Spring Cloud / Alibaba（V3-S2 L2）=====
 
+# 邮件健康检查：MailHealthIndicator 会随 spring.mail.host 自动出现并真的去连 SMTP，
+# 一旦发件通道抖动，/actuator/health 直接变 DOWN，把「验证码发不出去」放大成「服务不健康」。
+# 这里显式关掉：发信失败由发码端点返回 8375 + [BABYLOG][auth] 日志暴露，不占用探活信号。
+management:
+  health:
+    mail:
+      enabled: false
+
 sa-token:
   token-name: Authorization
   timeout: 86400
@@ -185,6 +193,21 @@ babylog:
       paths: /warm-flow/**
       exclude-paths: 
       message: 该端点要求登录后访问
+    # ---------- BabyLog App 认证（M5）：双 token + 邮箱验证码策略 ----------
+    # 双 token：access 短（Sa-Token 持有，2h）、refresh 长（Redis 存哈希，30d）。
+    # access 过期由客户端拿 refresh 换新（POST /app/babylog/auth/refresh），refresh 过期才回登录页。
+    # 与 sa-token.timeout=86400（管端 / sys-user）互不影响：登录时按次覆盖有效期，全局配置不动。
+    access-token-ttl-seconds: 7200
+    refresh-token-ttl-seconds: 2592000
+    email:
+      # 验证码短有效期 + 冷却 + 日配额 + 错误次数作废，四道闸独立生效
+      code-ttl-seconds: 300
+      resend-interval-seconds: 60
+      daily-limit: 10
+      max-verify-attempts: 5
+      subject: BabyLog 登录验证码
+      # 发件人留空 = 回退 spring.mail.username（各环境在自己 profile 里配 SMTP）
+      from:
   # 日志落盘（v3.1.0 生产化 · A3，V3.1-H · B1 追加按级别分文件）。实际由 logback-spring.xml 消费，
   # 这里只定义可覆盖项：prod/test 按「单文件 100MB + 按天切分 + 归档 gzip」滚动写两个文件——
   #   主文件  ：INFO 及以下（保留 30 天 / 总量 5GB）
