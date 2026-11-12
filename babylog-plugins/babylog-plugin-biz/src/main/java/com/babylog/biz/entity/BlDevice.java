@@ -22,6 +22,9 @@ public class BlDevice extends BaseDO {
     /** 归属用户 id */
     private Long userId;
 
+    /** 设备唯一标识（App 首次启动生成，登录时上报；(user_id, device_uuid) 唯一） */
+    private String deviceUuid;
+
     /** 设备名（App 端上报的型号/自定义名） */
     private String deviceName;
 
