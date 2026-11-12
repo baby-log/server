@@ -94,10 +94,16 @@ babylog:
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # 调度：不部署 XXL-Job 调度中心（BabyLog 决策 2026-11-12）。脚手架的 7 个留存清理任务
-  # （操作日志/登录日志/任务日志/消息/AI 记录/流程历史）由 starter-job 的
-  # LocalRetentionScheduler 本地 @Scheduled 自动接管（默认每天 03:00，
-  # 可调 babylog.retention.local-fallback.cron）。将来需要集中调度再恢复 babylog.job 段。
+  # 调度：XXL-Job（部署时启用）。dev 服务器 175.24.176.176:8101 已有调度中心（实测可达）；
+  # 部署环境若与之网络互通，取消下方注释并按 admin UI 核对 group-id / access-token；
+  # 若不互通，保持注释状态——LocalRetentionScheduler 本地调度会自动接管清理任务（每天 03:00），
+  # 只是失去 admin 集中管理/手动触发能力。
+  # job:
+  #   admin-addresses: http://175.24.176.176:8101
+  #   app-name: babylog-executor
+  #   port: 9999
+  #   group-id: 3
+  #   access-token: qaz123
   # 检索：BabyLog 业务检索在 App 端 Room 完成，服务端全文检索仅 AI KB 需要——
   # 现阶段用 simple 内存实现（零中间件，进程内可检索、重启即失）。
   # AI KB 阶段要上 ES 时改回 type: es-java 并恢复 es-java 子段

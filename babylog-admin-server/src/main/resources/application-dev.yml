@@ -91,10 +91,17 @@ babylog:
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # 调度：不部署 XXL-Job 调度中心（BabyLog 决策 2026-11-12）。脚手架的 7 个留存清理任务
-  # （操作日志/登录日志/任务日志/消息/AI 记录/流程历史）由 starter-job 的
-  # LocalRetentionScheduler 本地 @Scheduled 自动接管（默认每天 03:00，
-  # 可调 babylog.retention.local-fallback.cron）。将来需要集中调度再恢复 babylog.job 段。
+  # 调度：XXL-Job 调度中心已接入（175.24.176.176:8101，2026-11-12 实测可达，根路径无 context-path）。
+  # ⚠️ 配了此段后 LocalRetentionScheduler 本地兜底退出——**必须在 admin UI 建好执行器与 7 个任务**，
+  # 否则清理任务静默停止（脚手架踩过的坑）。执行器 AppName=babylog-dev-executor（自动注册）；
+  # 任务清单与建议 cron 见《独立产品规划/09-服务端组件与配置清单》。
+  # accessToken 与 group-id 若与 admin 实际不符，以 admin UI 为准修改。
+  job:
+    admin-addresses: http://175.24.176.176:8101
+    app-name: babylog-dev-executor
+    port: 9999
+    group-id: 1   # admin UI「执行器管理」里 babylog-dev-executor 的 ID，核查后修正
+    access-token: qaz123   # 与 admin 的 xxl.job.accessToken 一致，核查后修正
   # A4-1 代码索引与定位（S110）：默认关闭（要扫仓库源码），dev 显式开启
   ai:
     coding:
