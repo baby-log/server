@@ -7,8 +7,8 @@ spring:
           # 开发库 babylog；中间件已迁至公网服务器 175.24.176.176（2026-07-31 搬迁）
           # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
           url: jdbc:mysql://10.0.0.7:3306/babylog_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
-          username: root
-          password: mysql_DNCi3f
+          username: babylog_test
+          password: paBA7j5zyKJKZMmF
           driver-class-name: com.mysql.cj.jdbc.Driver
       # 连接池（V3.1-G · P1-B2）：与容量无关的生产参数在 application.yml，
       # 这里只给容量三件套。test 保持 20/5/5，与全量 IT 的既有基线一致。
@@ -73,19 +73,17 @@ babylog:
     public-url: https://cos.293242.com
   # XXL-Job 调度中心（测试环境）
   job:
-    admin-addresses: http://10.0.0.7:8101
+    admin-addresses: http://10.0.0.7:8200
     app-name: babylog-test-executor
     port: 9999
-    group-id: 3   # XXL-Job admin 中 babylog-executor 执行器组 ID
-    access-token: 123456
-  # 检索（S121/S122）：test 环境 ES——10.0.0.7:9200（内网，与 test 库同机；口令与 dev 一致）
-  # 注意：10.0.0.7 属内网网段，非该 VPC 内（如开发机）访问不通——检索会自动回退数据库查询，不影响业务。
+    group-id: 4   # XXL-Job admin 中 babylog-executor 执行器组 ID
+    access-token: qazwsx123
+  # 检索：BabyLog 业务检索在 App 端 Room 完成，服务端全文检索仅 AI KB 需要——
+  # 现阶段用 simple 内存实现（零中间件，进程内可检索、重启即失）。
+  # AI KB 阶段要上 ES 时改回 type: es-java 并恢复 es-java 子段
+  # （uris/username/password/compatibility-mode，接法见 pivotos-doc 检索章节）。
   search:
-    type: es-java
-    es-java:
-      uris: http://10.0.0.7:9200
-      username: elastic
-      password: Elastic_RGRSPM
+    type: simple
   # 微信小程序（测试号）
   wechat:
     miniapp:
