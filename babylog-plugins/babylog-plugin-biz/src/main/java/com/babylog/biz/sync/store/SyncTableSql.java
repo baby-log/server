@@ -9,6 +9,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -216,18 +217,28 @@ final class SyncTableSql {
 
     // ------------------------------------------------------------------
 
-    /** 父类字段在前（BaseDO → BlSyncDO → 实体），保证列顺序稳定可读 */
+    /**
+     * 父类字段在前（BaseDO → BlSyncDO → 实体），保证列顺序稳定可读。
+     *
+     * <p>按<b>属性名去重</b>：字段遮蔽（子类重复声明父类同名字段）会让同一列被推导两次，
+     * 生成的 insert 语句直接是 {@code Duplicate column} ——父类的那个胜出（它是 @Version /
+     * 归属列的声明处），子类的遮蔽字段在实体层面就应当消灭，这里只是兜底。
+     */
     private static List<Field> collectFields(Class<?> type) {
         Deque<Class<?>> chain = new ArrayDeque<>();
         for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
             chain.addFirst(current);
         }
         List<Field> fields = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (Class<?> current : chain) {
             for (Field field : current.getDeclaredFields()) {
                 if (field.isSynthetic()
                         || Modifier.isStatic(field.getModifiers())
                         || Modifier.isTransient(field.getModifiers())) {
+                    continue;
+                }
+                if (!seen.add(field.getName())) {
                     continue;
                 }
                 fields.add(field);
