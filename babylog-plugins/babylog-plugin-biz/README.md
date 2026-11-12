@@ -4,7 +4,7 @@ BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与
 
 - 契约模块：`babylog-plugin-biz-api`（`com.babylog.biz.api`）——错误码 `BabyLogErrorCode`（**8300-8399**，8xxx 段内空闲子段，migration/search/datainspect 已占 8000-8221）
 - 实现模块：`babylog-plugin-biz`（`com.babylog.biz`）——表前缀 **`bl_`**（ArchUnit A8 白名单已登记）
-- 路由规划：App 端 `/app/babylog/**`（app-user 体系，注解 + `StpAppUtil` 校验）、管理端 `/babylog/**`（`@SaCheckPermission`）——管理端 controller 属后续会话
+- 路由规划：App 端 `/app/babylog/**`（app-user 体系，注解 + `StpAppUtil` 校验）、管理端 `/babylog/**`（`@SaCheckPermission`，M10 已落地，见「管理端第一批（M10）」节）
 
 ## 表清单（24 张，Flyway V2.2.4）
 
@@ -245,12 +245,13 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 4. 内置产品（`is_builtin=1`，id 1~99）**不要进 outbox**，只从 changes 拉。
 5. 收到 8344 换 ID 重推；收到 8342/8345 丢弃并记日志。
 
-## 后续（滚动更新；最新清单见文末「后续（M9+）」）
+## 后续（滚动更新；最新清单见文末「后续（M11+）」）
 
 - ~~设备管理：注册/心跳/踢出端点~~ ✅ M8 已落（见「设备管理与基础数据下发（M8）」节）
 - ~~基础数据：products 增量下发~~ ✅ M8 已落（V2.2.8 seed + `/app/babylog/base/products`）；
   vaccine_schedule 下发等管理端界面好了再排
-- 管理端 controller + 菜单 SQL（`/babylog/**`，`@SaCheckPermission`）
+- ~~管理端 controller + 菜单 SQL~~ ✅ M10 已落（见文末「管理端第一批（M10）」节）
+- ~~意见反馈通道~~ ✅ M10 已落（表 V2.2.4 早就建好，本批补 App 端点 + 管理端查看/回复）
 - V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；`bl_family_members` 的同步归属改用 family 维度
 - 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
 
@@ -302,12 +303,82 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 - 联调踩坑：测试载荷把 `feedings.type` 写漏，8342 的 message 会直接指出缺失列
   （`Column 'type' cannot be null`），排查很快——**报文校验的报错质量就是联调效率**。
 
-## 后续（M9+）
+## 后续（M11+）
 
-- 管理端 controller + 菜单 SQL（`/babylog/**`，`@SaCheckPermission`；内置产品维护、
-  疫苗时间表、版本公告、反馈查看——本批 seed 的行将来就在这里改）
-- App 端接线：设备管理 UI（云同步面板下）、base/products 增量拉取接入 SyncWorker、
-  kick 提示文案（「该设备已被账号所有者移除」走 8376 既有文案分支即可）
-- 意见反馈通道（`bl_feedback`，V2.0 路线图「后台管理第一批」的第 4 件）
+- ~~管理端 controller + 菜单 SQL~~ ✅ M10 已落（见下方「管理端第一批（M10）」节；
+  疫苗时间表维护未做——bl_vaccine_schedule 无 seed，等运营数据有了再排）
+- ~~意见反馈通道~~ ✅ M10 已落（App 匿名提交 + 管理端查看/回复；App 端提交 UI 留 M11）
+- 管理端前端页面（pivotos-ui fork，`babylog/product|device|version|feedback` 四页；
+  菜单已建好，V2.2.9 里 M/C 行 visible='1' 隐藏，页面就绪后翻 '0'）
+- ⚠️ **框架遗留债（龙哥拍板）**：`@RepeatSubmit` 全应用静默失效——
+  `starter-redis` 的 `RedisAutoConfiguration` 类级 `@ConditionalOnBean(RedissonClient)`
+  在 Redisson 自家自动配置之前求值（com.babylog < org.redisson 字典序）→ 整类被跳过 →
+  `RepeatSubmitChecker` 未注册 → `starter-web` 幂等拦截器不装配。18080 --debug
+  实测确认（condition report 两行 Did not match）。影响 message 模板新增与本批反馈端点。
+  修法是 starter 一行改动（类级条件移到 @Bean 方法级或加 `@AutoConfiguration(after=…)`），
+  但踩「不改 starter 脚手架」红线，M10 未动；修复前反馈端点无防刷（内测期熟人包风险可控）
+- App 端反馈提交 UI（设置页入口，POST /app/babylog/feedback，匿名可用）
 - V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；
   `bl_family_members` 的同步归属改用 family 维度；refresh 轮换 + 复用检测一起上
+
+## 管理端第一批（M10，会话 2026-11-12，「后台管理第一批」剩余拼图）
+
+> 路由 `/babylog/**`（sys-admin 体系，方法级 `@SaCheckPermission(type = StpSysUtil.TYPE)`），
+> 与 App 端点（`/app/babylog/**`，app-user 体系）两套鉴权互不相通。
+> 菜单 SQL **V2.2.9**（5000 号段：5000 目录 + 5010 产品 / 5020 设备 / 5030 版本 / 5040 反馈，
+> 提交前全仓 grep 过号段无占用）。M/C 行 `visible='1'` 隐藏——pivotos-ui 页面 M11 才有，
+> 权限字符已生效可先用 curl 验证；页面就绪后一条 UPDATE 翻回 '0'。
+
+### 端点清单
+
+| 模块 | 端点 | 权限字符 | 说明 |
+|---|---|---|---|
+| 产品 | `GET /babylog/product/page` | babylog:product:list | 固定 `is_builtin=1`，分类/品牌/品名/上架过滤 |
+| 产品 | `GET /babylog/product/{id}` | babylog:product:query | 详情（墓碑行按不存在处理） |
+| 产品 | `PUT /babylog/product/{id}` | babylog:product:edit | 编辑含上下架（enabled 0/1）；改动经 base 通道增量下发 |
+| 产品 | `DELETE /babylog/product/{id}` | babylog:product:remove | 软删置墓碑，App 端 UI 隐藏，不可复活 |
+| 设备 | `GET /babylog/device/overview?account=` | babylog:device:list | 账号摘要+全部设备；account=用户名或邮箱 |
+| 设备 | `POST /babylog/device/{id}/kick` | babylog:device:kick | 复用 M8 `DeviceService.kick`，与本人移除同语义 |
+| 版本 | `GET /babylog/version/page` | babylog:version:list | platform/status 过滤，versionCode 倒序 |
+| 版本 | `POST /babylog/version` + `PUT /{id}` + `POST /{id}/publish` + `DELETE /{id}` | add/edit/publish/remove | DRAFT→PUBLISHED 单向；已发布锁定（8391） |
+| 反馈 | `GET /babylog/feedback/page` | babylog:feedback:list | 状态过滤，提交时间倒序 |
+| 反馈 | `PUT /babylog/feedback/{id}/reply` | babylog:feedback:reply | PENDING→REPLIED，盖回复时间 |
+| 反馈(App) | `POST /app/babylog/feedback` | **匿名**（A11 ③轨） | 不要求登录；登录了自动带 userId；联系方式可空 |
+
+### 必须记住的语义（写代码前先看）
+
+1. **管理端改内置产品 = 动 base 通道的游标与版本**：`updateById` 前必须把实体里 SELECT
+   出来的 `serverUpdatedAt` 置 null——MP 默认 NOT_NULL 策略会跳过该列，数据库
+   `ON UPDATE CURRENT_TIMESTAMP(3)` 才会触发；不置空 = 游标不前进 = App 永远拉不到。
+   `version` 靠乐观锁拦截器（实体 @Version 非空自动 SET version+1），并发冲突按 8348 处理。
+2. **两通道隔离不破**：管理端只准碰 `is_builtin=1`（8349 拒绝用户自建行）；墓碑行
+   被 @TableLogic 滤掉查不到（8348），「软删行不复活」天然守住。
+3. **账号解析口径**（设备查看）：先 `IUserFacade.getByUsername` 精确查，查不到再
+   `IUserAccountFacade.getByEmail(trim+小写)`（与 AppAuthServiceImpl 同口径），都 miss → 8362。
+4. **版本公告单向状态机**：PUBLISHED 行改/删/再发布一律 8391——用户可能已经看过这版公告，
+   改历史会破坏「同一 versionCode 对外口径稳定」；要改内容就发新 versionCode。
+   App 端升级检查端点（拉最新 PUBLISHED）属 V3，本批不做。
+5. **反馈匿名端点的 A11 口径**：方法体读 `LoginContext.getUserId()`（未登录返 null 落匿名），
+   走「业务代码兜底」③轨，**不登记** ANONYMOUS_ENDPOINTS（登记制留给纯匿名、不碰上下文的端点）。
+   `@RepeatSubmit` 已挂但因上方框架遗留债暂不生效，修复前无防刷。
+
+### 错误码（本批新增 6 个）
+
+8348 产品不存在（含墓碑）· 8349 仅内置产品可管理端维护 · 8362 账号不存在 ·
+8381 反馈内容 5-1000 字 · 8390 版本记录不存在 · 8391 仅草稿可修改/发布/删除
+
+## 验证记录（M10）
+
+- 单测 **109 个全绿**（M8 的 85 + 本批 24：`AdminProductServiceImplTest` 7 /
+  `AdminDeviceServiceImplTest` 5 / `AdminAppVersionServiceImplTest` 5 /
+  `FeedbackServiceImplTest` 5 / `AdminControllerPermissionContractTest` 2——
+  后者锁「controller 权限字符与菜单 SQL 逐字一致」+「App 反馈端点保持匿名且挂 RepeatSubmit」，
+  菜单或 controller 任一侧改字立即红）
+- ArchUnit **22/22 绿**（A8 无新 @TableName、A10 无 last(、A11 新端点全有鉴权信号）
+- dev 起服（18080 旁路）：Flyway v2.2.8 → **v2.2.9**，16 行菜单落库；curl 冒烟：
+  匿名反馈提交 200 → 内容过短 1001 → 管理端四端点未登录全部 **1002**（鉴权闸生效）
+- ⚠️ 踩坑一枚：admin-server fat jar 的 **up-to-date 误跳过**——biz 源码变了但
+  `package -am` 秒过、jar 时间戳不刷新、内嵌 biz jar 还是旧的（外层 unzip -l 还看不到内嵌
+  jar 里的类名，极易误判）。复现姿势：删掉 target 里的 jar + jar.original 再打包，
+  并解出 `BOOT-INF/lib/babylog-plugin-biz-3.2.0.jar` 核对新类在场才算数
+- 发现框架遗留债：`@RepeatSubmit` 全应用静默失效（见上方 M11+ 清单⚠️条目）
