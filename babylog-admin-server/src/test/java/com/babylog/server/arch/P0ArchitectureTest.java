@@ -486,6 +486,13 @@ class P0ArchitectureTest {
         java.util.Map.entry("MiniAuthController#login", "小程序登录入口：同上"),
         java.util.Map.entry("MiniAuthController#phone", "小程序手机号授权登录：同上"),
         java.util.Map.entry("MiniAuthController#bind", "小程序首次绑定：绑定前尚未有登录态，必须匿名"),
+        // BabyLog App 认证补充端点（M5）：登录/注册/发码/换 token 的本质就是「还没有登录态」，
+        // 逐个登记而非给类加 @SaCheckLogin 注解——落库 5 条 = 5 张欠条，端点删了必须同步删登记。
+        java.util.Map.entry("BabyLogAuthController#sendLoginCode", "BabyLog 邮箱验证码发送：登录前调用，必须匿名"),
+        java.util.Map.entry("BabyLogAuthController#loginByEmailCode", "BabyLog 邮箱验证码登录入口：同上"),
+        java.util.Map.entry("BabyLogAuthController#register", "BabyLog 账密注册入口：同上（注册即登录，返回凭证）"),
+        java.util.Map.entry("BabyLogAuthController#loginByPassword", "BabyLog 账密登录入口：同上"),
+        java.util.Map.entry("BabyLogAuthController#refresh", "BabyLog refresh 换 access：access 已过期，凭 refresh token 匿名调用"),
         java.util.Map.entry("EncryptKeyController#publicKey", "RSA 公钥：本身就是公开材料，供前端加密传输用（私钥不出服务端）"),
         // V3.1-F · P1-B8-1：Prometheus 抓取端点。Prometheus server 抓取不带登录态，端点必须匿名可达；
         // 代价是「指标全貌对任何能访问该端口的人可见」，故生产必须在网络层（Nginx/安全组）限制内网，
