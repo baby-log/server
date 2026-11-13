@@ -11,8 +11,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -73,17 +75,33 @@ public class FamilyAccessScopeResolver implements SyncAccessScopeResolver {
                 .eq(BlMemberPermission::getMemberId, me.getId()));
         Set<SyncCategory> readable = FamilyPermissions.defaultReadable(me.getRole());
         Set<SyncCategory> writable = FamilyPermissions.defaultWritable(me.getRole());
+        // 显式行覆盖（M16）：某分类存在任一显式行 → 该分类的裁决完全由行决定（跨宝宝取 OR）；
+        // 无行的分类走角色默认兑底。正常数据里同分类各行一致（改角色 = 全量原地重写），
+        // 不一致的脏数据「任一授权即授权」从宽不崩（脏数据口径维持 M15：取最新 + 告警不抛）。
+        Map<SyncCategory, boolean[]> explicit = new EnumMap<>(SyncCategory.class);
         for (BlMemberPermission row : rows) {
             SyncCategory category = parseCategory(row.getCategory());
             if (category == null) {
                 continue;
             }
-            if (Integer.valueOf(1).equals(row.getCanRead())) {
-                readable.add(category);
+            boolean[] grant = explicit.computeIfAbsent(category, c -> new boolean[2]);
+            grant[0] |= Integer.valueOf(1).equals(row.getCanRead());
+            grant[1] |= Integer.valueOf(1).equals(row.getCanWrite());
+        }
+        for (SyncCategory category : SyncCategory.values()) {
+            boolean[] grant = explicit.get(category);
+            if (grant == null) {
+                continue;
             }
-            // M15：权限行只加宽不减窄（见 SyncAccessScope javadoc）；M16 权限编辑 API 上线后改「覆盖」语义
-            if (Integer.valueOf(1).equals(row.getCanWrite())) {
+            if (grant[0]) {
+                readable.add(category);
+            } else {
+                readable.remove(category);
+            }
+            if (grant[1]) {
                 writable.add(category);
+            } else {
+                writable.remove(category);
             }
         }
         return new SyncAccessScope(me.getId(), me.getRole(), visibleUserIds, readable, writable);

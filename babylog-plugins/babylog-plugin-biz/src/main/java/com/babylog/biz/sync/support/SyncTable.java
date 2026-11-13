@@ -54,9 +54,16 @@ public enum SyncTable {
     CHILDREN("children", "bl_children", BlChild.class, null, java.util.Set.of("familyId")),
     /** 记录类型开关覆盖（基础设施：决定 App 首页显示哪些记录类型） */
     RECORD_TYPE_SETTINGS("record_type_settings", "bl_record_type_settings", BlRecordTypeSetting.class, null, java.util.Set.of()),
-    /** 家庭成员（基础设施：created_by 显示名靠它翻译） */
+    /**
+     * 家庭成员（服务端管理表，M16）：家庭服务（create/join/changeRole/kick）维护，
+     * 客户端只从 changes 拉取、push 一律 8350 拒收——否则成员可整行重推自我改成 OWNER
+     * （归属列 user_id = 成员自己，8344 归属校验拦不住自己的行）。
+     */
     FAMILY_MEMBERS("family_members", "bl_family_members", BlFamilyMember.class, null, java.util.Set.of()),
-    /** 成员分类权限（基础设施：V2.1 权限矩阵，V2.0 只有 owner 一行） */
+    /**
+     * 成员分类权限（服务端管理表，M16）：同 {@link #FAMILY_MEMBERS}，由家庭服务按角色矩阵
+     * 生成与原地更新（改角色 = 全量重写 can_read/can_write），客户端推送一律 8350 拒收。
+     */
     MEMBER_PERMISSIONS("member_permissions", "bl_member_permissions", BlMemberPermission.class, null, java.util.Set.of()),
     /** 产品库（基础设施：内置行服务端下发，自定义行用户自己维护） */
     PRODUCTS("products", "bl_products", BlProduct.class, null, java.util.Set.of()),
@@ -99,6 +106,10 @@ public enum SyncTable {
     /** 本表额外的服务端独占属性（payload 与 pull 都排除；family_members 的 familyId 不在此列——它是客户端可推的载荷列） */
     private final java.util.Set<String> serverOwnedProperties;
 
+    /** 服务端管理表（M16）：这两张由家庭服务维护，客户端只拉不推（push 拒收 8350） */
+    private static final java.util.Set<SyncTable> SERVER_MANAGED =
+            java.util.Set.of(FAMILY_MEMBERS, MEMBER_PERMISSIONS);
+
     SyncTable(String apiName, String tableName, Class<? extends BlSyncDO> entityClass, SyncCategory category,
               java.util.Set<String> serverOwnedProperties) {
         this.apiName = apiName;
@@ -128,6 +139,15 @@ public enum SyncTable {
     /** 本表的服务端独占属性（不进载荷、不回传；如 bl_children.family_id 由家庭服务回填） */
     public java.util.Set<String> serverOwnedProperties() {
         return serverOwnedProperties;
+    }
+
+    /**
+     * 是否服务端管理表（family_members / member_permissions）：push 整表拒收（8350），
+     * 拉取照常随行下发。这是 M16 提权漏洞的收口：这两表的行归属 = 成员自己，
+     * 不拒收则成员可整行重推自我改成 OWNER / 翻转 canWrite。
+     */
+    public boolean isServerManaged() {
+        return SERVER_MANAGED.contains(this);
     }
 
     /** 客户端传的表标识 → 注册表项（大小写敏感：与 Room 表名逐字相同） */

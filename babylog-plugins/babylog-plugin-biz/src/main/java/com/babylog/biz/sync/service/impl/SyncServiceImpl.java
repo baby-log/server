@@ -36,8 +36,9 @@ import java.util.Set;
  *   <li><b>拉取</b>：游标推进、跨表归并排序、分类过滤、分页；可见范围与读分类由
  *       {@link SyncAccessScopeResolver} 推导（V2.1 M15 读侧家庭可见：成员拉得到家庭
  *       全部 ACTIVE 成员的数据；无家庭用户集合 = {自己}，行为与 V2.0 零变化）；</li>
- *   <li><b>推送</b>：结构校验 → 归属校验 → 版本门禁 → 落库，逐条裁决（部分成功）；
- *       写权限判断交给 {@link SyncPermissionGuard}（M15 解析就绪、拦截 M16 点亮）；</li>
+ *   <li><b>推送</b>：结构校验 → 服务端管理表拒推（8350）→ 归属校验（家庭维度放行）→
+ *       版本门禁 → 写权限（8343）→ 落库，逐条裁决（部分成功）；
+ *       写权限判断交给 {@link SyncPermissionGuard}（M16 起拦截已点亮）；</li>
  *   <li><b>协议错误</b>：只有「请求本身不成立」（空载荷、超量、未知表、未知分类）才抛异常整批失败，
  *       单条记录的问题一律进 rejected 明细。</li>
  * </ul>
@@ -173,6 +174,9 @@ public class SyncServiceImpl implements SyncService {
                     "单次推送最多 " + MAX_PUSH_RECORDS + " 条，本次 " + total + " 条");
         }
 
+        // 归属放行（家庭维度）与写拦截共用一份范围：本次 push 只解析一次
+        SyncAccessScope scope = accessScopeResolver.resolveAccess(userId);
+
         SyncPushResultVO result = new SyncPushResultVO();
         result.setTotal(total);
         result.setServerTime(SyncCursor.now());
@@ -183,7 +187,7 @@ public class SyncServiceImpl implements SyncService {
             if (rows == null || rows.isEmpty()) {
                 continue;
             }
-            pushTable(table, userId, rows, result);
+            pushTable(table, userId, scope, rows, result);
         }
         log.info("[BABYLOG][sync] push userId={} device={} total={} upserted={} skipped={} rejected={}",
                 userId, cmd == null ? null : cmd.getDeviceUuid(), result.getTotal(),
@@ -191,8 +195,14 @@ public class SyncServiceImpl implements SyncService {
         return result;
     }
 
-    /** 一组（同一张表的）记录：先整体预查归属与版本，再逐条裁决 */
-    private void pushTable(SyncTable table, long userId, List<Map<String, Object>> rows, SyncPushResultVO result) {
+    /**
+     * 一组（同一张表的）记录：先整体预查归属与版本，再逐条裁决。
+     *
+     * <p>裁决顺序：id/version 合法性 → 内置产品段（8345）→ 服务端管理表（8350）→
+     * 归属（家庭维度放行，范围外 8344 换 ID 重推）→ 版本门禁（skipped）→ 写权限（8343）→ 落库。
+     */
+    private void pushTable(SyncTable table, long userId, SyncAccessScope scope,
+                           List<Map<String, Object>> rows, SyncPushResultVO result) {
         List<Map<String, Object>> valid = new ArrayList<>(rows.size());
         List<Long> ids = new ArrayList<>(rows.size());
         for (Map<String, Object> row : rows) {
@@ -211,6 +221,12 @@ public class SyncServiceImpl implements SyncService {
                 reject(result, table, id, BabyLogErrorCode.SYNC_BUILTIN_IMMUTABLE, null);
                 continue;
             }
+            if (table.isServerManaged()) {
+                // 成员行/权限行是服务端管理的只读镜像：这两表的行归属 = 成员自己，归属校验拦不住
+                // 整行重推——不拒收等于允许自我改 OWNER / 翻转 canWrite（M16 提权漏洞收口）
+                reject(result, table, id, BabyLogErrorCode.SYNC_MEMBER_TABLE_IMMUTABLE, null);
+                continue;
+            }
             valid.add(row);
             ids.add(id);
         }
@@ -223,8 +239,10 @@ public class SyncServiceImpl implements SyncService {
             long id = asLong(row.get("id"));
             long version = asLong(row.get("version"));
             SyncRecordStore.Existing current = existing.get(id);
-            if (current != null && current.userId() != userId) {
-                // 跨用户雪花撞车：换 ID 重试才有意义，所以给专用码，别让客户端陷入「同一个 ID 无限重推」
+            if (current != null && current.userId() != userId
+                    && !scope.visibleUserIds().contains(current.userId())) {
+                // 行属其他账号且不在可见范围（陌生账号）：换 ID 重推才有意义，所以给专用码，
+                // 别让客户端陷入「同一个 ID 无限重推」；家庭内成员的行放行（M16 家庭维度归属）
                 reject(result, table, id, BabyLogErrorCode.SYNC_OWNERSHIP_CONFLICT, null);
                 continue;
             }
@@ -233,7 +251,13 @@ public class SyncServiceImpl implements SyncService {
                 result.setSkipped(result.getSkipped() + 1);
                 continue;
             }
-            permissionGuard.checkWrite(table, userId, id, row);
+            try {
+                permissionGuard.checkWrite(table, scope, id, row);
+            } catch (ServiceException e) {
+                // 越权写（8343）：单条拒绝不拖累同批，与 8345/8342 同款丢弃类语义
+                reject(result, table, id, e.getCode(), e.getMessage());
+                continue;
+            }
             try {
                 store.upsert(table, row, userId);
                 result.setUpserted(result.getUpserted() + 1);
@@ -257,6 +281,11 @@ public class SyncServiceImpl implements SyncService {
                                BabyLogErrorCode code, String message) {
         result.getRejected().add(SyncPushRejectVO.of(table.apiName(), id, code.getCode(),
                 message == null ? code.getMsg() : message));
+    }
+
+    /** guard 拋出的业务异常专用：码与文案都来自异常本体（ServiceException 的 message 恒非空） */
+    private static void reject(SyncPushResultVO result, SyncTable table, Long id, int code, String message) {
+        result.getRejected().add(SyncPushRejectVO.of(table.apiName(), id, code, message));
     }
 
     /** JSON 数字可能是 Integer/Long/BigDecimal，统一收敛成 Long（雪花 ID 超出 Integer 范围） */

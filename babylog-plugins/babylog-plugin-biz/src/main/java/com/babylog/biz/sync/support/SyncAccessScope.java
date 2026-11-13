@@ -15,17 +15,18 @@ import java.util.Set;
  *       读写矩阵 = 角色默认（01B 第六节）∪ 显式 bl_member_permissions 行的授权。</li>
  * </ul>
  *
- * <p><b>权限行的语义（M15 简化，M16 随「权限编辑 API + push 写拦截」收紧）</b>：
- * 显式行只做<b>并集加宽</b>，不做减法——新宝宝出现在家庭后老成员不至于失明；
- * 三个角色的默认读矩阵都是全分类（01B：CAREGIVER 健康/医疗「只读」、VIEWER「全部只读」），
- * 所以 M15 实际效果里 readableCategories 恒为全集合，管道先建好，等 OWNER 的
- * 拒绝行（M16 API）出现后立即生效为减法语义（届时改这里并补单测）。
+ * <p><b>权限行语义（M16 起：显式行覆盖）</b>：某分类存在任一 bl_member_permissions
+ * 行时，该分类的读写裁决<b>完全由行决定</b>；无行的分类走角色默认兑底（01B 第六节）。
+ * 减窄立即生效：OWNER 撤回授权（写 can_read=0 / can_write=0 行）下一次拉取/推送即被拦。
+ * 行按 (member, child, category) 落，同分类跨宝宝的行取 OR（任一授权即授权）——
+ * 正常数据里同分类各行一致（改角色 = 全量重写），不一致属脏数据，从宽不崩；
+ * 按宝宝粒度的精确裁决（payload 已带 childId）留给后续会话。
  *
  * @param memberId         家庭成员行 id（bl_family_members.id）；无家庭为 null
  * @param role             角色（OWNER/CAREGIVER/VIEWER）；无家庭为 null
  * @param visibleUserIds   同步拉取的可见账号集合（18 张同步表的 user_id 过滤条件）
  * @param readableCategories 可读分类集合（拉取时与客户端请求的 categories 取交集）
- * @param writableCategories 可写分类集合（M15 仅供 guard 预留，写拦截 M16 点亮）
+ * @param writableCategories 可写分类集合（push 写拦截 8343 的裁决依据，M16 起生效）
  */
 public record SyncAccessScope(
         Long memberId,

@@ -53,6 +53,15 @@ public enum BabyLogErrorCode implements ErrorCode {
     PRODUCT_NOT_FOUND(8348, "产品不存在"),
     /** 管理端只能维护内置产品（is_builtin=1，id 1~99）；用户自建行走 App 同步通道，管理端不得触碰（base/sync 两通道隔离红线） */
     PRODUCT_NOT_BUILTIN(8349, "仅内置产品可通过管理端维护"),
+    /**
+     * 服务端管理表拒推（M16）：bl_family_members / bl_member_permissions 是服务端维护的
+     * 只读镜像，客户端只从 changes 拉取——8345 内置产品的同款「下发型」语义。
+     *
+     * <p>为什么必须整表拒收（2026-11-13 龙哥拍板）：这两张表的行归属恰好是
+     * {@code user_id = 成员自己}，归属校验（8344）拦不住成员整行重推自己拉回来的行——
+     * 不拒收等于允许自我改成 OWNER / 翻转 canWrite，权限裁决权在服务端（01B 红线）形同虚设。
+     */
+    SYNC_MEMBER_TABLE_IMMUTABLE(8350, "成员与权限行由服务端管理，不接受客户端推送"),
 
     // ---------- 设备（8360-8369） ----------
     DEVICE_NOT_FOUND(8360, "设备不存在"),
