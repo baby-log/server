@@ -17,7 +17,7 @@ import com.babylog.common.core.enums.error.ErrorCode;
  *   <li>8370-8379 认证（邮箱验证码 / 注册 / token，M5 占用）</li>
  *   <li>8380-8389 反馈</li>
  *   <li>8390-8394 版本公告（M10 管理端）</li>
- *   <li>8395-8399 保留</li>
+ *   <li>8395-8399 小程序认证（M20，wx.login code 换 app-user 双 token）</li>
  * </ul>
  */
 public enum BabyLogErrorCode implements ErrorCode {
@@ -95,6 +95,14 @@ public enum BabyLogErrorCode implements ErrorCode {
     APP_VERSION_NOT_FOUND(8390, "版本记录不存在"),
     /** 已发布（PUBLISHED）的版本锁定不可再改/再发/删除——用户可能已经看到过这版公告 */
     APP_VERSION_NOT_DRAFT(8391, "仅草稿状态的版本可修改/发布/删除"),
+
+    // ---------- 小程序认证（8395-8399，M20） ----------
+    /** 小程序应用未配置（babylog.wechat.miniapp.configs.babylog 缺 appid/secret），对齐 8374 MAIL_NOT_CONFIGURED 的先例模式 */
+    WX_MINI_NOT_CONFIGURED(8395, "小程序登录暂未配置，请联系管理员"),
+    /** code 无效/已使用/微信接口失败——客户端处置统一为「拉起新 code 重新登录」 */
+    WX_CODE_INVALID(8396, "微信登录凭证无效或已过期，请重新登录"),
+    /** 绑定冲突：openid 已绑定其他账号，或绑定指向不存在的账号（孤儿绑定）——换绑是管理动作，登录路不做 */
+    WX_MINI_BOUND_CONFLICT(8397, "该微信已绑定其他账号，请联系管理员"),
 
     ;
 

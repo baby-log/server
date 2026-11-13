@@ -5,6 +5,7 @@ import com.babylog.biz.auth.config.BabyLogAuthProperties;
 import com.babylog.biz.auth.dto.DeviceInfo;
 import com.babylog.biz.auth.dto.EmailCodeCmd;
 import com.babylog.biz.auth.dto.EmailLoginCmd;
+import com.babylog.biz.auth.dto.MiniLoginCmd;
 import com.babylog.biz.auth.dto.PasswordLoginCmd;
 import com.babylog.biz.auth.dto.RefreshTokenCmd;
 import com.babylog.biz.auth.dto.RegisterCmd;
@@ -18,11 +19,15 @@ import com.babylog.biz.device.service.DeviceWorkerIdAllocator;
 import com.babylog.biz.entity.BlDevice;
 import com.babylog.biz.mapper.BlDeviceMapper;
 import com.babylog.common.core.exception.ServiceException;
+import com.babylog.system.api.dto.SocialBindingDTO;
 import com.babylog.system.api.dto.UserAccountCreateCmd;
 import com.babylog.system.api.dto.UserDTO;
+import com.babylog.system.api.dto.WechatSessionDTO;
 import com.babylog.system.api.enums.SystemErrorCode;
 import com.babylog.system.api.facade.IUserAccountFacade;
 import com.babylog.system.api.facade.IUserFacade;
+import com.babylog.system.api.facade.ISocialAccountFacade;
+import com.babylog.system.api.facade.IWechatMiniFacade;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +48,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,6 +78,10 @@ class AppAuthServiceImplTest {
     @Mock
     private IUserAccountFacade userAccountFacade;
     @Mock
+    private IWechatMiniFacade wechatMiniFacade;
+    @Mock
+    private ISocialAccountFacade socialAccountFacade;
+    @Mock
     private BlDeviceMapper deviceMapper;
     @Mock
     private DeviceWorkerIdAllocator workerIdAllocator;
@@ -83,7 +93,8 @@ class AppAuthServiceImplTest {
     void setUp() {
         properties = new BabyLogAuthProperties();
         service = new AppAuthServiceImpl(emailCodeService, tokenService, refreshTokenStore,
-                userFacade, userAccountFacade, deviceMapper, workerIdAllocator, properties);
+                userFacade, userAccountFacade, wechatMiniFacade, socialAccountFacade,
+                deviceMapper, workerIdAllocator, properties);
 
         when(emailCodeService.normalize(anyString()))
                 .thenAnswer(inv -> inv.getArgument(0, String.class).trim().toLowerCase(Locale.ROOT));
@@ -307,6 +318,133 @@ class AppAuthServiceImplTest {
         assertBizError(() -> service.loginByPassword(passwordCmd("mom")), SystemErrorCode.USER_DISABLED);
     }
 
+    // ---------------- 微信小程序登录（M20） ----------------
+
+    @Test
+    void loginByWxMini_createsAccountAndBindingOnFirstLogin() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", null));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1")).thenReturn(null);
+        when(userAccountFacade.existsByUsername(anyString())).thenReturn(false);
+        when(userAccountFacade.createAccount(any())).thenReturn(NEW_USER_ID);
+        when(userFacade.getById(NEW_USER_ID)).thenReturn(user(NEW_USER_ID, "wx_abc123", "微信用户", ""));
+
+        LoginTokenVO vo = service.loginByWxMini(miniLoginCmd("js-code", device()));
+
+        assertThat(vo.isNewUser()).isTrue();
+        assertThat(vo.getUserId()).isEqualTo(NEW_USER_ID);
+        assertThat(vo.getAccessToken()).isEqualTo("access-token");
+        assertThat(vo.getRefreshToken()).isEqualTo("refresh-token");
+        assertThat(vo.getDeviceId()).isEqualTo(9001L);
+        // 首登建档：wx_ 前缀随机用户名 + 昵称「微信用户」+ 无邮箱 + 密码留空（仅能靠微信身份登录）
+        ArgumentCaptor<UserAccountCreateCmd> cmd = ArgumentCaptor.forClass(UserAccountCreateCmd.class);
+        verify(userAccountFacade).createAccount(cmd.capture());
+        assertThat(cmd.getValue().getUsername()).startsWith("wx_");
+        assertThat(cmd.getValue().getNickname()).isEqualTo("微信用户");
+        assertThat(cmd.getValue().getEmail()).isEmpty();
+        assertThat(cmd.getValue().getRawPassword()).isNull();
+        // 绑定建立：userId + channel + openId + unionId
+        verify(socialAccountFacade).bind(NEW_USER_ID, "wechat-mini", "open-1", null);
+    }
+
+    @Test
+    void loginByWxMini_firstLogin_bindsUnionIdWhenPresent() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", "union-1"));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1")).thenReturn(null);
+        when(userAccountFacade.existsByUsername(anyString())).thenReturn(false);
+        when(userAccountFacade.createAccount(any())).thenReturn(NEW_USER_ID);
+        when(userFacade.getById(NEW_USER_ID)).thenReturn(user(NEW_USER_ID, "wx_abc123", "微信用户", ""));
+
+        service.loginByWxMini(miniLoginCmd("js-code", null));
+
+        verify(socialAccountFacade).bind(NEW_USER_ID, "wechat-mini", "open-1", "union-1");
+    }
+
+    @Test
+    void loginByWxMini_reusesBindingOnSubsequentLogin() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", "union-1"));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1"))
+                .thenReturn(binding(USER_ID, "open-1", null));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "wx_abc123", "微信用户", ""));
+
+        LoginTokenVO vo = service.loginByWxMini(miniLoginCmd("js-code", null));
+
+        assertThat(vo.isNewUser()).isFalse();
+        assertThat(vo.getUserId()).isEqualTo(USER_ID);
+        verify(userAccountFacade, never()).createAccount(any());
+        verify(socialAccountFacade, never()).bind(anyLong(), anyString(), anyString(), anyString());
+        // unionId 后补：绑定行缺 unionId，本次登录拿到了就补齐
+        verify(socialAccountFacade).updateUnionId("wechat-mini", "open-1", "union-1");
+    }
+
+    @Test
+    void loginByWxMini_skipsUnionIdBackfillWhenUnchanged() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", "union-1"));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1"))
+                .thenReturn(binding(USER_ID, "open-1", "union-1"));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "wx_abc123", "微信用户", ""));
+
+        service.loginByWxMini(miniLoginCmd("js-code", null));
+
+        verify(socialAccountFacade, never()).updateUnionId(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void loginByWxMini_rejectsDisabledBoundAccount() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", null));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1"))
+                .thenReturn(binding(USER_ID, "open-1", null));
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "wx_abc123", "微信用户", "", 1));
+
+        assertBizError(() -> service.loginByWxMini(miniLoginCmd("js-code", null)),
+                SystemErrorCode.USER_DISABLED);
+    }
+
+    @Test
+    void loginByWxMini_rejectsOrphanBinding() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", null));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1"))
+                .thenReturn(binding(USER_ID, "open-1", null));
+        when(userFacade.getById(USER_ID)).thenReturn(null);
+
+        assertBizError(() -> service.loginByWxMini(miniLoginCmd("js-code", null)),
+                BabyLogErrorCode.WX_MINI_BOUND_CONFLICT);
+        verify(userAccountFacade, never()).createAccount(any());
+    }
+
+    @Test
+    void loginByWxMini_translateNotConfigured() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code"))
+                .thenThrow(new ServiceException(SystemErrorCode.SOCIAL_NOT_CONFIGURED));
+
+        assertBizError(() -> service.loginByWxMini(miniLoginCmd("js-code", null)),
+                BabyLogErrorCode.WX_MINI_NOT_CONFIGURED);
+        verify(socialAccountFacade, never()).findByChannelOpenId(anyString(), anyString());
+    }
+
+    @Test
+    void loginByWxMini_translateInvalidCode() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code"))
+                .thenThrow(new ServiceException(SystemErrorCode.SOCIAL_CODE_INVALID));
+
+        assertBizError(() -> service.loginByWxMini(miniLoginCmd("js-code", null)),
+                BabyLogErrorCode.WX_CODE_INVALID);
+    }
+
+    @Test
+    void loginByWxMini_translateBindRaceConflict() {
+        when(wechatMiniFacade.code2Session("babylog", "js-code")).thenReturn(wxSession("open-1", null));
+        when(socialAccountFacade.findByChannelOpenId("wechat-mini", "open-1")).thenReturn(null);
+        when(userAccountFacade.existsByUsername(anyString())).thenReturn(false);
+        when(userAccountFacade.createAccount(any())).thenReturn(NEW_USER_ID);
+        when(userFacade.getById(NEW_USER_ID)).thenReturn(user(NEW_USER_ID, "wx_abc123", "微信用户", ""));
+        // find 与 bind 之间的并发窗口：同一 openId 被另一请求抢先绑定
+        doThrow(new ServiceException(SystemErrorCode.SOCIAL_ALREADY_BOUND))
+                .when(socialAccountFacade).bind(anyLong(), anyString(), anyString(), any());
+
+        assertBizError(() -> service.loginByWxMini(miniLoginCmd("js-code", null)),
+                BabyLogErrorCode.WX_MINI_BOUND_CONFLICT);
+    }
+
     // ---------------- refresh ----------------
 
     @Test
@@ -442,6 +580,26 @@ class AppAuthServiceImplTest {
         device.setPlatform("android");
         device.setAppVersion("2.0.0");
         return device;
+    }
+    private static WechatSessionDTO wxSession(String openId, String unionId) {
+        WechatSessionDTO dto = new WechatSessionDTO();
+        dto.setOpenId(openId);
+        dto.setUnionId(unionId);
+        return dto;
+    }
+    private static SocialBindingDTO binding(Long userId, String openId, String unionId) {
+        SocialBindingDTO dto = new SocialBindingDTO();
+        dto.setUserId(userId);
+        dto.setChannel("wechat-mini");
+        dto.setOpenId(openId);
+        dto.setUnionId(unionId);
+        return dto;
+    }
+    private static MiniLoginCmd miniLoginCmd(String code, DeviceInfo device) {
+        MiniLoginCmd cmd = new MiniLoginCmd();
+        cmd.setCode(code);
+        cmd.setDevice(device);
+        return cmd;
     }
 
     private static UserDTO user(Long id, String username, String nickname, String email) {

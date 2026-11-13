@@ -493,6 +493,7 @@ class P0ArchitectureTest {
         java.util.Map.entry("BabyLogAuthController#register", "BabyLog 账密注册入口：同上（注册即登录，返回凭证）"),
         java.util.Map.entry("BabyLogAuthController#loginByPassword", "BabyLog 账密登录入口：同上"),
         java.util.Map.entry("BabyLogAuthController#refresh", "BabyLog refresh 换 access：access 已过期，凭 refresh token 匿名调用"),
+        java.util.Map.entry("BabyLogAuthController#loginByWxMini", "BabyLog 微信小程序登录入口：同上（wx.login code 换凭证，未绑定首登自动建档）"),
         java.util.Map.entry("EncryptKeyController#publicKey", "RSA 公钥：本身就是公开材料，供前端加密传输用（私钥不出服务端）"),
         // V3.1-F · P1-B8-1：Prometheus 抓取端点。Prometheus server 抓取不带登录态，端点必须匿名可达；
         // 代价是「指标全貌对任何能访问该端口的人可见」，故生产必须在网络层（Nginx/安全组）限制内网，

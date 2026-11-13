@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.babylog.biz.auth.dto.EmailCodeCmd;
 import com.babylog.biz.auth.dto.EmailLoginCmd;
 import com.babylog.biz.auth.dto.LogoutCmd;
+import com.babylog.biz.auth.dto.MiniLoginCmd;
 import com.babylog.biz.auth.dto.PasswordLoginCmd;
 import com.babylog.biz.auth.dto.RefreshTokenCmd;
 import com.babylog.biz.auth.dto.RegisterCmd;
@@ -63,6 +64,12 @@ public class BabyLogAuthController {
     @PostMapping("/password/login")
     public R<LoginTokenVO> loginByPassword(@Validated @RequestBody PasswordLoginCmd cmd) {
         return R.ok(authService.loginByPassword(cmd));
+    }
+
+    @Operation(summary = "微信小程序登录（匿名，wx.login code 换 app-user 双 token，未绑定自动建档）")
+    @PostMapping("/mini/login")
+    public R<LoginTokenVO> loginByWxMini(@Validated @RequestBody MiniLoginCmd cmd) {
+        return R.ok(authService.loginByWxMini(cmd));
     }
 
     @Operation(summary = "刷新 access token（匿名，凭 refresh token）")

@@ -7,6 +7,7 @@ import com.babylog.biz.auth.config.BabyLogAuthProperties;
 import com.babylog.biz.auth.dto.DeviceInfo;
 import com.babylog.biz.auth.dto.EmailCodeCmd;
 import com.babylog.biz.auth.dto.EmailLoginCmd;
+import com.babylog.biz.auth.dto.MiniLoginCmd;
 import com.babylog.biz.auth.dto.PasswordLoginCmd;
 import com.babylog.biz.auth.dto.RegisterCmd;
 import com.babylog.biz.auth.dto.RefreshTokenCmd;
@@ -21,11 +22,15 @@ import com.babylog.biz.device.service.DeviceWorkerIdAllocator;
 import com.babylog.biz.entity.BlDevice;
 import com.babylog.biz.mapper.BlDeviceMapper;
 import com.babylog.common.core.exception.ServiceException;
+import com.babylog.system.api.dto.SocialBindingDTO;
 import com.babylog.system.api.dto.UserAccountCreateCmd;
 import com.babylog.system.api.dto.UserDTO;
+import com.babylog.system.api.dto.WechatSessionDTO;
 import com.babylog.system.api.enums.SystemErrorCode;
 import com.babylog.system.api.facade.IUserAccountFacade;
 import com.babylog.system.api.facade.IUserFacade;
+import com.babylog.system.api.facade.ISocialAccountFacade;
+import com.babylog.system.api.facade.IWechatMiniFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -64,6 +69,12 @@ public class AppAuthServiceImpl implements AppAuthService {
 
     /** 自动建档的用户名前缀：与后台建的号、微信小程序号（wx_）在视觉上可区分 */
     private static final String AUTO_USERNAME_PREFIX = "bl_";
+    /** 小程序自动建档用户名前缀：与 system 手机号建档（MiniAuthServiceImpl）的 wx_ 前缀同口径 */
+    private static final String WX_USERNAME_PREFIX = "wx_";
+    /** 小程序登录的微信应用标识：对应 yml `babylog.wechat.miniapp.configs.babylog` 配置位 */
+    private static final String WX_MINI_APP = "babylog";
+    /** 绑定渠道（sys_social_user.channel，与 system MiniAuthService.CHANNEL_WECHAT_MINI 同值） */
+    private static final String CHANNEL_WECHAT_MINI = "wechat-mini";
     private static final int USERNAME_MAX_ATTEMPTS = 5;
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -81,6 +92,10 @@ public class AppAuthServiceImpl implements AppAuthService {
     private final IUserFacade userFacade;
     /** 写契约：按邮箱查、查重、建号、校验密码（M5 收口后取代原 SysUserAccountDao） */
     private final IUserAccountFacade userAccountFacade;
+    /** 微信小程序 API 契约（M20）：code 换 session；appid/secret 的解析与 access_token 缓存留在 system 侧 */
+    private final IWechatMiniFacade wechatMiniFacade;
+    /** 社交绑定契约（M20）：(channel, openId) → sys_user 的绑定查询与写入 */
+    private final ISocialAccountFacade socialAccountFacade;
     private final BlDeviceMapper deviceMapper;
     private final DeviceWorkerIdAllocator workerIdAllocator;
     private final BabyLogAuthProperties properties;
@@ -90,6 +105,8 @@ public class AppAuthServiceImpl implements AppAuthService {
                               RefreshTokenStore refreshTokenStore,
                               IUserFacade userFacade,
                               IUserAccountFacade userAccountFacade,
+                              IWechatMiniFacade wechatMiniFacade,
+                              ISocialAccountFacade socialAccountFacade,
                               BlDeviceMapper deviceMapper,
                               DeviceWorkerIdAllocator workerIdAllocator,
                               BabyLogAuthProperties properties) {
@@ -98,6 +115,8 @@ public class AppAuthServiceImpl implements AppAuthService {
         this.refreshTokenStore = refreshTokenStore;
         this.userFacade = userFacade;
         this.userAccountFacade = userAccountFacade;
+        this.wechatMiniFacade = wechatMiniFacade;
+        this.socialAccountFacade = socialAccountFacade;
         this.deviceMapper = deviceMapper;
         this.workerIdAllocator = workerIdAllocator;
         this.properties = properties;
@@ -163,6 +182,77 @@ public class AppAuthServiceImpl implements AppAuthService {
         }
         requireEnabled(found);
         return completeLogin(found, false, cmd.getDevice(), "");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LoginTokenVO loginByWxMini(MiniLoginCmd cmd) {
+        WechatSessionDTO session = code2Session(cmd.getCode());
+        SocialBindingDTO binding =
+                socialAccountFacade.findByChannelOpenId(CHANNEL_WECHAT_MINI, session.getOpenId());
+
+        UserDTO user;
+        boolean newUser;
+        if (binding == null) {
+            user = createAccountForWxMini();
+            newUser = true;
+            try {
+                socialAccountFacade.bind(user.getId(), CHANNEL_WECHAT_MINI,
+                        session.getOpenId(), session.getUnionId());
+            } catch (ServiceException e) {
+                if (e.getCode() == SystemErrorCode.SOCIAL_ALREADY_BOUND.getCode()) {
+                    // find 与 bind 之间的并发窗口：另一个请求先把同一 openId 绑走了。
+                    // 客户端重试一次即可按已绑定路径登录，这里报冲突码而非静默换绑。
+                    throw new ServiceException(BabyLogErrorCode.WX_MINI_BOUND_CONFLICT);
+                }
+                throw e;
+            }
+            log.info("[BABYLOG][auth] 微信小程序首登自动建档 userId={} openId={}",
+                    user.getId(), maskOpenId(session.getOpenId()));
+        } else {
+            user = userFacade.getById(binding.getUserId());
+            if (user == null) {
+                // 孤儿绑定：指向已删除的账号。换绑属管理动作，登录路不做，留日志供排查
+                log.warn("[BABYLOG][auth] 小程序绑定指向不存在账号 userId={} openId={}",
+                        binding.getUserId(), maskOpenId(session.getOpenId()));
+                throw new ServiceException(BabyLogErrorCode.WX_MINI_BOUND_CONFLICT);
+            }
+            requireEnabled(user);
+            // unionId 后补：微信有时首登不下发，后续登录遇到就补齐（与 system 同款语义）；
+            // 值没变就不调契约（facade 实现侧还有一层同判断，双保险）
+            if (StringUtils.hasText(session.getUnionId())
+                    && !session.getUnionId().equals(binding.getUnionId())) {
+                socialAccountFacade.updateUnionId(CHANNEL_WECHAT_MINI,
+                        session.getOpenId(), session.getUnionId());
+            }
+            newUser = false;
+        }
+        // 与邮箱/账密登录同一出口：app-user 双 token + bl_device 落行 + workerId。
+        // 小程序在服务端眼里就是「一台设备」，家庭/同步端点零改动（M20 拍板）。
+        return completeLogin(user, newUser, cmd.getDevice(), "");
+    }
+
+    /** code 换 session，并把 system 段错误码翻译成 biz 的 8395 段（App/小程序端只认 8xxx） */
+    private WechatSessionDTO code2Session(String code) {
+        try {
+            return wechatMiniFacade.code2Session(WX_MINI_APP, code);
+        } catch (ServiceException e) {
+            if (e.getCode() == SystemErrorCode.SOCIAL_NOT_CONFIGURED.getCode()) {
+                throw new ServiceException(BabyLogErrorCode.WX_MINI_NOT_CONFIGURED);
+            }
+            if (e.getCode() == SystemErrorCode.SOCIAL_CODE_INVALID.getCode()
+                    || e.getCode() == SystemErrorCode.SOCIAL_API_FAILED.getCode()) {
+                throw new ServiceException(BabyLogErrorCode.WX_CODE_INVALID);
+            }
+            throw e;
+        }
+    }
+
+    /** 微信小程序首登自动建档：wx_ 前缀随机用户名 + 随机密码（仅能靠微信身份登录） */
+    private UserDTO createAccountForWxMini() {
+        String username = generateUsername(WX_USERNAME_PREFIX);
+        Long userId = createAccount(username, "微信用户", "", null);
+        return requireUser(userId);
     }
 
     @Override
@@ -301,14 +391,26 @@ public class AppAuthServiceImpl implements AppAuthService {
     }
 
     private String generateUsername() {
+        return generateUsername(AUTO_USERNAME_PREFIX);
+    }
+
+    private String generateUsername(String prefix) {
         for (int i = 0; i < USERNAME_MAX_ATTEMPTS; i++) {
-            String candidate = AUTO_USERNAME_PREFIX + RandomUtil.randomString(10);
+            String candidate = prefix + RandomUtil.randomString(10);
             if (!userAccountFacade.existsByUsername(candidate)) {
                 return candidate;
             }
         }
         // 10 位随机串连续 5 次撞库，实际不可能；真撞上说明随机源坏了，宁可报错也不建重名号
         throw new ServiceException("用户名生成失败，请重试");
+    }
+
+    /** openId 打码：只留前 4 位，日志里够定位、不至于全量暴露用户身份 */
+    private static String maskOpenId(String openId) {
+        if (openId == null || openId.length() <= 4) {
+            return "****";
+        }
+        return openId.substring(0, 4) + "****";
     }
 
     /**

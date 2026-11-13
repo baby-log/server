@@ -2,6 +2,7 @@ package com.babylog.biz.auth.service;
 
 import com.babylog.biz.auth.dto.EmailCodeCmd;
 import com.babylog.biz.auth.dto.EmailLoginCmd;
+import com.babylog.biz.auth.dto.MiniLoginCmd;
 import com.babylog.biz.auth.dto.PasswordLoginCmd;
 import com.babylog.biz.auth.dto.RegisterCmd;
 import com.babylog.biz.auth.dto.RefreshTokenCmd;
@@ -13,6 +14,7 @@ import com.babylog.biz.auth.vo.LoginTokenVO;
  *
  * <p>三件套：邮箱验证码登录（首发）、账密注册与账密登录（兜底）、refresh 换 access。
  * 三者共用同一套发 token / 落设备 / 建会话逻辑，保证「无论怎么进来，出门的凭证形状一样」。
+ * M20 增第四条路：微信小程序登录（wx.login code，微信身份即账号，未绑定首登自动建档）。
  */
 public interface AppAuthService {
 
@@ -27,6 +29,9 @@ public interface AppAuthService {
 
     /** 账密登录：account 可为用户名或邮箱 */
     LoginTokenVO loginByPassword(PasswordLoginCmd cmd);
+
+    /** 微信小程序登录：code 换 session → 绑定或自动建档 → 发 app-user 双 token（M20） */
+    LoginTokenVO loginByWxMini(MiniLoginCmd cmd);
 
     /** 用 refresh token 换新的 access token */
     LoginTokenVO refresh(RefreshTokenCmd cmd);
