@@ -360,7 +360,8 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
    App 端升级检查端点（拉最新 PUBLISHED）属 V3，本批不做。
 5. **反馈匿名端点的 A11 口径**：方法体读 `LoginContext.getUserId()`（未登录返 null 落匿名），
    走「业务代码兜底」③轨，**不登记** ANONYMOUS_ENDPOINTS（登记制留给纯匿名、不碰上下文的端点）。
-   `@RepeatSubmit` 已挂但因上方框架遗留债暂不生效，修复前无防刷。
+   ~~`@RepeatSubmit` 已挂但因上方框架遗留债暂不生效~~ → **M15 修复后已生效**（dev 冒烟实测：
+   同报文反馈连发两次，第二次 1005）。
 
 ### 错误码（本批新增 6 个）
 
@@ -428,3 +429,79 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
   + reply（PENDING→REPLIED、replyTime 盖章）
 - 遗留：dev 库留了一条 versionCode=99 的软删测试行与一条已回复的探针反馈行，可清可留；
   test/prod 环境部署仍排队龙哥 1Panel（现需带 M8+M10 jar + 前端 dist）
+
+## 家庭共享与读侧权限点亮（M15，会话 2026-11-13，V2.1 第一批）
+
+> 部署与内测包仍暂缓（M14 P1），本批只对 dev 18080 起服验证。开场三拍板（龙哥确认）：
+> ①8344 换 ID 重推确认归 V2.1（M16 提示词列主候选，本会话不动 outbox 处置逻辑）；
+> ②家庭模型按现有三表落地，**零 Flyway 新号**（v2.2.10 后无新迁移）；③权限点亮选
+> 方案 A「读侧家庭可见」——成员能真拉到家庭数据，push 写拦截留 M16。
+
+### 家庭管理端点（`/app/babylog/family/**`，类级 `@SaCheckLogin(app-user)`，token 裸值）
+
+| 端点 | 说明 | 错误码 |
+|---|---|---|
+| `POST /` | 创建家庭：默认 OWNER + 回填 owner 名下宝宝的 family_id + 生成默认权限行 | 已在家 8303 |
+| `GET /` | 我的家庭（inviteCode 仅 OWNER 可见） | 无家庭 8300 |
+| `POST /invite/reset` | 重置邀请码（8 位无歧义字符，旧码立即失效） | 非 OWNER 8304 |
+| `POST /join` | 凭码加入（大小写不敏感；码错/解散/软删统一 8301） | 重复加入 8303 |
+| `GET /members` | 成员列表（含 REMOVED，按加入时间正序） | 无家庭 8300 |
+| `PUT /members/{id}/role` | 改角色（CAREGIVER/VIEWER；OWNER 不可指定不可转让） | 8302/8304 |
+| `POST /members/{id}/kick` | 踢出：status 置 REMOVED，**行保留、不吊销 token** | 8302/8304 |
+
+**踢出的生效机制**：不删行不吊销登录（对方仍是独立账号）——`FamilyAccessScopeResolver`
+只认 ACTIVE 成员行，被踢者**下一次拉取**立即回落「单用户范围」（只剩自己的数据）；
+幂等（踢 REMOVED 行直接 200 空操作）；凭新邀请码可再加入（新成员行）。
+
+### 读侧权限（/sync/changes，01B 第六节）
+
+- 拉取过滤从 `user_id = :userId` 改 `user_id IN (:userIds)`：集合由
+  `SyncAccessScopeResolver` 推导——无家庭（含被踢后）= {自己}（**行为与 V2.0 零变化，回归锁**），
+  家庭成员 = 家庭全部 ACTIVE 成员（成员拉得到 owner 的宝宝/记录/成员行/权限行）
+- 拉取分类 = 客户端请求 ∩ 成员可读分类（管道已建；三个角色默认读全开，M15 实际不收窄）
+- **`bl_children.family_id` 转为服务端独占列**（`SyncTable.CHILDREN.serverOwnedProperties`）：
+  不进载荷不回传——否则客户端重推宝宝行会把回填的 family_id 覆写成 null
+  （README 上文「三处结构性差异」#2 的「不感知不回传」就此落死）
+- 权限行生成：加入/创建时按 01B 角色默认矩阵落 `bl_member_permissions`（家庭宝宝 × 四分类，
+  归属 user_id = 该成员，其 App 拉得到自己的矩阵）；**改角色 = 原地更新**已有行 can_write
+  （version+1 同步可见）——uk(member_id, child_id, category) 不含 deleted，
+  软删重插必撞 DuplicateKey（dev 冒烟实测踩过）；缺行（新宝宝）补插
+
+### 写侧（push，M16 点亮）
+
+`OwnerFullAccessPermissionGuard` 已删，换 `MemberPermissionGuard`：经 resolver 读三表做真实
+矩阵裁决，但 `WRITE_ENFORCEMENT_ENABLED=false`——M15 任务书拍板只解析不拒绝，翻 true 即启用
+8343（M16 待办与家庭维度归属放行、8344 收口写在 guard javadoc，勿丢）。
+
+### @RepeatSubmit 框架债修复（M14 P3 红线豁免，双 commit）
+
+1. `@AutoConfiguration(after = {RedissonAutoConfigurationV2, V4})`——类级
+   `@ConditionalOnBean(RedissonClient)` 按字典序在 Redisson 之前求值 → 整类跳过 →
+   RepeatSubmitChecker 缺失（M10 发现的静默失效）。方法级条件不可替代（求值时机相同）。
+2. **连带件（必修，否则起不来）**：类真正装配后 `@EnableCaching` 首次生效，全应用从没有过
+   CacheManager → APPLICATION FAILED TO START。补 `@ConditionalOnMissingBean` 的
+   ConcurrentMapCacheManager 兜底（Boot 同款默认，应用自带即让位）。不能指望 Boot 的
+   CacheAutoConfiguration 兜——排序在本类之后、同样的时序坑。
+
+单测锁：`RedisAutoConfigurationTest`（after 注解含 Redisson 两类 + 有/无 client 的装配行为）。
+
+## 验证记录（M15）
+
+- biz 单测 **134 个全绿**（M11 的 109 + 25：`FamilyServiceImplTest` 12 / `InviteCodesTest` 4 /
+  `FamilyAccessScopeResolverTest` 5 / `MemberPermissionGuardTest` 2 / `SyncServiceImplTest` +1（
+  家庭范围拉取）/ `SyncTableSqlTest` +1（children familyId 独占））
+- starter-redis 单测 4/4 绿；ArchUnit **22/22 绿**（新 controller 类级鉴权，A11 无欠条）
+- dev 起服（18080）：**无新 Flyway 迁移**（v2.2.10 后零 DDL，符合开场拍板）；
+  curl 冒烟 **49 项全绿**（脚本 `/tmp/m15-smoke.zsh`，账号/雪花 ID 运行时生成）：
+  双账号注册 → 匿名 1002 → 无家庭 8300/零数据基线 → A 推宝宝+喂养 → 建家（OWNER/8 位码/
+  回填生效）→ 重复创建 8303 → 错码 8301 / 小写空格加入成功 VIEWER / 重复加入 8303 →
+  **B 拉取看到 A 的宝宝+喂养+成员行+权限行（读侧家庭可见）** → VIEWER 权限行全只读 →
+  B 改角色/踢人被拒 8304 → A 改 B 为 CAREGIVER（B 权限行原地更新可写=2）/改自己 8304 →
+  踢出后 B myFamily 8300、拉取看不到家庭数据（REMOVED 立即生效）→ 重复踢幂等 →
+  旧码再加入成功 → 重置码后旧码 8301 → A 回归拉取不变 + 重推宝宝覆盖（family_id 不被
+  客户端载荷覆写）→ **@RepeatSubmit 生效（同报文反馈第二次 1005）**
+- 冒烟踩坑一枚（已修成产品行为）：改角色最初实现「软删权限行+重插」撞
+  `uk_member_child_category`（uk 不含 deleted），改原地更新后语义更干净（行 id 稳定、
+  同步语义是「权限值变了」而非「删旧插新」）
+- **push 被会话安全策略拦（已知坑）**：AI 会话里 `git push` 被判数据外传拒绝，M15 的
+  5 个 commit 只落本地，**龙哥自行执行 `git push origin develop` 双推**
