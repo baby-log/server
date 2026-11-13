@@ -237,9 +237,70 @@ class SyncServiceImplTest {
                     assertThat(reject.getCode()).isEqualTo(BabyLogErrorCode.SYNC_OWNERSHIP_CONFLICT.getCode());
                     assertThat(reject.getId()).isEqualTo(88L);
                     assertThat(reject.getTable()).isEqualTo("feedings");
+                    assertThat(reject.getMessage()).contains("更换 ID");
                 });
         assertThat(result.getUpserted()).isZero();
         verify(store, never()).upsert(any(), any(), anyLong());
+    }
+
+    @Test
+    void push_familyMemberCanEditRowOwnedByVisibleFamilyMember() {
+        // M16 家庭维度归属放行：行属 OTHER（可见范围内的家庭成员）→ 不再 8344，按新值放行更新
+        org.mockito.Mockito.when(accessScopeResolver.resolveAccess(USER_ID))
+                .thenReturn(new SyncAccessScope(9L, "CAREGIVER",
+                        List.of(USER_ID, OTHER_USER_ID),
+                        java.util.EnumSet.allOf(com.babylog.biz.sync.support.SyncCategory.class),
+                        java.util.EnumSet.of(com.babylog.biz.sync.support.SyncCategory.FEEDING,
+                                com.babylog.biz.sync.support.SyncCategory.CARE)));
+        storeHasExisting(SyncTable.FEEDINGS, 88L, new SyncRecordStore.Existing(OTHER_USER_ID, 3));
+
+        SyncPushResultVO result = service.push(USER_ID, cmd("feedings", List.of(payload(88L, 5))));
+
+        assertThat(result.getRejected()).isEmpty();
+        assertThat(result.getUpserted()).isEqualTo(1);
+        verify(store).upsert(eq(SyncTable.FEEDINGS), any(), eq(USER_ID));
+    }
+
+    @Test
+    void push_rejectsServerManagedMemberAndPermissionTables() {
+        // M16 提权漏洞收口：这两表的行归属 = 成员自己，归属校验拦不住整行重推自我改
+        // OWNER / 翻转 canWrite → 整表拒收 8350（同 8345 内置产品的下发型语义）
+        SyncPushResultVO members = service.push(USER_ID,
+                cmd("family_members", List.of(payload(1L, 1))));
+        SyncPushResultVO permissions = service.push(USER_ID,
+                cmd("member_permissions", List.of(payload(2L, 1))));
+
+        assertThat(members.getRejected()).singleElement()
+                .satisfies(reject -> assertThat(reject.getCode())
+                        .isEqualTo(BabyLogErrorCode.SYNC_MEMBER_TABLE_IMMUTABLE.getCode()));
+        assertThat(permissions.getRejected()).singleElement()
+                .satisfies(reject -> assertThat(reject.getCode())
+                        .isEqualTo(BabyLogErrorCode.SYNC_MEMBER_TABLE_IMMUTABLE.getCode()));
+        assertThat(members.getUpserted()).isZero();
+        assertThat(permissions.getUpserted()).isZero();
+        verify(store, never()).upsert(eq(SyncTable.FAMILY_MEMBERS), any(), anyLong());
+        verify(store, never()).upsert(eq(SyncTable.MEMBER_PERMISSIONS), any(), anyLong());
+    }
+
+    @Test
+    void push_guardRejectionIsCollectedPerRecordNotBatchFailure() {
+        // M16 写拦截：VIEWER 推 CARE 越权 → guard 抛 8343，收进单条 rejected，不拖累同批另一条
+        doThrow(new ServiceException(BabyLogErrorCode.SYNC_CATEGORY_DENIED))
+                .when(permissionGuard).checkWrite(eq(SyncTable.DIAPERS), any(SyncAccessScope.class),
+                eq(10L), any());
+
+        SyncPushResultVO result = service.push(USER_ID,
+                cmd("diapers", List.of(payload(10L, 1), payload(11L, 1))));
+
+        assertThat(result.getRejected()).singleElement()
+                .satisfies(reject -> {
+                    assertThat(reject.getCode()).isEqualTo(BabyLogErrorCode.SYNC_CATEGORY_DENIED.getCode());
+                    assertThat(reject.getId()).isEqualTo(10L);
+                    assertThat(reject.getMessage()).contains("写权限");
+                });
+        assertThat(result.getUpserted()).isEqualTo(1);
+        assertThat(result.getTotal()).isEqualTo(2);
+        verify(store).upsert(eq(SyncTable.DIAPERS), any(), eq(USER_ID));
     }
 
     @Test
@@ -266,7 +327,7 @@ class SyncServiceImplTest {
         assertThat(result.getRejected()).isEmpty();
         verify(store).upsert(eq(SyncTable.FEEDINGS), any(), eq(USER_ID));
         // 写权限钩子必须每条都被调用（V2.1 换真实现时不用回头找插桩点）
-        verify(permissionGuard).checkWrite(eq(SyncTable.FEEDINGS), eq(USER_ID), eq(88L), any());
+        verify(permissionGuard).checkWrite(eq(SyncTable.FEEDINGS), any(SyncAccessScope.class), eq(88L), any());
     }
 
     @Test

@@ -69,4 +69,20 @@ class SyncTableTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("UNKNOWN");
     }
+
+    @Test
+    void serverManagedTablesAreExactlyMembersAndPermissions() {
+        // M16 提权漏洞收口：这两表的行归属 = 成员自己，push 整表拒收（8350），拉取照常。
+        // 清单锁死：多登记一张会误伤正常数据表，少登记一张会重新打开提权口子
+        assertThat(SyncTable.FAMILY_MEMBERS.isServerManaged()).isTrue();
+        assertThat(SyncTable.MEMBER_PERMISSIONS.isServerManaged()).isTrue();
+        for (SyncTable table : SyncTable.values()) {
+            if (table == SyncTable.FAMILY_MEMBERS || table == SyncTable.MEMBER_PERMISSIONS) {
+                continue;
+            }
+            assertThat(table.isServerManaged())
+                    .as("表 %s 不应被标记为服务端管理表", table.apiName())
+                    .isFalse();
+        }
+    }
 }

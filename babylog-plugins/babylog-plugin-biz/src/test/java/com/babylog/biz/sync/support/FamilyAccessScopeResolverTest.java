@@ -19,7 +19,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * 读侧权限裁决单测（M15）：单用户回归锁 + 家庭可见范围 + REMOVED 立即失效 + 权限行加宽。
+ * 读侧权限裁决单测（M15 落地 / M16 覆盖语义）：单用户回归锁 + 家庭可见范围 +
+ * REMOVED 立即失效 + 显式行覆盖（加宽与减窄都要立即生效）。
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -108,7 +109,7 @@ class FamilyAccessScopeResolverTest {
     }
 
     @Test
-    void permissionRowsWidenWritableAndUnknownCategoryIsIgnored() {
+    void explicitRowGrantsWritableOutsideRoleDefault() {
         BlFamilyMember me = member(9L, 5L, ME, BlFamilyMember.ROLE_VIEWER, BlFamilyMember.STATUS_ACTIVE);
         when(memberMapper.selectList(any(Wrapper.class)))
                 .thenReturn(List.of(me))
@@ -128,7 +129,71 @@ class FamilyAccessScopeResolverTest {
 
         SyncAccessScope scope = resolver().resolveAccess(ME);
 
-        // VIEWER 默认写为空，被显式授权行加宽出 MEDICAL（M15：行只加宽不减窄）
+        // VIEWER 默认写为空；MEDICAL 有显式授权行 → 覆盖生效，该分类可写（M16：行覆盖而非并集）
         assertThat(scope.writableCategories()).containsExactly(SyncCategory.MEDICAL);
+    }
+
+    @Test
+    void explicitRowNarrowingTakesEffectImmediately() {
+        // M16 减窄锁：OWNER 写 canWrite=0 行撤回授权 → 下一次裁决即被减除（角色默认不再兑底）
+        BlFamilyMember me = member(9L, 5L, ME, BlFamilyMember.ROLE_CAREGIVER, BlFamilyMember.STATUS_ACTIVE);
+        when(memberMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(me))
+                .thenReturn(List.of(me));
+
+        BlMemberPermission revoked = new BlMemberPermission();
+        revoked.setMemberId(9L);
+        revoked.setCategory("FEEDING");
+        revoked.setCanRead(1);
+        revoked.setCanWrite(0); // CAREGIVER 默认 FEEDING 可写，被显式行减除
+        when(permissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(revoked));
+
+        SyncAccessScope scope = resolver().resolveAccess(ME);
+
+        assertThat(scope.writableCategories()).containsExactly(SyncCategory.CARE);
+    }
+
+    @Test
+    void explicitRowCanNarrowReadableToo() {
+        // 读侧同样覆盖：行 canRead=0 → 该分类不可读（拉取分类过滤立即收窄）
+        BlFamilyMember me = member(9L, 5L, ME, BlFamilyMember.ROLE_VIEWER, BlFamilyMember.STATUS_ACTIVE);
+        when(memberMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(me))
+                .thenReturn(List.of(me));
+
+        BlMemberPermission hidden = new BlMemberPermission();
+        hidden.setMemberId(9L);
+        hidden.setCategory("MEDICAL");
+        hidden.setCanRead(0);
+        hidden.setCanWrite(0);
+        when(permissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(hidden));
+
+        SyncAccessScope scope = resolver().resolveAccess(ME);
+
+        assertThat(scope.readableCategories()).hasSize(3);
+        assertThat(scope.readableCategories()).doesNotContain(SyncCategory.MEDICAL);
+        assertThat(scope.writableCategories()).isEmpty();
+    }
+
+    @Test
+    void categoryWithoutExplicitRowsKeepsRoleDefault() {
+        // 无行的分类走角色默认兑底：CAREGIVER 只有一行 MEDICAL 授权 → FEEDING/CARE 仍按默认可写
+        BlFamilyMember me = member(9L, 5L, ME, BlFamilyMember.ROLE_CAREGIVER, BlFamilyMember.STATUS_ACTIVE);
+        when(memberMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(me))
+                .thenReturn(List.of(me));
+
+        BlMemberPermission grant = new BlMemberPermission();
+        grant.setMemberId(9L);
+        grant.setCategory("MEDICAL");
+        grant.setCanRead(1);
+        grant.setCanWrite(1);
+        when(permissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(grant));
+
+        SyncAccessScope scope = resolver().resolveAccess(ME);
+
+        // FEEDING/CARE = 角色默认，MEDICAL = 显式行加宽，HEALTH = 角色默认只读
+        assertThat(scope.writableCategories()).containsExactlyInAnyOrder(
+                SyncCategory.FEEDING, SyncCategory.CARE, SyncCategory.MEDICAL);
     }
 }
