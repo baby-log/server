@@ -248,6 +248,9 @@ class FamilyServiceImplTest {
                 permRow(901L, 302L, 77L, "CARE", 0),
                 permRow(902L, 302L, 77L, "HEALTH", 0),
                 permRow(903L, 302L, 77L, "MEDICAL", 0));
+        // 模拟 SELECT 出来的行：游标列非空（M18 bug 复现前提——不置空则 ON UPDATE 不触发）
+        oldRows.forEach(row -> row.setServerUpdatedAt(java.time.LocalDateTime.of(2026, 11, 13, 10, 0)));
+        target.setServerUpdatedAt(java.time.LocalDateTime.of(2026, 11, 13, 10, 0));
         // 第一次 selectList：regenerate 读已有权限行；同一次调用内 insertDefault 再读一次（同一结果）
         when(permissionMapper.selectList(any(Wrapper.class))).thenReturn(oldRows);
         when(permissionMapper.updateById(any(BlMemberPermission.class))).thenReturn(1);
@@ -256,7 +259,11 @@ class FamilyServiceImplTest {
         cmd.setRole("CAREGIVER");
         service().changeRole(OWNER, 302L, cmd);
 
-        verify(memberMapper).updateById(any(BlFamilyMember.class));
+        // M18 回归锁：updateById 前游标列必须置空——非空会被 MP NOT_NULL 策略显式 SET 回旧值，
+        // ON UPDATE CURRENT_TIMESTAMP(3) 不触发，改角色后增量拉取 0 行（M17 真机踩坑）
+        ArgumentCaptor<BlFamilyMember> memberCaptor = ArgumentCaptor.forClass(BlFamilyMember.class);
+        verify(memberMapper).updateById(memberCaptor.capture());
+        assertThat(memberCaptor.getValue().getServerUpdatedAt()).isNull();
         // 旧行原地更新：只有 canWrite 变化的两行（FEEDING/CARE 0→1）被 updateById，
         // 行 id 不变（uk(member_id, child_id, category) 不含 deleted，软删重插会撞键——dev 冒烟实测）
         ArgumentCaptor<BlMemberPermission> permCaptor = ArgumentCaptor.forClass(BlMemberPermission.class);
@@ -266,6 +273,9 @@ class FamilyServiceImplTest {
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("FEEDING", 1),
                         org.assertj.core.groups.Tuple.tuple("CARE", 1));
+        // 权限行同样：游标列置空（增量可见的前提）
+        assertThat(permCaptor.getAllValues())
+                .allSatisfy(row -> assertThat(row.getServerUpdatedAt()).isNull());
         // 已有行全部覆盖（宝宝 × 四分类），无插无删
         verify(permissionMapper, never()).insert(any(BlMemberPermission.class));
         verify(permissionMapper, never()).deleteById(anyLong());
@@ -316,6 +326,8 @@ class FamilyServiceImplTest {
     void kickMarksRemovedWithoutDeletingRow() {
         BlFamilyMember me = member(301L, 200L, OWNER, BlFamilyMember.ROLE_OWNER, BlFamilyMember.STATUS_ACTIVE);
         BlFamilyMember target = member(302L, 200L, JOINER, BlFamilyMember.ROLE_VIEWER, BlFamilyMember.STATUS_ACTIVE);
+        // SELECT 出来的行游标非空：kick 后进 updateById 的实体必须置空（M18 回归锁，同 changeRole）
+        target.setServerUpdatedAt(java.time.LocalDateTime.of(2026, 11, 13, 10, 0));
         when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of(me));
         when(memberMapper.selectById(302L)).thenReturn(target);
         when(memberMapper.updateById(any(BlFamilyMember.class))).thenReturn(1);
@@ -325,6 +337,7 @@ class FamilyServiceImplTest {
         ArgumentCaptor<BlFamilyMember> captor = ArgumentCaptor.forClass(BlFamilyMember.class);
         verify(memberMapper).updateById(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(BlFamilyMember.STATUS_REMOVED);
+        assertThat(captor.getValue().getServerUpdatedAt()).isNull();
         // 行不物理删：同步通道要能看到「谁被移除了」；权限行也不动（裁决只认 ACTIVE）
         verify(memberMapper, never()).deleteById(anyLong());
         verify(permissionMapper, never()).deleteById(anyLong());

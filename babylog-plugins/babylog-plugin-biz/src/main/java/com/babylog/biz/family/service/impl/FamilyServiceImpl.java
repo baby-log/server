@@ -45,6 +45,11 @@ import java.util.function.Predicate;
  *       不变、version+1，同步可见「权限值变了」）——不能软删重建：唯一键
  *       (member_id, child_id, category) 不含 deleted，软删行仍占键，重插必撞 DuplicateKey
  *       （dev 冒烟实测））；</li>
+ *   <li><b>updateById 前必须置空 serverUpdatedAt</b>（M18）：同步表实体从 SELECT 出来游标列非空，
+ *       MP NOT_NULL 策略会把旧值写回 SET 段 → MySQL ON UPDATE CURRENT_TIMESTAMP(3) 不触发 →
+ *       行变更对增量拉取不可见。changeRole/kick/regeneratePermissionRows 全部遵守，
+ *       与 M10 管理端产品维护（AdminProductServiceImpl）同一口径；新增任何同步表 updateById
+ *       都要照此办理；</li>
  *   <li><b>宝宝的 family_id 回填只在创建家庭时做一次</b>（owner 名下 family_id 为空的行）；
  *       M16 做「宝宝进家庭」的显式管理（届时新宝宝如何对成员可见一并收口）。</li>
  * </ul>
@@ -176,7 +181,11 @@ public class FamilyServiceImpl implements FamilyService {
             throw new ServiceException(BabyLogErrorCode.OWNER_TRANSFER_FORBIDDEN);
         }
         target.setRole(cmd.getRole());
-        // updateById：@Version 非空自动 +1（同步可见「角色变了」），server_updated_at 随 ON UPDATE 前进
+        // updateById：@Version 非空自动 +1（同步可见「角色变了」）。游标列必须置空——
+        // 实体从 SELECT 出来 serverUpdatedAt 非空，MP NOT_NULL 策略会把旧值显式 SET 回去，
+        // 数据库 ON UPDATE CURRENT_TIMESTAMP(3) 不触发 → 成员行拿不到新 server_updated_at →
+        // 增量拉取 0 行（M17 冒烟实测踩坑，与 M10 管理端产品维护同一类坑，修法口径一致）
+        target.setServerUpdatedAt(null);
         memberMapper.updateById(target);
         // 权限行按新角色的默认矩阵重建：旧行软删（同步可见「旧权限收回」）+ 新行插入
         regeneratePermissionRows(target);
@@ -197,6 +206,8 @@ public class FamilyServiceImpl implements FamilyService {
             return;
         }
         target.setStatus(BlFamilyMember.STATUS_REMOVED);
+        // 游标置空理由同 changeRole：被踢成员要靠增量拉取看到自己行变 REMOVED（M18 修复）
+        target.setServerUpdatedAt(null);
         memberMapper.updateById(target);
         // 权限行不动：成员行 status=REMOVED 已让裁决（FamilyAccessScopeResolver 只认 ACTIVE）
         // 与拉取范围立即失效；行保留是同步事实（客户端要显示「谁被移除了」）
@@ -346,7 +357,9 @@ public class FamilyServiceImpl implements FamilyService {
                 row.setCanRead(1);
                 row.setCanWrite(target);
                 row.setUpdatedAt(now);
-                // updateById：@Version 非空自动 +1，同步可见
+                // updateById：@Version 非空自动 +1，同步可见。游标置空理由同 changeRole——
+                // 权限行必须拿到新 server_updated_at，否则改角色后成员增量拉取 0 行（M18 修复）
+                row.setServerUpdatedAt(null);
                 permissionMapper.updateById(row);
             }
         }
