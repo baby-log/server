@@ -44,58 +44,68 @@ import java.util.Set;
  */
 public enum SyncTable {
 
-    /** 宝宝档案（基础设施：业务记录都挂 child_id，必须随行下发） */
-    CHILDREN("children", "bl_children", BlChild.class, null),
+    /**
+     * 宝宝档案（基础设施：业务记录都挂 child_id，必须随行下发）。
+     *
+     * <p>{@code familyId} 是服务端独占列（V2.1 家庭回填归属用）：客户端 Room 没有这列、
+     * 不感知也不回传（README 已文档化的结构性差异 #2）。若允许它出现在载荷里，客户端
+     * 编辑宝宝后整行重推会把回填好的 family_id 覆写成 null——家庭归属 silently 丢失。
+     */
+    CHILDREN("children", "bl_children", BlChild.class, null, java.util.Set.of("familyId")),
     /** 记录类型开关覆盖（基础设施：决定 App 首页显示哪些记录类型） */
-    RECORD_TYPE_SETTINGS("record_type_settings", "bl_record_type_settings", BlRecordTypeSetting.class, null),
+    RECORD_TYPE_SETTINGS("record_type_settings", "bl_record_type_settings", BlRecordTypeSetting.class, null, java.util.Set.of()),
     /** 家庭成员（基础设施：created_by 显示名靠它翻译） */
-    FAMILY_MEMBERS("family_members", "bl_family_members", BlFamilyMember.class, null),
+    FAMILY_MEMBERS("family_members", "bl_family_members", BlFamilyMember.class, null, java.util.Set.of()),
     /** 成员分类权限（基础设施：V2.1 权限矩阵，V2.0 只有 owner 一行） */
-    MEMBER_PERMISSIONS("member_permissions", "bl_member_permissions", BlMemberPermission.class, null),
+    MEMBER_PERMISSIONS("member_permissions", "bl_member_permissions", BlMemberPermission.class, null, java.util.Set.of()),
     /** 产品库（基础设施：内置行服务端下发，自定义行用户自己维护） */
-    PRODUCTS("products", "bl_products", BlProduct.class, null),
+    PRODUCTS("products", "bl_products", BlProduct.class, null, java.util.Set.of()),
     /** 提醒（基础设施：跨分类，App 靠它驱动本地通知） */
-    REMINDERS("reminders", "bl_reminders", BlReminder.class, null),
+    REMINDERS("reminders", "bl_reminders", BlReminder.class, null, java.util.Set.of()),
 
     /** 喂养 */
-    FEEDINGS("feedings", "bl_feedings", BlFeeding.class, SyncCategory.FEEDING),
+    FEEDINGS("feedings", "bl_feedings", BlFeeding.class, SyncCategory.FEEDING, java.util.Set.of()),
 
     /** 尿布 */
-    DIAPERS("diapers", "bl_diapers", BlDiaper.class, SyncCategory.CARE),
+    DIAPERS("diapers", "bl_diapers", BlDiaper.class, SyncCategory.CARE, java.util.Set.of()),
     /** 睡眠 */
-    SLEEPS("sleeps", "bl_sleeps", BlSleep.class, SyncCategory.CARE),
+    SLEEPS("sleeps", "bl_sleeps", BlSleep.class, SyncCategory.CARE, java.util.Set.of()),
     /** 洗澡 */
-    BATHS("baths", "bl_baths", BlBath.class, SyncCategory.CARE),
+    BATHS("baths", "bl_baths", BlBath.class, SyncCategory.CARE, java.util.Set.of()),
     /** 吐奶 */
-    SPITS("spits", "bl_spits", BlSpit.class, SyncCategory.CARE),
+    SPITS("spits", "bl_spits", BlSpit.class, SyncCategory.CARE, java.util.Set.of()),
     /** 泵奶 */
-    PUMP_SESSIONS("pump_sessions", "bl_pump_sessions", BlPumpSession.class, SyncCategory.CARE),
+    PUMP_SESSIONS("pump_sessions", "bl_pump_sessions", BlPumpSession.class, SyncCategory.CARE, java.util.Set.of()),
 
     /** 测量（体重/身高/头围/体温/黄疸） */
-    MEASUREMENTS("measurements", "bl_measurements", BlMeasurement.class, SyncCategory.HEALTH),
+    MEASUREMENTS("measurements", "bl_measurements", BlMeasurement.class, SyncCategory.HEALTH, java.util.Set.of()),
 
     /** 用药/补剂 */
-    MEDICATIONS("medications", "bl_medications", BlMedication.class, SyncCategory.MEDICAL),
+    MEDICATIONS("medications", "bl_medications", BlMedication.class, SyncCategory.MEDICAL, java.util.Set.of()),
     /** 疫苗接种实例 */
-    VACCINATIONS("vaccinations", "bl_vaccinations", BlVaccination.class, SyncCategory.MEDICAL),
+    VACCINATIONS("vaccinations", "bl_vaccinations", BlVaccination.class, SyncCategory.MEDICAL, java.util.Set.of()),
     /** 随访/复查 */
-    FOLLOW_UPS("follow_ups", "bl_follow_ups", BlFollowUp.class, SyncCategory.MEDICAL),
+    FOLLOW_UPS("follow_ups", "bl_follow_ups", BlFollowUp.class, SyncCategory.MEDICAL, java.util.Set.of()),
     /** 就医 */
-    VISITS("visits", "bl_visits", BlVisit.class, SyncCategory.MEDICAL),
+    VISITS("visits", "bl_visits", BlVisit.class, SyncCategory.MEDICAL, java.util.Set.of()),
     /** 附件（宿主多为就医/疫苗/测量，统一归医疗分类） */
-    ATTACHMENTS("attachments", "bl_attachments", BlAttachment.class, SyncCategory.MEDICAL),
+    ATTACHMENTS("attachments", "bl_attachments", BlAttachment.class, SyncCategory.MEDICAL, java.util.Set.of()),
     ;
 
     private final String apiName;
     private final String tableName;
     private final Class<? extends BlSyncDO> entityClass;
     private final SyncCategory category;
+    /** 本表额外的服务端独占属性（payload 与 pull 都排除；family_members 的 familyId 不在此列——它是客户端可推的载荷列） */
+    private final java.util.Set<String> serverOwnedProperties;
 
-    SyncTable(String apiName, String tableName, Class<? extends BlSyncDO> entityClass, SyncCategory category) {
+    SyncTable(String apiName, String tableName, Class<? extends BlSyncDO> entityClass, SyncCategory category,
+              java.util.Set<String> serverOwnedProperties) {
         this.apiName = apiName;
         this.tableName = tableName;
         this.entityClass = entityClass;
         this.category = category;
+        this.serverOwnedProperties = java.util.Set.copyOf(serverOwnedProperties);
     }
 
     public String apiName() {
@@ -113,6 +123,11 @@ public enum SyncTable {
     /** 拉取过滤分类；{@code null} = 不参与过滤，任何请求都下发 */
     public SyncCategory category() {
         return category;
+    }
+
+    /** 本表的服务端独占属性（不进载荷、不回传；如 bl_children.family_id 由家庭服务回填） */
+    public java.util.Set<String> serverOwnedProperties() {
+        return serverOwnedProperties;
     }
 
     /** 客户端传的表标识 → 注册表项（大小写敏感：与 Room 表名逐字相同） */

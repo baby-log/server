@@ -80,14 +80,14 @@ final class SyncTableSql {
                 pk = column;
                 continue;
             }
-            if (!SERVER_OWNED.contains(property)) {
+            if (!isServerOwned(property)) {
                 pullProps.add(property);
             }
             if (STAMPED.contains(property)) {
                 stamped.add(property);
                 continue;
             }
-            if (!SERVER_OWNED.contains(property)) {
+            if (!isServerOwned(property)) {
                 payload.add(property);
             }
         }
@@ -220,11 +220,16 @@ final class SyncTableSql {
      * （MySQL 的 NOW(3) 在同一条语句内是常量，一次 push 的 200 行可能共用一个毫秒值），
      * 加 id 做同毫秒 tiebreak 后，「下一页」从上一页最后一条的 id 之后继续。
      * 客户端不感知这条细节，只需把 nextSince/nextSinceId 原样回传。
+     *
+     * <p><b>可见范围是账号集合</b>（V2.1 M15）：无家庭用户集合里只有自己（行为与 V2.0 的
+     * {@code user_id = :userId} 完全一致）；家庭成员的集合 = 家庭全部 ACTIVE 成员
+     * （读侧家庭可见，01B 第六节）。集合由 {@code SyncAccessScopeResolver} 在服务层
+     * 推导后传入，存储层不做任何权限判断。
      */
     private String buildSelectChangesSql() {
         return "SELECT " + String.join(", ", pullColumns) + ", server_updated_at"
                 + " FROM " + table.tableName()
-                + " WHERE user_id = :userId"
+                + " WHERE user_id IN (:userIds)"
                 + " AND (server_updated_at > :since OR (server_updated_at = :since AND " + idColumn + " > :sinceId))"
                 + " ORDER BY server_updated_at, " + idColumn;
     }
@@ -245,6 +250,11 @@ final class SyncTableSql {
     /** 该表实体是否声明了 isBuiltin 字段（即库表有 is_builtin 列） */
     private boolean hasBuiltinFlag() {
         return propertyToColumn.containsKey("isBuiltin");
+    }
+
+    /** 服务端独占：全局列 + 本表登记列（如 bl_children.family_id）都不进载荷与拉取 */
+    private boolean isServerOwned(String property) {
+        return SERVER_OWNED.contains(property) || table.serverOwnedProperties().contains(property);
     }
 
     // ------------------------------------------------------------------

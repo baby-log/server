@@ -3,6 +3,8 @@ package com.babylog.biz.sync.service.impl;
 import com.babylog.biz.api.enums.BabyLogErrorCode;
 import com.babylog.biz.sync.dto.SyncPushCmd;
 import com.babylog.biz.sync.store.SyncRecordStore;
+import com.babylog.biz.sync.support.SyncAccessScope;
+import com.babylog.biz.sync.support.SyncAccessScopeResolver;
 import com.babylog.biz.sync.support.SyncCursor;
 import com.babylog.biz.sync.support.SyncPermissionGuard;
 import com.babylog.biz.sync.support.SyncTable;
@@ -53,12 +55,17 @@ class SyncServiceImplTest {
     private SyncRecordStore store;
     @Mock
     private SyncPermissionGuard permissionGuard;
+    @Mock
+    private SyncAccessScopeResolver accessScopeResolver;
 
     private SyncServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new SyncServiceImpl(store, permissionGuard);
+        service = new SyncServiceImpl(store, permissionGuard, accessScopeResolver);
+        // M15 回归锁的基线场景：无家庭用户 = 可见集合只有自己 + 读写全开（行为与 V2.0 零变化）
+        org.mockito.Mockito.when(accessScopeResolver.resolveAccess(org.mockito.ArgumentMatchers.anyLong()))
+                .thenAnswer(inv -> SyncAccessScope.singleUser(inv.getArgument(0)));
     }
 
     // ==================================================================
@@ -75,7 +82,7 @@ class SyncServiceImplTest {
         // 没有新数据时不能把游标清成 0，否则客户端下次变成全量重拉
         assertThat(vo.getNextSince()).isZero();
         assertThat(vo.getNextSinceId()).isZero();
-        verify(store, times(18)).selectChanges(any(), eq(USER_ID), any(), eq(0L),
+        verify(store, times(18)).selectChanges(any(), eq(List.of(USER_ID)), any(), eq(0L),
                 eq(SyncServiceImpl.DEFAULT_PULL_LIMIT));
     }
 
@@ -112,7 +119,7 @@ class SyncServiceImplTest {
 
         // 客户端拿 nextSince/nextSinceId 回来，服务端必须把两段都带进查询
         service.pull(USER_ID, vo.getNextSince(), vo.getNextSinceId(), "CARE", 10);
-        verify(store).selectChanges(eq(SyncTable.DIAPERS), eq(USER_ID),
+        verify(store).selectChanges(eq(SyncTable.DIAPERS), eq(List.of(USER_ID)),
                 eq(SyncCursor.toLocalDateTime(5_000L)), eq(10L), eq(10));
     }
 
@@ -120,10 +127,10 @@ class SyncServiceImplTest {
     void pull_categoryFilterSkipsOtherCategories() {
         service.pull(USER_ID, 0L, null, "FEEDING", null);
 
-        verify(store).selectChanges(eq(SyncTable.FEEDINGS), anyLong(), any(), anyLong(), anyInt());
-        verify(store).selectChanges(eq(SyncTable.CHILDREN), anyLong(), any(), anyLong(), anyInt());
-        verify(store, never()).selectChanges(eq(SyncTable.DIAPERS), anyLong(), any(), anyLong(), anyInt());
-        verify(store, never()).selectChanges(eq(SyncTable.VISITS), anyLong(), any(), anyLong(), anyInt());
+        verify(store).selectChanges(eq(SyncTable.FEEDINGS), any(), any(), anyLong(), anyInt());
+        verify(store).selectChanges(eq(SyncTable.CHILDREN), any(), any(), anyLong(), anyInt());
+        verify(store, never()).selectChanges(eq(SyncTable.DIAPERS), any(), any(), anyLong(), anyInt());
+        verify(store, never()).selectChanges(eq(SyncTable.VISITS), any(), any(), anyLong(), anyInt());
     }
 
     @Test
@@ -136,7 +143,7 @@ class SyncServiceImplTest {
     void pull_clampsLimitToMaximum() {
         service.pull(USER_ID, 0L, null, null, 9_999);
 
-        verify(store).selectChanges(eq(SyncTable.FEEDINGS), anyLong(), any(), anyLong(),
+        verify(store).selectChanges(eq(SyncTable.FEEDINGS), any(), any(), anyLong(),
                 eq(SyncServiceImpl.MAX_PULL_LIMIT));
     }
 
@@ -148,6 +155,24 @@ class SyncServiceImplTest {
 
         // 客户端误把自己的手机时钟当游标传：按服务端时间处理，否则会永远拉不到数据
         assertThat(vo.getNextSince()).isLessThan(bogus);
+    }
+
+    @Test
+    void pull_familyMemberSeesFamilyScopeAndReadFilterApplies() {
+        // M15 读侧家庭可见：VIEWER 成员可见集合 = 家庭全部 ACTIVE 成员；
+        // 可读分类被收窄到 FEEDING（当前实际矩阵恒为全开，这里锁的是管道语义）
+        org.mockito.Mockito.when(accessScopeResolver.resolveAccess(USER_ID))
+                .thenReturn(new SyncAccessScope(9L, "VIEWER",
+                        List.of(USER_ID, OTHER_USER_ID),
+                        java.util.EnumSet.of(com.babylog.biz.sync.support.SyncCategory.FEEDING),
+                        java.util.EnumSet.noneOf(com.babylog.biz.sync.support.SyncCategory.class)));
+
+        service.pull(USER_ID, 0L, null, null, null);
+
+        verify(store).selectChanges(eq(SyncTable.FEEDINGS), eq(List.of(USER_ID, OTHER_USER_ID)),
+                any(), anyLong(), anyInt());
+        verify(store, never()).selectChanges(eq(SyncTable.DIAPERS), any(), any(), anyLong(), anyInt());
+        verify(store, never()).selectChanges(eq(SyncTable.VISITS), any(), any(), anyLong(), anyInt());
     }
 
     // ==================================================================
@@ -296,7 +321,7 @@ class SyncServiceImplTest {
     // ==================================================================
 
     private void storeReturns(SyncTable table, SyncRecordStore.Row... rows) {
-        org.mockito.Mockito.when(store.selectChanges(eq(table), anyLong(), any(), anyLong(), anyInt()))
+        org.mockito.Mockito.when(store.selectChanges(eq(table), any(), any(), anyLong(), anyInt()))
                 .thenReturn(List.of(rows));
     }
 

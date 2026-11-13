@@ -6,7 +6,6 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-
 /**
  * 同步记录存储（18 张 bl_ 表的通用读写）。
  *
@@ -34,11 +33,16 @@ public interface SyncRecordStore {
     /**
      * 游标增量拉取（<b>含软删除行</b>：deleted=1 也是客户端要应用的变更）。
      *
+     * <p>可见范围（V2.1 M15 读侧家庭可见）：{@code userIds} 由服务层的
+     * {@code SyncAccessScopeResolver} 推导——无家庭用户 = {自己}（行为与 V2.0 零变化），
+     * 家庭成员 = 家庭全部 ACTIVE 成员。存储层不做权限判断，只按集合过滤。
+     *
+     * @param userIds 可见账号集合（至少含当前用户自己）
      * @param since   服务端游标（{@code server_updated_at} 下界，含同值）
      * @param sinceId 同毫秒 tiebreak（上一页最后一条的 id）
      * @param limit   单表上限（全局上限由服务层再裁一次）
      */
-    List<Row> selectChanges(SyncTable table, long userId, LocalDateTime since, long sinceId, int limit);
+    List<Row> selectChanges(SyncTable table, Collection<Long> userIds, LocalDateTime since, long sinceId, int limit);
 
     /**
      * 内置行增量拉取（M8 基础数据通道，<b>不按 user_id 过滤</b>）。

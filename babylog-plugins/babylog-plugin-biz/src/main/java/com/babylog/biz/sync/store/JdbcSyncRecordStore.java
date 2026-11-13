@@ -55,10 +55,13 @@ public class JdbcSyncRecordStore implements SyncRecordStore {
     }
 
     @Override
-    public List<Row> selectChanges(SyncTable table, long userId, LocalDateTime since, long sinceId, int limit) {
+    public List<Row> selectChanges(SyncTable table, Collection<Long> userIds, LocalDateTime since, long sinceId, int limit) {
+        if (userIds == null || userIds.isEmpty()) {
+            throw new IllegalArgumentException("selectChanges 的可见账号集合不能为空（至少应含当前用户）");
+        }
         SyncTableSql sql = sqlByTable.get(table);
         Map<String, Object> params = new HashMap<>(4);
-        params.put("userId", userId);
+        params.put("userIds", userIds);
         params.put("since", since);
         params.put("sinceId", sinceId);
         // LIMIT 用数值内联：limit 已在服务层钳到 [1, MAX]，不存在注入面，且部分驱动对 LIMIT ? 支持不一致

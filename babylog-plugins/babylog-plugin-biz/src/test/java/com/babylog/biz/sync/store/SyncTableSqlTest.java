@@ -65,14 +65,29 @@ class SyncTableSqlTest {
     }
 
     @Test
-    void cursorQueryUsesOwnerAndBothCursorSegments() {
+    void cursorQueryUsesVisibleAccountSetAndBothCursorSegments() {
         String sql = new SyncTableSql(SyncTable.FEEDINGS).selectChangesSql();
 
-        assertThat(sql).contains("WHERE user_id = :userId")
+        // M15：可见范围是账号集合（无家庭用户集合 = {自己}，行为与 user_id = :userId 零变化）
+        assertThat(sql).contains("WHERE user_id IN (:userIds)")
+                .doesNotContain("user_id = :userId")
                 .contains("(server_updated_at > :since OR (server_updated_at = :since AND id > :sinceId))")
                 .contains("ORDER BY server_updated_at, id")
                 // 软删除行必须能被拉到：同步语义里 deleted=1 也是变更
                 .doesNotContain("deleted = 0");
+    }
+
+    @Test
+    void childrenFamilyIdIsServerOwned() {
+        // family_id 由家庭服务回填（创建家庭时），客户端 Room 没有这列：
+        // 出现在载荷里 = 客户端重推宝宝行会把回填值覆写回 null（家庭归属 silently 丢失）
+        SyncTableSql children = new SyncTableSql(SyncTable.CHILDREN);
+        assertThat(children.payloadProperties()).doesNotContain("familyId");
+        assertThat(children.pullProperties()).doesNotContain("familyId");
+
+        // 对照：family_members 的 family_id 是客户端可推的载荷列（M6 联调既有行为，勿动）
+        SyncTableSql members = new SyncTableSql(SyncTable.FAMILY_MEMBERS);
+        assertThat(members.payloadProperties()).contains("familyId");
     }
 
     @Test

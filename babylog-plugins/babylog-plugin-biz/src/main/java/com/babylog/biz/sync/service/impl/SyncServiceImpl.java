@@ -4,6 +4,8 @@ import com.babylog.biz.api.enums.BabyLogErrorCode;
 import com.babylog.biz.sync.dto.SyncPushCmd;
 import com.babylog.biz.sync.service.SyncService;
 import com.babylog.biz.sync.store.SyncRecordStore;
+import com.babylog.biz.sync.support.SyncAccessScope;
+import com.babylog.biz.sync.support.SyncAccessScopeResolver;
 import com.babylog.biz.sync.support.SyncCategory;
 import com.babylog.biz.sync.support.SyncCursor;
 import com.babylog.biz.sync.support.SyncPermissionGuard;
@@ -31,10 +33,11 @@ import java.util.Set;
  *
  * <p>三块职责，边界写清楚：
  * <ul>
- *   <li><b>拉取</b>：游标推进、跨表归并排序、分类过滤、分页——不做权限判断（归属过滤在 SQL 的
- *       {@code user_id} 条件里，V2.1 的读权限再叠加一层 member 过滤）；</li>
+ *   <li><b>拉取</b>：游标推进、跨表归并排序、分类过滤、分页；可见范围与读分类由
+ *       {@link SyncAccessScopeResolver} 推导（V2.1 M15 读侧家庭可见：成员拉得到家庭
+ *       全部 ACTIVE 成员的数据；无家庭用户集合 = {自己}，行为与 V2.0 零变化）；</li>
  *   <li><b>推送</b>：结构校验 → 归属校验 → 版本门禁 → 落库，逐条裁决（部分成功）；
- *       写权限判断交给 {@link SyncPermissionGuard}（V2.0 空实现）；</li>
+ *       写权限判断交给 {@link SyncPermissionGuard}（M15 解析就绪、拦截 M16 点亮）；</li>
  *   <li><b>协议错误</b>：只有「请求本身不成立」（空载荷、超量、未知表、未知分类）才抛异常整批失败，
  *       单条记录的问题一律进 rejected 明细。</li>
  * </ul>
@@ -65,10 +68,13 @@ public class SyncServiceImpl implements SyncService {
 
     private final SyncRecordStore store;
     private final SyncPermissionGuard permissionGuard;
+    private final SyncAccessScopeResolver accessScopeResolver;
 
-    public SyncServiceImpl(SyncRecordStore store, SyncPermissionGuard permissionGuard) {
+    public SyncServiceImpl(SyncRecordStore store, SyncPermissionGuard permissionGuard,
+                           SyncAccessScopeResolver accessScopeResolver) {
         this.store = store;
         this.permissionGuard = permissionGuard;
+        this.accessScopeResolver = accessScopeResolver;
     }
 
     // ==================================================================
@@ -77,7 +83,11 @@ public class SyncServiceImpl implements SyncService {
 
     @Override
     public SyncChangesVO pull(long userId, Long sinceMillis, Long sinceId, String categories, Integer limit) {
+        SyncAccessScope scope = accessScopeResolver.resolveAccess(userId);
         Set<SyncCategory> requested = parseCategories(categories);
+        // 有效分类 = 客户端请求 ∩ 成员可读分类（无家庭用户可读 = 全开，行为零变化）。
+        // 基础设施表不参与分类过滤，任何请求都随行下发（少了它们业务记录连 child_id 都对不上号）。
+        Set<SyncCategory> effective = intersect(requested, scope.readableCategories());
         int pageLimit = SyncCursor.normalizeLimit(limit, DEFAULT_PULL_LIMIT, MAX_PULL_LIMIT);
         long serverTime = SyncCursor.now();
         long effectiveSince = SyncCursor.normalizeSince(sinceMillis, serverTime, CURSOR_FUTURE_TOLERANCE_MILLIS);
@@ -85,8 +95,8 @@ public class SyncServiceImpl implements SyncService {
         LocalDateTime sinceTime = SyncCursor.toLocalDateTime(effectiveSince);
 
         List<SyncRecordStore.Row> merged = new ArrayList<>();
-        for (SyncTable table : SyncTable.forCategories(requested)) {
-            merged.addAll(store.selectChanges(table, userId, sinceTime, effectiveSinceId, pageLimit));
+        for (SyncTable table : SyncTable.forCategories(effective)) {
+            merged.addAll(store.selectChanges(table, scope.visibleUserIds(), sinceTime, effectiveSinceId, pageLimit));
         }
         // 跨表归并：游标是全局的（所有表共用一份 server_updated_at 时间轴），故必须全局排序后再截断
         merged.sort(Comparator.comparingLong(SyncRecordStore.Row::cursorMillis)
@@ -122,6 +132,18 @@ public class SyncServiceImpl implements SyncService {
         } catch (IllegalArgumentException e) {
             throw new ServiceException(BabyLogErrorCode.SYNC_CATEGORY_INVALID, e.getMessage());
         }
+    }
+
+    /** 请求分类与可读分类取交集；请求为 null（不限分类）时直接用可读分类 */
+    private static Set<SyncCategory> intersect(Set<SyncCategory> requested, Set<SyncCategory> readable) {
+        if (requested == null) {
+            return readable;
+        }
+        Set<SyncCategory> result = requested.isEmpty()
+                ? java.util.EnumSet.noneOf(SyncCategory.class)
+                : java.util.EnumSet.copyOf(requested);
+        result.retainAll(readable);
+        return result;
     }
 
     // ==================================================================
