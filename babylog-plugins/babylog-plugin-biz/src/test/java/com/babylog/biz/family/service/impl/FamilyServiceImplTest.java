@@ -368,6 +368,104 @@ class FamilyServiceImplTest {
     }
 
     // ------------------------------------------------------------------
+    // 成员自助退出（M18）
+    // ------------------------------------------------------------------
+
+    @Test
+    void leaveMarksSelfRemovedWithCursorNulled() {
+        BlFamilyMember me = member(302L, 200L, JOINER, BlFamilyMember.ROLE_VIEWER, BlFamilyMember.STATUS_ACTIVE);
+        me.setServerUpdatedAt(java.time.LocalDateTime.of(2026, 11, 13, 10, 0));
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of(me));
+        when(memberMapper.updateById(any(BlFamilyMember.class))).thenReturn(1);
+
+        service().leave(JOINER);
+
+        // 语义与踢出对齐：自己那行置 REMOVED（不删行、不吊销 token、权限行不动），
+        // 游标置空保证退出者的增量拉取能看到行变 REMOVED（M18 口径）
+        ArgumentCaptor<BlFamilyMember> captor = ArgumentCaptor.forClass(BlFamilyMember.class);
+        verify(memberMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getId()).isEqualTo(302L);
+        assertThat(captor.getValue().getStatus()).isEqualTo(BlFamilyMember.STATUS_REMOVED);
+        assertThat(captor.getValue().getServerUpdatedAt()).isNull();
+        verify(memberMapper, never()).deleteById(anyLong());
+        verify(permissionMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void leaveRejectsOwnerMustDissolveFirst() {
+        BlFamilyMember me = member(301L, 200L, OWNER, BlFamilyMember.ROLE_OWNER, BlFamilyMember.STATUS_ACTIVE);
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of(me));
+
+        // OWNER 退出 = 家庭锁死（无人可管理/解散），必须走 dissolve
+        assertBizError(() -> service().leave(OWNER), BabyLogErrorCode.OWNER_LEAVE_FORBIDDEN);
+        verify(memberMapper, never()).updateById(any(BlFamilyMember.class));
+    }
+
+    @Test
+    void leaveReturns8300WhenUserHasNoFamily() {
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        assertBizError(() -> service().leave(JOINER), BabyLogErrorCode.FAMILY_NOT_FOUND);
+    }
+
+    // ------------------------------------------------------------------
+    // 解散家庭（M18）
+    // ------------------------------------------------------------------
+
+    @Test
+    void dissolveMarksFamilyDissolvedRemovesAllMembersAndClearsChildren() {
+        BlFamilyMember me = member(301L, 200L, OWNER, BlFamilyMember.ROLE_OWNER, BlFamilyMember.STATUS_ACTIVE);
+        BlFamilyMember other = member(302L, 200L, JOINER, BlFamilyMember.ROLE_VIEWER, BlFamilyMember.STATUS_ACTIVE);
+        java.time.LocalDateTime oldCursor = java.time.LocalDateTime.of(2026, 11, 13, 10, 0);
+        me.setServerUpdatedAt(oldCursor);
+        other.setServerUpdatedAt(oldCursor);
+        BlFamily family = new BlFamily();
+        family.setId(200L);
+        family.setName("我们家");
+        family.setInviteCode("ABCD2345");
+        family.setStatus(BlFamily.STATUS_ACTIVE);
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of(me, other));
+        when(familyMapper.selectById(200L)).thenReturn(family);
+        when(familyMapper.updateById(any(BlFamily.class))).thenReturn(1);
+        when(memberMapper.updateById(any(BlFamilyMember.class))).thenReturn(1);
+        when(childMapper.update(any(), any(Wrapper.class))).thenReturn(2);
+
+        service().dissolve(OWNER);
+
+        // 家庭行软删（status=DISSOLVED，行保留）：旧邀请码 join 只查 ACTIVE 家庭 → 8301
+        ArgumentCaptor<BlFamily> familyCaptor = ArgumentCaptor.forClass(BlFamily.class);
+        verify(familyMapper).updateById(familyCaptor.capture());
+        assertThat(familyCaptor.getValue().getStatus()).isEqualTo(BlFamily.STATUS_DISSOLVED);
+        verify(familyMapper, never()).deleteById(anyLong());
+
+        // 全部 ACTIVE 成员（含 OWNER 自己）置 REMOVED + 游标置空（各成员 myFamily → 8300 回落）
+        ArgumentCaptor<BlFamilyMember> memberCaptor = ArgumentCaptor.forClass(BlFamilyMember.class);
+        verify(memberMapper, times(2)).updateById(memberCaptor.capture());
+        assertThat(memberCaptor.getAllValues())
+                .extracting(BlFamilyMember::getId, BlFamilyMember::getStatus)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple(301L, BlFamilyMember.STATUS_REMOVED),
+                        org.assertj.core.groups.Tuple.tuple(302L, BlFamilyMember.STATUS_REMOVED));
+        assertThat(memberCaptor.getAllValues())
+                .allSatisfy(row -> assertThat(row.getServerUpdatedAt()).isNull());
+
+        // 宝宝归属清空（2026-11-13 拍板）：与 create 的回填对称，重建家庭时宝宝重新归入
+        verify(childMapper).update(any(), any(Wrapper.class));
+        // 权限行不动（与踢出同口径）
+        verify(permissionMapper, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void dissolveRejectsNonOwnerAndNoFamily() {
+        BlFamilyMember viewer = member(302L, 200L, JOINER, BlFamilyMember.ROLE_VIEWER, BlFamilyMember.STATUS_ACTIVE);
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of(viewer));
+        assertBizError(() -> service().dissolve(JOINER), BabyLogErrorCode.OWNER_TRANSFER_FORBIDDEN);
+
+        when(memberMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        // 无家庭（含已解散后的重复调用——成员行已 REMOVED）统一 8300，天然幂等
+        assertBizError(() -> service().dissolve(OWNER), BabyLogErrorCode.FAMILY_NOT_FOUND);
+    }
+
+    // ------------------------------------------------------------------
 
     private static BlFamilyMember member(long id, long familyId, long userId, String role, String status) {
         BlFamilyMember row = new BlFamilyMember();

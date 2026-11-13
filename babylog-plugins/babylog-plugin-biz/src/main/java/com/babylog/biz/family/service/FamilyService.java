@@ -36,4 +36,18 @@ public interface FamilyService {
 
     /** 踢出成员（仅 OWNER → 8304；不可踢自己；目标须为本家庭 ACTIVE 成员 → 8302）。行保留，status=REMOVED */
     void kick(long userId, long memberId);
+
+    /**
+     * 成员自助退出（M18）：语义与踢出对齐——成员行 status 置 REMOVED（行保留、不吊销 token、
+     * 权限行不动），退出者立即回落单用户范围。无家庭 → 8300；OWNER → 8305（请先解散）。
+     */
+    void leave(long userId);
+
+    /**
+     * OWNER 解散家庭（M18）：家庭行置 DISSOLVED（旧邀请码随之失效，join → 8301）、
+     * 全部 ACTIVE 成员行置 REMOVED（各成员下一次 myFamily 即 8300 回落单用户）、
+     * 宝宝 family_id 清空（与 create 的回填对称——解散后重建家庭，宝宝重新归入新家庭）。
+     * 无家庭 → 8300；非 OWNER → 8304；重复解散按无家庭处理（成员行已 REMOVED → 8300）。
+     */
+    void dissolve(long userId);
 }

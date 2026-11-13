@@ -45,6 +45,10 @@ import java.util.function.Predicate;
  *       不变、version+1，同步可见「权限值变了」）——不能软删重建：唯一键
  *       (member_id, child_id, category) 不含 deleted，软删行仍占键，重插必撞 DuplicateKey
  *       （dev 冒烟实测））；</li>
+ *   <li><b>退出/解散（M18）与踢出同语义</b>：只动成员行 status（REMOVED），不吊销 token、
+ *       权限行不动、幂等靠「ACTIVE 行不存在 → 8300」。OWNER 不可退出（8305，防家庭锁死），
+ *       只能解散；解散 = 家庭行 DISSOLVED（旧码 join 8301）+ 全员 REMOVED +
+ *       宝宝 family_id 清空（与 create 回填对称，支持解散后重建家庭——2026-11-13 龙哥拍板）；</li>
  *   <li><b>updateById 前必须置空 serverUpdatedAt</b>（M18）：同步表实体从 SELECT 出来游标列非空，
  *       MP NOT_NULL 策略会把旧值写回 SET 段 → MySQL ON UPDATE CURRENT_TIMESTAMP(3) 不触发 →
  *       行变更对增量拉取不可见。changeRole/kick/regeneratePermissionRows 全部遵守，
@@ -211,6 +215,55 @@ public class FamilyServiceImpl implements FamilyService {
         memberMapper.updateById(target);
         // 权限行不动：成员行 status=REMOVED 已让裁决（FamilyAccessScopeResolver 只认 ACTIVE）
         // 与拉取范围立即失效；行保留是同步事实（客户端要显示「谁被移除了」）
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void leave(long userId) {
+        BlFamilyMember me = requireActiveMembership(userId);
+        if (BlFamilyMember.ROLE_OWNER.equals(me.getRole())) {
+            // OWNER 退出 = 家庭锁死（无人可管理成员/解散），必须走 dissolve
+            throw new ServiceException(BabyLogErrorCode.OWNER_LEAVE_FORBIDDEN);
+        }
+        me.setStatus(BlFamilyMember.STATUS_REMOVED);
+        me.setServerUpdatedAt(null);
+        memberMapper.updateById(me);
+        // 权限行不动（与踢出同口径）：成员行 REMOVED 已让裁决与拉取范围立即失效
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void dissolve(long userId) {
+        BlFamilyMember me = requireActiveMembership(userId);
+        requireOwner(me);
+        BlFamily family = familyMapper.selectById(me.getFamilyId());
+        if (family == null) {
+            throw new ServiceException(BabyLogErrorCode.FAMILY_NOT_FOUND);
+        }
+        family.setStatus(BlFamily.STATUS_DISSOLVED);
+        // bl_family 是服务端专属表（BaseDO，无游标列），不存在置空问题；
+        // 旧邀请码随 status 失效：join 只查 ACTIVE 家庭，旧码统一 8301（不给存在性信号）
+        familyMapper.updateById(family);
+
+        // 全部 ACTIVE 成员行（含 OWNER 自己）置 REMOVED：各成员下一次 myFamily 即 8300 →
+        // App 端清身份回落单用户（M17 已实现该分支）；不吊销 token，幂等由「成员行已 REMOVED →
+        // requireActiveMembership 抛 8300」天然保证
+        List<BlFamilyMember> active = memberMapper.selectList(Wrappers.<BlFamilyMember>lambdaQuery()
+                .eq(BlFamilyMember::getFamilyId, me.getFamilyId())
+                .eq(BlFamilyMember::getStatus, BlFamilyMember.STATUS_ACTIVE));
+        for (BlFamilyMember row : active) {
+            row.setStatus(BlFamilyMember.STATUS_REMOVED);
+            row.setServerUpdatedAt(null);
+            memberMapper.updateById(row);
+        }
+
+        // 宝宝归属清空（2026-11-13 龙哥拍板）：与 create 的回填逻辑对称——
+        // 解散后重建家庭时，「owner 名下 family_id 为空的宝宝」会重新归入新家庭。
+        // wrapper 更新不写游标列，ON UPDATE 自动前进，owner 下次增量拉取收到新行
+        // （family_id 是服务端独占列不回传，客户端无感知，version 不变幂等）
+        childMapper.update(null, Wrappers.<BlChild>lambdaUpdate()
+                .set(BlChild::getFamilyId, null)
+                .eq(BlChild::getFamilyId, me.getFamilyId()));
     }
 
     // ==================================================================

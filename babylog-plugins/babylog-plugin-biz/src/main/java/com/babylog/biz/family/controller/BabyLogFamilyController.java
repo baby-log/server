@@ -88,6 +88,20 @@ public class BabyLogFamilyController {
         return R.ok();
     }
 
+    @Operation(summary = "成员自助退出（OWNER 不可退出须先解散 → 8305；退出后立即回落单用户范围）")
+    @PostMapping("/leave")
+    public R<Void> leave() {
+        familyService.leave(currentUserId());
+        return R.ok();
+    }
+
+    @Operation(summary = "解散家庭（仅 OWNER → 8304；家庭置 DISSOLVED，成员全部 REMOVED，宝宝归属清空待重建家庭回填）")
+    @PostMapping("/dissolve")
+    public R<Void> dissolve() {
+        familyService.dissolve(currentUserId());
+        return R.ok();
+    }
+
     /** 与 BabyLogSyncController / BabyLogDeviceController 同口径：会话被清时按 1002 回，让客户端走 refresh */
     private static long currentUserId() {
         Long userId = LoginContext.getUserId();

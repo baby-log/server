@@ -28,6 +28,11 @@ public enum BabyLogErrorCode implements ErrorCode {
     NOT_FAMILY_MEMBER(8302, "非家庭成员"),
     MEMBER_ALREADY_JOINED(8303, "该用户已在家庭中"),
     OWNER_TRANSFER_FORBIDDEN(8304, "仅家庭创建者可管理成员"),
+    /**
+     * OWNER 不能用「退出」代替「解散」（M18）：OWNER 是不可转让的兜底角色（01B 第六节），
+     * 直接退出会把家庭留在「有 ACTIVE 成员却无人可管理」的锁死态——要走 POST /family/dissolve。
+     */
+    OWNER_LEAVE_FORBIDDEN(8305, "家庭创建者不能退出，请先解散家庭"),
 
     // ---------- 宝宝（8320-8329） ----------
     CHILD_NOT_FOUND(8320, "宝宝不存在"),
