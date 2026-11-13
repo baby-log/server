@@ -683,6 +683,32 @@ system 插件早有 wx-mini 登录编排（`/mini/auth/**` 发 `wx-mini-user` to
   dev 冒烟 `/tmp/m21-smoke.zsh` **28/28**（A 建家+推数据 → wx_ 前缀 B join → 家庭视角
   summary + members 来源标记 + 8301/8303 契约探针）。
 
+## 小程序收尾批配套（M23，会话 2026-11-13，V2.2 收口，**服务端零改动**）
+
+M23 没有新增端点、没有新错误码、没有新 Flyway 迁移——小程序这一批消费的两个端点都是**存量**的，
+本节点只记契约口径，避免下次误以为是新功能。
+
+| 端点 | 出处 | 小程序用法 |
+|---|---|---|
+| `POST /app/babylog/auth/logout` | **M5**（`BabyLogAuthController#logout`，`@SaCheckLogin(app-user)`） | 退出登录：body 带 `refreshToken` → `logoutCurrent()` 吊销当前 access + `revoke(refreshToken)` **双吊销**；不带只注销 access |
+| `PUT /app/system/profile` | **system 插件**（`ProfileController#update`，`LoginContext` 解析三套账号体系） | join 家庭**前**改 `sys_user.nickname`，解决小程序首登昵称固定「微信用户」重名。body 全字段可选，只传 `nickname` 其余列不动 |
+
+**两个必须记住的口径**：
+
+1. **logout 不是踢设备**：`bl_device` 行保持 ACTIVE、workerId 不回收 → 下次静默登录复用同一设备行
+   （冒烟 4c/4e 锁死：workerId 仍 0、device status 仍 ACTIVE）。被踢（KICKED）才走 8376 + 复活语义。
+2. **成员显示名是 join 时快照**：`FamilyServiceImpl#resolveDisplayName` 取插行那一刻的 `sys_user.nickname`
+   落 `bl_family_members.display_name`。所以「改昵称」必须在 join 之前；已加入后改 sys_user.nickname
+   **不会**刷新成员行与历史记录显示名（也不回填）。将来要支持「加入后改名」，得在服务端补一条
+   「成员行显示名刷新」口径（已作为 M24 备选 B 记录）。
+
+**验证**：`/tmp/m23-smoke.zsh` **21/21 全绿**（运行时账号，biz 侧代码未改，故未重跑单测/ArchUnit）：
+A 注册+推宝宝+建家 → B（wx_ 前缀，默认昵称「微信用户」）先 `PUT /app/system/profile` 改「奶奶」
+再 join → 成员行 displayName=奶奶、userType=WX_MINI → logout → 旧 access **1002**、旧 refresh **8376**
+→ 重新登录 userId 不变、workerId 仍 0、家庭身份仍 VIEWER、设备行仍 ACTIVE → 对照组 C 不改昵称
+直接 join，displayName 仍是「微信用户」 → 未登录 logout 被 **1002** 拦。
+另：`POST /app/babylog/family`（建家）**无尾斜杠**，带 `/` 会 1004，冒烟脚本已按无斜杠写。
+
 ## 后续（M21+）
 
 - ~~V2.2 第二批：加入家庭（邀请码 join）/ 成员动态页~~ ✅ M21 已完成（小程序侧；见
@@ -692,7 +718,11 @@ system 插件早有 wx-mini 登录编排（`/mini/auth/**` 发 `wx-mini-user` to
   与 rejected[8343] 均为 M6/M16 存量契约；小程序侧见 `BabyLog-Mini/PROGRESS.md`；
   dev 冒烟 27/27：`/tmp/m22-smoke.zsh`，含 VIEWER 8343 → 升级落库 → 汇总+1 →
   recent 标注 memberId → 降回 VIEWER 立即拦）
-- V2.2 收尾批（M23 候选）：小程序 logout 接 M5 存量端点、「微信用户」显示名区分（产品拍板）
+- ~~V2.2 收尾批（M23）：小程序 logout 接 M5 存量端点、「微信用户」显示名区分~~ ✅ M23 已完成
+  （**服务端零改动**；消费 `/auth/logout` + `/app/system/profile`，冒烟 `/tmp/m23-smoke.zsh` 21/21；
+  见上方「小程序收尾批配套（M23）」节）
+- **V2.2 客户端四件套已全部收口**（加入家庭/今日汇总/快速记录/成员动态）——小程序侧后续只剩
+  提审备案等发布动作（V3 前不动）
 - refresh token 轮换 + 复用检测（评估结论见上方 M17+ 清单：改 App 契约，单独排会话）
 - 权限按宝宝粒度裁决；疫苗时间表维护；多租户保持关闭（bl_ 表无 tenant_id）
 - App 端「谁记的」端到端与 FamilyApi leave/dissolve 接线 ✅ M19 已全部完成（上方 M18 节
