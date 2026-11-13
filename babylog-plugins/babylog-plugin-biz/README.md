@@ -687,8 +687,12 @@ system 插件早有 wx-mini 登录编排（`/mini/auth/**` 发 `wx-mini-user` to
 
 - ~~V2.2 第二批：加入家庭（邀请码 join）/ 成员动态页~~ ✅ M21 已完成（小程序侧；见
   `BabyLog-Mini/PROGRESS.md`；服务端配套改动见上方 M21 节）
-- V2.2 第三批（M22）：快速记录（push 单条 FEEDING/CARE，VIEWER 置灰预判，
-  雪花 ID 用登录响应 workerId 生成）
+- ~~V2.2 第三批（M22）：快速记录（push 单条 FEEDING/CARE，VIEWER 置灰预判，雪花 ID 用
+  登录响应 workerId 生成）~~ ✅ M22 已完成（**纯客户端批次，服务端零改动**——`/sync/push`
+  与 rejected[8343] 均为 M6/M16 存量契约；小程序侧见 `BabyLog-Mini/PROGRESS.md`；
+  dev 冒烟 27/27：`/tmp/m22-smoke.zsh`，含 VIEWER 8343 → 升级落库 → 汇总+1 →
+  recent 标注 memberId → 降回 VIEWER 立即拦）
+- V2.2 收尾批（M23 候选）：小程序 logout 接 M5 存量端点、「微信用户」显示名区分（产品拍板）
 - refresh token 轮换 + 复用检测（评估结论见上方 M17+ 清单：改 App 契约，单独排会话）
 - 权限按宝宝粒度裁决；疫苗时间表维护；多租户保持关闭（bl_ 表无 tenant_id）
 - App 端「谁记的」端到端与 FamilyApi leave/dissolve 接线 ✅ M19 已全部完成（上方 M18 节
