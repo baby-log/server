@@ -627,13 +627,55 @@ OWNER 是不可转让兜底角色（01B），直接退出会把家庭留在「�
   （M17 判断 3 原话）——C 全量拉 member_permissions 是 12 行（A 旧家 4 + A 新家 4 +
   C 自己 4），数全集必误报
 
-## 后续（M19+）
+## 小程序登录与今日汇总（M20，会话 2026-11-13，V2.2 第一批）
 
-- **App 端「谁记的」端到端**（M19 候选首位）：12 个 Repository 仍写 `createdBy = LOCAL_OWNER_ID`
-  常量，应改「家庭内写 prefs.familyMemberId、不在家庭写 LOCAL_OWNER_ID」+ 列表标注消费
-  `FamilyMemberRepository.observeMembers()` 翻译目录（M17 已备好）
-- App 端 FamilyApi 补 leave/dissolve 两端点接线（服务端 M18 已就绪，见上节契约影响面）
-- V2.2 微信小程序启动（新仓库，原生小程序，家庭轻入口）/ iOS 启动评估 S1——M19 候选，
-  龙哥拍板
+V2.2 微信小程序启动（家庭轻入口）。**架构拍板：小程序走 app-user token，家庭/同步端点零改动**——
+system 插件早有 wx-mini 登录编排（`/mini/auth/**` 发 `wx-mini-user` token），但 biz 全部端点是
+`@SaCheckLogin(app-user)`，Sa-Token 多账号体系 token 互不相认；故 biz 补第四条登录路，小程序在
+服务端眼里就是「一台设备」（bl_device 落行、拿 workerId），家庭/同步/后续快速记录全链路直接复用。
+
+### 端点（新增 2 个，现有端点零改动）
+
+| 端点 | 鉴权 | 说明 |
+|---|---|---|
+| `POST /app/babylog/auth/mini/login` | 匿名（A11 已登记） | wx.login code → code2session（system 契约）→ 查 sys_social_user 绑定 → 未绑定首登自动建档（`wx_` 前缀随机用户名、随机密码、昵称「微信用户」）→ completeLogin 管线发 app-user 双 token + bl_device + workerId。unionId 遇到就后补（值不变不调契约） |
+| `GET /app/babylog/summary/today` | `@SaCheckLogin(app-user)` | 只读聚合：按宝宝今日喂养（次数/ML 合计/母乳/辅食）/尿布（湿/脏）/睡眠（时长/进行中截断到当前）+ 最近动态（三类合并倒序前 10 条，透传 createdBy 成员显示名）。可见范围与读权限复用 `SyncAccessScopeResolver`；分类读权限显式减窄 → 对应聚合段返回 null（不可绕过）。「今日」= 服务端 JVM 时区当天 00:00 起 `started_at` 窗口，跨夜睡眠不算今天 |
+
+### 契约依赖（system-api 新增，M20；同时是上游 PivotOS 同步素材）
+
+- `IWechatMiniFacade#code2Session(app, code)` → `WechatSessionDTO`（openId/unionId）；
+  system 插件适配 Bean `WechatMiniLocalFacade` 委托 `WechatMiniService`
+- `ISocialAccountFacade#findByChannelOpenId/bind/updateUnionId` → `SocialBindingDTO`；
+  适配 Bean `SocialAccountLocalFacade` 委托 `SocialUserService`（sys_social_user，channel=wechat-mini）
+- **上游同步提示词见 BabyLog-Android/PROGRESS.md M20 节**——两仓库文件内容逐字一致，零冲突
+- **配置位**：`babylog.wechat.miniapp.configs.babylog.appid/secret`（yml，龙哥自填；
+  未配置时 mini login 返回 8395，其他端点不受影响）
+
+### 错误码（小程序认证 8395-8399 段）
+
+8395 小程序未配置（对齐 8374 MAIL_NOT_CONFIGURED 先例）· 8396 code 无效/已使用/微信接口失败
+（客户端拉新 code 重登）· 8397 绑定冲突（openid 绑了别的账号 / 孤儿绑定 / 并发抢绑——换绑是管理
+动作，登录路不做）。system 段 2080-2083 在 biz 收口转译，客户端只认 8xxx。
+
+### 验证记录（M20）
+
+- biz 单测 **165 个全绿**（151 基线 + 9 mini 登录 + 5 summary；MP lambda cache 需
+  `TableInfoHelper.initTableInfo` 引导，FamilyServiceImplTest 同款）
+- ArchUnit **22/22 绿**（A11 登记 `BabyLogAuthController#loginByWxMini`）
+- dev 18080 冒烟 `/tmp/m20-smoke.zsh` **28/28 全绿**：mini login 未配置 8395 / 空 code 拒；
+  账密注册→push 五行（child+2喂+尿+进行中睡眠）→ summary 断言 count/totalMl=120（SOLID 30g 不计）/
+  wet/soiled/durationS≈2400/ongoing/recent[0]=FEEDING+妈妈记的；无 token 1002；无宝宝账号空集不报错
+- **真 code2session 联调待 AppID**（小程序还在 mp 后台初始化；yml 填好 appid/secret 后重启即通）
+- commits：`461dc1d`（system 契约）/ `c34d0aa`（mini 登录）/ `5dd592e`（summary）
+
+## 后续（M20+）
+
+- **小程序真机/模拟器联调**（等 AppID + yml 配置）：devtools「导入项目」打开 BabyLog-Mini
+  （骨架已在），模拟器跑通登录 + 今日汇总
+- V2.2 第二批：加入家庭（邀请码 join）/ 快速记录（push FEEDING+CARE，VIEWER 置灰预判）/
+  成员动态页
 - refresh token 轮换 + 复用检测（评估结论见上方 M17+ 清单：改 App 契约，单独排会话）
 - 权限按宝宝粒度裁决；疫苗时间表维护；多租户保持关闭（bl_ 表无 tenant_id）
+- App 端「谁记的」端到端与 FamilyApi leave/dissolve 接线 ✅ M19 已全部完成（上方 M18 节
+  「App 端契约影响面」已消费，勿再排）
+
