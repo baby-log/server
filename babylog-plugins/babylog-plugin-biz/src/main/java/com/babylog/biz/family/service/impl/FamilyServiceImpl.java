@@ -316,11 +316,12 @@ public class FamilyServiceImpl implements FamilyService {
     }
 
     private BlFamilyMember insertMemberRow(Long familyId, long userId, String role) {
+        UserDTO user = userFacade.getById(userId);
         BlFamilyMember row = new BlFamilyMember();
         row.setFamilyId(familyId);
         row.setUserId(userId);
-        row.setUserType("APP");
-        row.setDisplayName(resolveDisplayName(userId));
+        row.setUserType(resolveUserType(user));
+        row.setDisplayName(resolveDisplayName(user, userId));
         row.setRole(role);
         row.setStatus(BlFamilyMember.STATUS_ACTIVE);
         row.setJoinedAt(System.currentTimeMillis());
@@ -328,9 +329,21 @@ public class FamilyServiceImpl implements FamilyService {
         return row;
     }
 
-    private String resolveDisplayName(long userId) {
+    /**
+     * 成员来源标记（M21 最小改动，修 M15 遗留的写死 "APP"）：小程序首登自动建档的
+     * 用户名固定 {@code wx_} 前缀（M20 约定），据此标记 WX_MINI，其余一律 APP。
+     * 只在插入成员行时定值（与行同生命周期），不做实时推导——成员行是同步表，勿频繁改。
+     */
+    private static String resolveUserType(UserDTO user) {
+        if (user != null && user.getUsername() != null
+                && user.getUsername().startsWith("wx_")) {
+            return BlFamilyMember.USER_TYPE_WX_MINI;
+        }
+        return BlFamilyMember.USER_TYPE_APP;
+    }
+
+    private String resolveDisplayName(UserDTO user, long userId) {
         String fallback = "user-" + userId;
-        UserDTO user = userFacade.getById(userId);
         if (user == null) {
             return truncate(fallback);
         }

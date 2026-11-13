@@ -195,6 +195,40 @@ class FamilyServiceImplTest {
         ArgumentCaptor<BlFamilyMember> memberCaptor = ArgumentCaptor.forClass(BlFamilyMember.class);
         verify(memberMapper).insert(memberCaptor.capture());
         assertThat(memberCaptor.getValue().getDisplayName()).isEqualTo("mom"); // 无昵称回退用户名
+        assertThat(memberCaptor.getValue().getUserType()).isEqualTo(BlFamilyMember.USER_TYPE_APP); // M21：非 wx_ 前缀 → APP
+    }
+
+    @Test
+    void joinMarksWxMiniUserAsWxMiniSourceType() {
+        // M21：wx_ 前缀用户名（小程序首登建档，M20 约定）→ 成员行 user_type=WX_MINI
+        // （修 M15 遗留的写死 "APP"——小程序家人加入后成员名单会错标来源）
+        BlFamily family = new BlFamily();
+        family.setId(200L);
+        family.setName("隔壁家庭");
+        family.setInviteCode("ABCD2345");
+        family.setStatus(BlFamily.STATUS_ACTIVE);
+        when(familyMapper.selectOne(any(Wrapper.class))).thenReturn(family);
+        when(memberMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        when(memberMapper.insert(any(BlFamilyMember.class))).thenAnswer(inv -> {
+            inv.getArgument(0, BlFamilyMember.class).setId(302L);
+            return 1;
+        });
+        // 家庭无宝宝 → 不生成权限行（0 次插入），只验成员行来源标记
+        when(childMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        UserDTO user = new UserDTO();
+        user.setUsername("wx_9f3k2m");
+        user.setNickname("微信用户");
+        when(userFacade.getById(JOINER)).thenReturn(user);
+
+        FamilyJoinCmd cmd = new FamilyJoinCmd();
+        cmd.setInviteCode("ABCD2345");
+        service().join(JOINER, cmd);
+
+        ArgumentCaptor<BlFamilyMember> memberCaptor = ArgumentCaptor.forClass(BlFamilyMember.class);
+        verify(memberMapper).insert(memberCaptor.capture());
+        assertThat(memberCaptor.getValue().getUserType()).isEqualTo(BlFamilyMember.USER_TYPE_WX_MINI);
+        assertThat(memberCaptor.getValue().getDisplayName()).isEqualTo("微信用户");
+        verify(permissionMapper, never()).insert(any(BlMemberPermission.class));
     }
 
     @Test

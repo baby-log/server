@@ -37,6 +37,12 @@ public class BlFamilyMember extends BlSyncDO {
     /** 已被踢出：行保留（软删语义走 status 而非 deleted，同步可见），不再参与裁决 */
     public static final String STATUS_REMOVED = "REMOVED";
 
+    // ---- 用户来源（M21 起由服务端在插入成员行时推导，不再写死 APP） ----
+    /** App 端账号（账密注册/邮箱登录建档） */
+    public static final String USER_TYPE_APP = "APP";
+    /** 微信小程序账号（wx.login 首登自动建档，用户名固定 wx_ 前缀——M20 约定） */
+    public static final String USER_TYPE_WX_MINI = "WX_MINI";
+
     /** 家庭 id（bl_family.id） */
     private Long familyId;
 
