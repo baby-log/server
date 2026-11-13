@@ -561,10 +561,79 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 ## 后续（M17+）
 
 - ~~V2.1 家庭共享服务端：写拦截/归属放行/8350/显式行覆盖~~ ✅ M15+M16 已收口（读侧 M15、写侧 M16）
-- **App 端家庭 UI 第一批**（M17 候选首位）：家庭管理页（建家/邀请码/加入/成员列表/改角色/踢出）
-  + 同步链路对 8343/8350/8344 的客户端处置 + family_members/member_permissions 移出 outbox
-- 服务端家庭退出/解散端点（成员自助退出、OWNER 解散家庭）——现在只有踢人，主动退出没有
+- ~~App 端家庭 UI 第一批~~ ✅ M17 已收口（BabyLog-Android@develop，家庭 UI + rejected 处置 + 8344 换 ID 重推）
+- ~~服务端家庭退出/解散端点~~ ✅ M18 已落（见下方「M18」节）
+- ~~改角色/踢出后增量游标不前进（M17 冒烟抓到的真 bug）~~ ✅ M18 P0 已修（updateById 前置空 serverUpdatedAt，见 M18 节）
+- **refresh token 轮换 + 复用检测**（设备踢出复活宽限，M8 遗留）：M18 评估**单独排会话**——
+  轮换会改 App 端契约（/refresh 响应须回新 refresh token，客户端要持久化新值），
+  无客户端承接的半成品不上线；且要动 RedisRefreshTokenStore 存储结构（token 家族/已用墓碑）
 - 权限按宝宝粒度裁决：当前跨宝宝 OR 聚合，payload 已带 childId，钩子签名已预留
-- refresh token 轮换 + 复用检测（设备踢出复活宽限问题，M8 遗留）
 - 疫苗时间表维护（bl_vaccine_schedule 无 seed，等运营数据）
 - 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
+
+## 家庭退出/解散与同步游标修复（M18，会话 2026-11-13，V2.1 服务端收尾批）
+
+### P0：改角色/踢出后同步游标不前进（M17 真机抓到的 bug）
+
+根因：`changeRole`/`kick`/`regeneratePermissionRows` 的实体从 SELECT 出来 `serverUpdatedAt`
+非空，MP NOT_NULL 策略把旧值显式写回 SET 段 → MySQL `ON UPDATE CURRENT_TIMESTAMP(3)`
+不触发 → 成员行/权限行拿不到新游标 → 增量拉取 0 行（M15/M16 冒烟只做 `since=0` 全量拉，
+漏了这条路径；M17 真机「改角色后权限置灰不刷新，直到退出重登」即此）。修法与 M10 管理端
+产品维护同口径：**同步表 updateById 前一律 `setServerUpdatedAt(null)`**。同类隐患全插件
+grep 过：其余 updateById 都在服务端专属表（bl_family/bl_device/bl_feedback/bl_app_version，
+无游标列），只有这三处中招。**新增任何同步表 updateById 都要照此办理**（类注释已写死）。
+
+### 退出/解散端点（`/app/babylog/family/**` 续）
+
+| 端点 | 说明 | 错误码 |
+|---|---|---|
+| `POST /leave` | 成员自助退出：自己成员行置 REMOVED，语义与踢出完全对齐（行保留、不吊销 token、权限行不动）；退出者立即回落单用户范围 | 无家庭 8300 · OWNER 8305 |
+| `POST /dissolve` | OWNER 解散：家庭行置 DISSOLVED（旧邀请码 join → 8301）、全部 ACTIVE 成员行置 REMOVED（含 OWNER 自己）、宝宝 `family_id` **清空**（2026-11-13 龙哥拍板：与 create 回填对称，解散后重建家庭宝宝重新归入新家庭） | 无家庭 8300 · 非 OWNER 8304 |
+
+**新错误码 8305**（`OWNER_LEAVE_FORBIDDEN`「家庭创建者不能退出，请先解散家庭」）：
+OWNER 是不可转让兜底角色（01B），直接退出会把家庭留在「有成员却无人可管理」的锁死态。
+
+**幂等语义**：重复 leave/dissolve → `requireActiveMembership` 找不到 ACTIVE 行 → 8300
+（与 myFamily 无家庭同语义）；被踢/退出/解散三者殊途同归，都走 8300。
+
+### App 端契约影响面（写给 M19+ 的 App 会话）
+
+- **服务端只保证语义一致，App 端零新分支可复用 M17 已有逻辑**：退出（leave/被踢/解散）
+  后客户端下一次 `myFamily` 得 8300 → 清 `familyMemberId`/`familyRole` 身份 → 回落单用户
+  ——M17 已实现该分支，服务端返回口径与之对齐；
+- `FamilyApi` 七端点 → **九端点**（+leave/+dissolve），UI 上：非 OWNER 成员列表挂「退出家庭」，
+  OWNER 挂「解散家庭」（receive 8305 时引导文案「创建者请先解散」）；解散须二次确认；
+- 退出后成员的下次**增量拉取**能拉到自己成员行 REMOVED（M18 游标修复保证），
+  客户端按 M17 的镜像行处理即可；旧邀请码 join 一律 8301（码无效路径，已有处理）。
+
+### 验证记录（M18）
+
+- biz 单测 **151 个全绿**（M16 的 146 + 5：FamilyServiceImplTest 增量游标回归锁 2 例
+  （changeRole/kick 进 updateById 的实体游标列必须 null）+ leave/dissolve 3 组 5 例）
+- ArchUnit **22/22 绿**（新端点走类级 `@SaCheckLogin`，A11 无欠条）；fat jar 复核
+  （删 jar 重打包 + 解内嵌 biz jar 核对 leave/dissolve/8305 在场）
+- dev 起服（18080，先杀 M17 遗留旧实例）：无新 Flyway 迁移；curl 冒烟 **35/35 全绿**
+  （脚本 `/tmp/m18-smoke.zsh`，账号/雪花 ID 运行时生成，**全程用「记游标→增量拉」
+  而非 since=0 全量拉**——M15/M16 的盲区就是本批 P0 的藏身处）：
+  - **P0 核心**：B 全量拉记游标 → A 改 B 为 CAREGIVER → B 增量拉 family_members/
+    member_permissions 都 >0 行（修前=0），role=CAREGIVER、FEEDING/CARE 行 canWrite=1；
+  - A 踢 B → B 增量拉到自己成员行 REMOVED（kick 同款游标前进）；
+  - B 再加入 → leave 200 → myFamily 8300 → 重复 leave 幂等 8300；OWNER leave 8305；
+  - A dissolve 200 → myFamily 8300 → 重复 dissolve 幂等 8300 → 旧码 join 8301 →
+    A 增量拉看到宝宝行（family_id 清空触发 ON UPDATE）+ 自己成员行 REMOVED；
+  - A 重建家庭 → C 凭新码加入 → C 全量拉看到 A 的宝宝（family_id 回填生效）+
+    自己 4 条只读权限行；C（VIEWER）dissolve 8304
+- 冒烟踩坑一枚（脚本侧）：权限镜像行**全家可见**，断言必须按自己的 memberId 过滤
+  （M17 判断 3 原话）——C 全量拉 member_permissions 是 12 行（A 旧家 4 + A 新家 4 +
+  C 自己 4），数全集必误报
+
+## 后续（M19+）
+
+- **App 端「谁记的」端到端**（M19 候选首位）：12 个 Repository 仍写 `createdBy = LOCAL_OWNER_ID`
+  常量，应改「家庭内写 prefs.familyMemberId、不在家庭写 LOCAL_OWNER_ID」+ 列表标注消费
+  `FamilyMemberRepository.observeMembers()` 翻译目录（M17 已备好）
+- App 端 FamilyApi 补 leave/dissolve 两端点接线（服务端 M18 已就绪，见上节契约影响面）
+- V2.2 微信小程序启动（新仓库，原生小程序，家庭轻入口）/ iOS 启动评估 S1——M19 候选，
+  龙哥拍板
+- refresh token 轮换 + 复用检测（评估结论见上方 M17+ 清单：改 App 契约，单独排会话）
+- 权限按宝宝粒度裁决；疫苗时间表维护；多租户保持关闭（bl_ 表无 tenant_id）
