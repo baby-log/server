@@ -1,69 +1,85 @@
-# ============================================================
-# 生产配置（本仓库为私有仓库，凭据直接填在本文件，不再走环境变量注入）。
-# 部署前必填：MySQL url/username/password、Redis host/password、
-#           field-encrypt-key（写入即不可换）、LLM api-key（AI 能力）。
-# ============================================================
 spring:
   datasource:
     dynamic:
       primary: master
       datasource:
         master:
+          # 生产库 babylog（10.0.4.15，独立于 test 的 10.0.0.7，两机不互通；2026-11-13 落定）
+          # allowMultiQueries=false（S130）：驱动层禁用堆叠查询
           url: jdbc:mysql://10.0.4.15:3306/babylog?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true&allowMultiQueries=false
           username: babylog
           password: 2jn6xR27Sw8M6kNW
           driver-class-name: com.mysql.cj.jdbc.Driver
-      # ===== 连接池（V3.1-G · P1-B2）=====
-      # 与容量无关的生产参数（获取等待/有效性检测/驱逐/保活/泄漏回收/慢SQL）
-      # 统一放在 application.yml 的 spring.datasource.dynamic.druid；
-      # 这里只覆盖**容量三件套**，prod 按线上并发上调。
-      #
-      # ⚠️ 容量口径：max-active × 应用实例数 + 运维/定时任务余量 必须 < MySQL max_connections
-      #    （MySQL 默认 151）。若将来扩到多实例，这里要同步下调，否则表现为
-      #    「Too many connections」而不是连接池报错，极难归因。
-      # ⚠️ 再次提醒：本项目是 **Druid**，不是 HikariCP，别写 hikari.*。
+      # 连接池（V3.1-G · P1-B2）：与容量无关的生产参数在 application.yml，
+      # 这里只给容量三件套。生产沿用 5/5/20 起步（与全量 IT 基线同值），压测后再按并发放宽。
       druid:
         initial-size: 5
-        min-idle: 10
-        max-active: 50
+        min-idle: 5
+        max-active: 20
   data:
     redis:
       host: 10.0.4.15
       port: 6379
       password: ZpHSQ9qe22Y1UoHV
       timeout: 5s
-      database: 0
+      database: 1
 
   ai:
-    # 生产禁止凭据兜底，未注入时 AI 能力不可用
+    # 生产直连值（2026-11-13 落定）：本文件即生产生效值，不依赖环境变量注入
+    # 要换 key 直接改本行并重新打包——yml 里没有占位符，环境变量不会覆盖字面量。
     openai:
       api-key: sk-ws-H.RXELPDM.Nvf2.MEYCIQDqSA0lvw96Ec1Do29Rak5agBBL6DXno6nbapmKIBgHugIhAIij2gYu8pdVRSWwL9sy5v9spPPAswu_7fxq0XxOqRpC
     # 向量库（2026-10-02）：Milvus 服务端**暂不部署**，统一走 simple（内存 + JSON 快照，零中间件）。
     # ① spring.ai.vectorstore.type 必须显式设为 simple——Milvus 自动装配 matchIfMissing=true，
     #    不设会按默认 localhost:19530 连 Milvus 导致**启动失败**（dev 2026-09-24 实测同因）；
     # ② 知识库向量类型走 babylog.kb.vector-store.type（application.yml 默认 simple，库表默认也是 simple）；
-    # ③ 简单向量库为**进程内内存**实现：单机够用，多实例部署时各实例快照不共享，需保持单实例。
+    # ③ 快照文件位于启动工作目录下的 ./data/kb/simple/kb-store.json（停机自动保存、启动自动加载）。
     # 将来部署 Milvus 服务端后：把 type 改回 milvus 并恢复下方 milvus 段即可，业务代码零改动。
     vectorstore:
       type: simple
     #   milvus:
     #     client:
-    #       host: 10.0.4.15
+    #       host: 10.0.0.7
     #       port: 19530
     #     database-name: default
-    #     collection-name: babylog_kb
+    #     collection-name: babylog_test_kb
     #     embedding-dimension: 1024
     #     initialize-schema: true
     #     metric-type: COSINE
+
+
+  # ---------- 邮件（M5 邮箱验证码登录，dev 直连 163 SMTP） ----------
+  # 键用 Spring Boot 标准 spring.mail.*：host 有值时 Boot 才装配 JavaMailSender，
+  # username/password 留空则发码端点返回 8374「邮件服务未配置」，不影响起服与其他功能。
+  # 163 需开「SMTP 服务」并拿到客户端授权码（不是登录密码）；465 = SSL 隐式加密，必须 mail.smtp.ssl.enable=true。
+  # ⚠️ 两行凭据由龙哥自己填（AI 不往配置文件里写口令）：username = 发件邮箱全称，password = 客户端授权码。
+  mail:
+    host: smtp.163.com
+    port: 465
+    username: Alex_Server@163.com
+    password: THXBuYqhngnRn8kn
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          # 三个超时都设 8s：SMTP 卡住时不能把发码请求一起拖死（同步发信，见 EmailCodeSender 注释）
+          connectiontimeout: 8000
+          timeout: 8000
+          writetimeout: 8000
 
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
 
-# v3.1.0 生产化 · A3：生产默认 info（此前是 debug + Spring MVC trace——磁盘/IO 放大一个数量级，
-# 且 trace 级会把参数处理器细节带进日志）。落盘路径与滚动见 logback-spring.xml。
-# 排障临时开 debug 时用环境变量覆盖：LOGGING_LEVEL_COM_BABYLOG=debug
 logging:
+  # 生产口径（2026-11-13 部署批）：全量 info。
+  # 不要回到 debug：mybatis-plus 的 log-impl 是 Slf4jImpl，com.babylog 一开 debug
+  # 就会按 mapper logger 把 SQL 与**实际参数**打出来（邮箱/昵称/喂养记录全落盘），
+  # 且日志量按天翻几倍，100MB 滚动也扛不住。
+  # 临时排障用环境变量覆盖，别改这里：LOGGING_LEVEL_COM_BABYLOG=debug
   level:
     com.babylog: info
     org.dromara.warm.flow: info
@@ -78,12 +94,14 @@ knife4j:
   enable: true
   production: true
 
+
 babylog:
   tenant:
-    # BabyLog 不启用多租户（M4 拍板：bl_ 表无 tenant_id，开了绑租户账号摸 bl_ 表会 Unknown column）
-    enabled: false       # 脚手架租户能力的 IT 测试用各自 test yml，不受此影响
+    # ⚠️ 2026-11-12 批次 D：BabyLog 部署不得开租户（M4 拍板）——bl_ 表无 tenant_id，
+    # 开了会 Unknown column。此前的 true 是框架 IT 测试基线，与本部署无关。
+    enabled: false
     mode: column         # column / schema / datasource
-  # 文件存储：腾讯云 COS（部署时凭据直接填本文件——私有仓库，2026-11-12 口径）
+  # 文件存储：腾讯云 COS（生产；桶与 public-url 暂与 test 共用，待独立桶/域名）
   file:
     storage-type: s3
     vendor: cos
@@ -93,16 +111,14 @@ babylog:
     bucket: huweilong-1440252518
     region: ap-shanghai
     public-url: https://cos.293242.com
-  # 调度：XXL-Job（部署时启用）。dev 服务器 175.24.176.176:8101 已有调度中心（实测可达）；
-  # 部署环境若与之网络互通，取消下方注释并按 admin UI 核对 group-id / access-token；
-  # 若不互通，保持注释状态——LocalRetentionScheduler 本地调度会自动接管清理任务（每天 03:00），
-  # 只是失去 admin 集中管理/手动触发能力。
+  # XXL-Job 调度中心（生产 10.0.8.11:8100）。
+  # ⚠️ 容器部署时执行器自探测到的是容器内网 IP，admin 回调不到：需显式配 babylog.job.ip=宿主机内网 IP，并映射 9900 端口。
   job:
-     admin-addresses: http://175.24.176.176:8100
-     app-name: babylog-executor
-     port: 9999
-     group-id: 10
-     access-token: qazwsx123
+    admin-addresses: http://10.0.8.11:8100
+    app-name: babylog-executor
+    port: 9900
+    group-id: 3
+    access-token: qazwsx123
   # 检索：BabyLog 业务检索在 App 端 Room 完成，服务端全文检索仅 AI KB 需要——
   # 现阶段用 simple 内存实现（零中间件，进程内可检索、重启即失）。
   # AI KB 阶段要上 ES 时改回 type: es-java 并恢复 es-java 子段
@@ -111,9 +127,17 @@ babylog:
     type: simple
   # ST-DATAINSPECT（S130）：通用数据监控。生产默认关闭自由 SQL（高危）——
   # 仍可浏览库表与预览，放开自由 SQL 需显式改这里并重启（权限不能替代此开关）
+  # ⚠️ 2026-11-13 补回：application.yml 的默认值是 true，prod 不显式关掉就等于开库拖数据。
   datainspect:
     query-enabled: false
-  # 微信小程序（测试号）
+  # 微信小程序（测试号 appid；正式号上线前替换）
   wechat:
     miniapp:
       appid: wx0a426f6d4bce0b5c
+  mybatis:
+    # L9 守卫（2026-11-13）：与数据源 URL 里的库名逐字比对，不一致直接拒绝启动——专治「连错库」
+    expected-database: babylog
+    # 字段加密密钥（AES，16/24/32 位）：ai_api_key.api_key 等 @FieldEncrypt 字段落库加密
+    # 本行即生产专用 32 位密钥（2026-11-13 落定）。一旦有加密字段写入即不可更换：
+    # 换密钥 = ai_api_key 等历史数据永久解不开，务必先离线备份。
+    field-encrypt-key: bc11d66a1b42d304a828968eb884eeb4
