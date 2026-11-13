@@ -186,14 +186,16 @@ nextSinceId 本页最后一条的 id（同毫秒 tiebreak）
 { "deviceUuid": "…", "changes": { "feedings": [ { "id": 1, "version": 3, "childId": 9, … } ] } }
 ```
 
-逐条裁决顺序：`id`/`version` 合法性 → 内置产品段（id ≤ 99）→ 归属 → 版本门禁 → 权限钩子 → 落库。
+逐条裁决顺序（M16 定稿）：`id`/`version` 合法性 → 内置产品段（id ≤ 99）→ 服务端管理表（8350）→ 归属（家庭维度放行）→ 版本门禁 → 权限钩子（8343）→ 落库。
 
 | 结果 | 含义 / 客户端处置 |
 |---|---|
 | `upserted` | 落库（新增，或推送 version > 库内 → 整行覆盖，last-write-wins，不做字段合并） |
 | `skipped` | 库内 version ≥ 推送 version → 服务端优先；重推同一批（幂等重试）走这条 |
-| `rejected[8344]` | 主键属于别的账号 → **换 ID 重新入队**（同一个 ID 重推永远不会成功） |
+| `rejected[8343]` | 无该分类写权限（M16 点亮）→ 丢弃不重试；客户端应把该分类入口置灰（UI 隐藏） |
+| `rejected[8344]` | 主键属陌生账号（不在家庭可见范围）→ **换 ID 重新入队**（同一个 ID 重推永远不会成功）；M16 起家庭内成员的行放行，只对家庭外账号报此码 |
 | `rejected[8345]` | 内置产品（id 1~99）→ 丢弃，内置行由服务端下发 |
+| `rejected[8350]` | 服务端管理表（family_members / member_permissions）→ 丢弃不重试（M16 提权漏洞收口）；这两表只从 changes 拉，永不进 outbox |
 | `rejected[8342]` | 格式非法或库约束拒绝（必填列缺失等）→ 丢弃并上报日志，重试不会成功 |
 
 协议级错误（整批失败）：空载荷/全表为空 → **8342**；总数 > 200 → **8341**；未知表标识 → **8347**；
@@ -209,8 +211,9 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 
 ### 错误码（同步 8340-8359 / 设备 8360-8369）
 
-8340 版本冲突 · 8341 超上限 · 8342 记录非法 · 8343 无分类写权限（V2.1）·
-**8344 归属冲突** · **8345 内置数据不可推** · **8346 分类非法** · **8347 表非法** ·
+8340 版本冲突 · 8341 超上限 · 8342 记录非法 · 8343 无分类写权限（**M16 已点亮**）·
+**8344 归属冲突（M16 起家庭内放行，只对可见范围外账号报）** · **8345 内置数据不可推** ·
+**8346 分类非法** · **8347 表非法** · **8350 成员/权限表不可推（M16 提权漏洞收口）** ·
 8360 设备不存在 · **8361 设备数超限（1024 台，workerId 用尽）**
 
 ## 验证记录（M6）
@@ -243,16 +246,21 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
 2. 游标存两段（`nextSince` + `nextSinceId`），一起回传，别只存时间。
 3. 客户端**不发** `userId`；服务端以 token 为准。
 4. 内置产品（`is_builtin=1`，id 1~99）**不要进 outbox**，只从 changes 拉。
-5. 收到 8344 换 ID 重推；收到 8342/8345 丢弃并记日志。
+5. 收到 8343/8342/8345/8350 丢弃并记日志（不重试）；收到 8344 **换 ID 重推**——服务端契约已收口
+   （M16：家庭内放行、只对家庭外陌生账号报 8344），App 端换 ID 重推的执行逻辑（重写引用列）归后续 App 会话。
+6. `family_members` / `member_permissions` **不要进 outbox**（M16 起 push 整表拒收 8350）：
+   只从 changes 拉、随家庭服务（建家/加入/改角色/踢出）变化；App 端本地 V1 遗留的占位成员行也不要推。
+7. 权限矩阵的裁决权在服务端：客户端置灰/隐藏只是 UI 表达，不是安全边界（01B 红线）；
+   推送前可用拉到的 member_permissions 行做 UI 预判，但服务端 8343 才是终判。
 
-## 后续（滚动更新；最新清单见文末「后续（M11+）」）
+## 后续（滚动更新；最新清单见文末「后续（M17+）」）
 
 - ~~设备管理：注册/心跳/踢出端点~~ ✅ M8 已落（见「设备管理与基础数据下发（M8）」节）
 - ~~基础数据：products 增量下发~~ ✅ M8 已落（V2.2.8 seed + `/app/babylog/base/products`）；
   vaccine_schedule 下发等管理端界面好了再排
 - ~~管理端 controller + 菜单 SQL~~ ✅ M10 已落（见文末「管理端第一批（M10）」节）
 - ~~意见反馈通道~~ ✅ M10 已落（表 V2.2.4 早就建好，本批补 App 端点 + 管理端查看/回复）
-- V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；`bl_family_members` 的同步归属改用 family 维度
+- ~~V2.1 家庭共享（服务端侧）~~ ✅ M15 读侧 + M16 写侧已收口；App 端接线见文末「后续（M17+）」
 - 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
 
 ## 设备管理与基础数据下发（M8，会话 2026-11-12，V2.0 收官批）
@@ -310,16 +318,12 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
   `packages/types/src/babylog.ts`；V2.2.10 菜单解封，详见「管理端前端（M11）」节；
   疫苗时间表维护未做——bl_vaccine_schedule 无 seed，等运营数据有了再排）
 - ~~意见反馈通道~~ ✅ M10 已落（App 匿名提交 + 管理端查看/回复；App 端提交 UI 留 M12）
-- ⚠️ **框架遗留债（龙哥拍板）**：`@RepeatSubmit` 全应用静默失效——
-  `starter-redis` 的 `RedisAutoConfiguration` 类级 `@ConditionalOnBean(RedissonClient)`
-  在 Redisson 自家自动配置之前求值（com.babylog < org.redisson 字典序）→ 整类被跳过 →
-  `RepeatSubmitChecker` 未注册 → `starter-web` 幂等拦截器不装配。18080 --debug
-  实测确认（condition report 两行 Did not match）。影响 message 模板新增与本批反馈端点。
-  修法是 starter 一行改动（类级条件移到 @Bean 方法级或加 `@AutoConfiguration(after=…)`），
-  但踩「不改 starter 脚手架」红线，M10 未动；修复前反馈端点无防刷（内测期熟人包风险可控）
-- App 端反馈提交 UI（设置页入口，POST /app/babylog/feedback，匿名可用）
-- V2.1 家庭共享：`bl_member_permissions` 真实现接入 `SyncPermissionGuard`；
-  `bl_family_members` 的同步归属改用 family 维度；refresh 轮换 + 复用检测一起上
+- ~~⚠️ 框架遗留债：`@RepeatSubmit` 全应用静默失效~~ ✅ M15 已修（`RedisAutoConfiguration` 加
+  `@AutoConfiguration(after = Redisson 两类)` + CacheManager 兜底，详见 M15 节；红线豁免一次记录在案）
+- ~~App 端反馈提交 UI~~ ✅ M12 已落（设置页入口）
+- ~~V2.1 家庭共享服务端~~ ✅ M15+M16 已收口：读侧家庭可见 + 写拦截 8343 + 8350 拒推 +
+  显式行覆盖；App 端接线（家庭 UI / outbox 处置 / 8343·8344·8350 客户端处置）归 M17 候选首位；
+  refresh 轮换 + 复用检测仍未上（M8 遗留宽限问题）
 
 ## 管理端第一批（M10，会话 2026-11-12，「后台管理第一批」剩余拼图）
 
@@ -467,11 +471,11 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
   （version+1 同步可见）——uk(member_id, child_id, category) 不含 deleted，
   软删重插必撞 DuplicateKey（dev 冒烟实测踩过）；缺行（新宝宝）补插
 
-### 写侧（push，M16 点亮）
+### 写侧（push，M16 已点亮）
 
-`OwnerFullAccessPermissionGuard` 已删，换 `MemberPermissionGuard`：经 resolver 读三表做真实
-矩阵裁决，但 `WRITE_ENFORCEMENT_ENABLED=false`——M15 任务书拍板只解析不拒绝，翻 true 即启用
-8343（M16 待办与家庭维度归属放行、8344 收口写在 guard javadoc，勿丢）。
+`OwnerFullAccessPermissionGuard` 已删，换 `MemberPermissionGuard`：按 `SyncAccessScope` 的
+可写分类矩阵真实裁决，M16 起 `WRITE_ENFORCEMENT_ENABLED=true` 常开，越权写单条 8343 拒绝
+（详见下方「M16」节）。
 
 ### @RepeatSubmit 框架债修复（M14 P3 红线豁免，双 commit）
 
@@ -505,3 +509,62 @@ M5 栽过一次）；更要命的是 MP 的 `@TableLogic` 会把 `deleted=1` 的
   同步语义是「权限值变了」而非「删旧插新」）
 - **push 被会话安全策略拦（已知坑）**：AI 会话里 `git push` 被判数据外传拒绝，M15 的
   5 个 commit 只落本地，**龙哥自行执行 `git push origin develop` 双推**
+
+## push 写拦截与家庭归属放行（M16，会话 2026-11-13，V2.1 第二批）
+
+> 开场两拍板（龙哥确认）：①越权写口径 = **整条拒绝 8343**（进 rejected 列表，客户端出队
+> 不重试，与 8345/8342 同款丢弃类语义；不采纳静默跳过）；②本会话排查发现的**提权漏洞**
+> （family_members / member_permissions 行归属恰为成员自己，归属校验拦不住整行重推自我改
+> OWNER / 翻转 canWrite）= **整表拒推新码 8350**（同 8345 下发型语义）。
+
+### 交付四件
+
+1. **写拦截点亮**：`MemberPermissionGuard.WRITE_ENFORCEMENT_ENABLED=true`；guard 抛的 8343
+   由 `SyncServiceImpl` 收进**单条 rejected**（不拖累整批）；guard 签名换传 `SyncAccessScope`
+   （push 一次解析，省掉逐条 resolveAccess 的三表查询）
+2. **家庭维度归属放行**：归属校验从「行属当前用户」放宽为「行属当前用户或行属
+   visibleUserIds 内成员」——成员编辑家人创建的行不再 8344，ODKU 更新段不动 user_id
+   （STAMPED 列只在 INSERT 盖章），归属不会被编辑者抢走；范围外陌生账号仍 8344（换 ID
+   重推语义由既有码消息承载，服务端契约就此收口；App 侧换 ID 重推执行逻辑归后续 App 会话）
+3. **8350 整表拒推**：`SyncTable.isServerManaged()`（恰好 family_members / member_permissions
+   两张，`SyncTableTest` 清单锁死）；预检段拒收，与内置产品 8345 同款；App 端后续把两表移出
+   outbox（本地 V1 遗留占位成员行也不要推）
+4. **权限行显式行覆盖**：M15 的「只加宽不减窄」废止——某分类存在任一显式行则该分类完全
+   由行裁决（跨宝宝 OR 聚合），无行按角色默认兑底，减窄立即生效（OWNER 撤回授权下一次
+   裁决即被拦）；脏数据口径维持 M15（取最新 + 告警不抛）
+
+### 基础设施表的边界分工（写清楚防下次重设计）
+
+| 表 | push 边界 |
+|---|---|
+| family_members / member_permissions | **整表拒推 8350**（服务端管理表，只拉不推） |
+| children / record_type_settings / products / reminders | 归属校验（8344 家庭维度放行）；业务分类表另加 8343 |
+
+### 验证记录（M16）
+
+- biz 单测 **146 个全绿**（M15 的 134 + 12：`MemberPermissionGuardTest` 重写 7 例 /
+  `FamilyAccessScopeResolverTest` +3（加宽/减窄/读收窄/兑底）/ `SyncServiceImplTest` +3
+  （家庭归属放行 / 8350 拒推 / guard 异常收单条）/ `SyncTableTest` +1（服务端管理表清单锁））
+- ArchUnit **22/22 绿**；fat jar 复核（删 jar 重打包 + 解出 biz/biz-api 内嵌 jar 核对
+  8350 与 isServerManaged 在场）
+- dev 起服（18080）：无新 Flyway 迁移；curl 冒烟 **31 项全绿**（脚本 `/tmp/m16-smoke.zsh`，
+  A/B/C 三账号运行时生成，C 是家庭外陌生账号）：无家庭基线 3 条全过（回归锁）→
+  B VIEWER 推尿布+喂养同批双条 8343（文案「无该分类的写权限」、0 落库、不拖累整批）→
+  B 推 member_permissions / family_members（role=OWNER 自我提权载荷）均 8350 且权限行
+  未被污染 → A 改 CAREGIVER 后 B 重推同条通过 → **B 编辑 A 的喂养行成功（不再 8344，
+  A 拉到 amountMl=150 新值）** → C 推自己的行落库、B 推 C 的行 8344（文案「请更换 ID 后重试」）
+  且 B 拉不到 C 的行 → A 改回 VIEWER 后 B 再推 8343（减窄立即生效）→
+  C/A 拉取回归锁（无家庭零变化、OWNER 不变）
+- 遗留：dev 库留着 m16 冒烟三账号的家庭与记录探针数据，可清可留；8350 改变了 App 端契约
+  （两表不再可推），**App 侧移出 outbox 的会话必须排上**（M17 候选首位）
+
+## 后续（M17+）
+
+- ~~V2.1 家庭共享服务端：写拦截/归属放行/8350/显式行覆盖~~ ✅ M15+M16 已收口（读侧 M15、写侧 M16）
+- **App 端家庭 UI 第一批**（M17 候选首位）：家庭管理页（建家/邀请码/加入/成员列表/改角色/踢出）
+  + 同步链路对 8343/8350/8344 的客户端处置 + family_members/member_permissions 移出 outbox
+- 服务端家庭退出/解散端点（成员自助退出、OWNER 解散家庭）——现在只有踢人，主动退出没有
+- 权限按宝宝粒度裁决：当前跨宝宝 OR 聚合，payload 已带 childId，钩子签名已预留
+- refresh token 轮换 + 复用检测（设备踢出复活宽限问题，M8 遗留）
+- 疫苗时间表维护（bl_vaccine_schedule 无 seed，等运营数据）
+- 注意：本插件全部表**不加 tenant_id**（多租户不启用；BabyLog 部署配置不得开 tenant）
