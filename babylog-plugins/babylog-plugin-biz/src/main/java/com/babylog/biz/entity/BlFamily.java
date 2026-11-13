@@ -18,6 +18,10 @@ public class BlFamily extends BaseDO {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    // ---- 状态 ----
+    public static final String STATUS_ACTIVE = "ACTIVE";
+    public static final String STATUS_DISSOLVED = "DISSOLVED";
+
     /** 家庭名称 */
     private String name;
 

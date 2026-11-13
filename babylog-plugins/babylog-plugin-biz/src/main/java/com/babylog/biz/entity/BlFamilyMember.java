@@ -23,6 +23,20 @@ public class BlFamilyMember extends BlSyncDO {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    // ---- 角色（01B 第六节定稿，勿新增第四种角色） ----
+    /** 创建者：全部读写 + 管理成员，不可转让的兜底角色 */
+    public static final String ROLE_OWNER = "OWNER";
+    /** 照护者（配偶/老人）：喂养/护理读写，健康/医疗只读 */
+    public static final String ROLE_CAREGIVER = "CAREGIVER";
+    /** 只读（异地长辈）：全部只读；新成员加入的默认角色 */
+    public static final String ROLE_VIEWER = "VIEWER";
+
+    // ---- 状态 ----
+    /** 正常成员（参与同步范围与权限裁决） */
+    public static final String STATUS_ACTIVE = "ACTIVE";
+    /** 已被踢出：行保留（软删语义走 status 而非 deleted，同步可见），不再参与裁决 */
+    public static final String STATUS_REMOVED = "REMOVED";
+
     /** 家庭 id（bl_family.id） */
     private Long familyId;
 
