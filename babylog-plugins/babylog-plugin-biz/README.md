@@ -668,12 +668,27 @@ system 插件早有 wx-mini 登录编排（`/mini/auth/**` 发 `wx-mini-user` to
 - **真 code2session 联调待 AppID**（小程序还在 mp 后台初始化；yml 填好 appid/secret 后重启即通）
 - commits：`461dc1d`（system 契约）/ `c34d0aa`（mini 登录）/ `5dd592e`（summary）
 
-## 后续（M20+）
+## 小程序第二批配套（M21，会话 2026-11-13，V2.2 第二批）
 
-- **小程序真机/模拟器联调**（等 AppID + yml 配置）：devtools「导入项目」打开 BabyLog-Mini
-  （骨架已在），模拟器跑通登录 + 今日汇总
-- V2.2 第二批：加入家庭（邀请码 join）/ 快速记录（push FEEDING+CARE，VIEWER 置灰预判）/
-  成员动态页
+小程序侧消费 M15/M18 存量家庭端点（join/members/myFamily），**服务端唯一改动一处**：
+
+- **修 M15 遗留的成员来源写死**：`FamilyServiceImpl.insertMemberRow` 原来恒写 `user_type="APP"`
+  （M15 写就时只有 App 用户）——小程序家人加入后成员名单会错标来源。改为按用户名 `wx_` 前缀
+  （M20 首登自动建档约定）推导：`BlFamilyMember.USER_TYPE_WX_MINI`，否则 `USER_TYPE_APP`；
+  只在插成员行时定值（成员行是同步表，不做实时推导、不回填历史行）。
+  App 端无感知（userType 本就只用于展示来源标签）。
+- 小程序侧判断记录（inviteCode 仅 OWNER 且非 OWNER JSON 键缺省、members 含 REMOVED 须过滤、
+  8300 未加入是正常态、workerId=0 是首台设备合法分配）→ `BabyLog-Mini/PROGRESS.md` M21 节。
+- 验证：biz 单测 **166 绿**（+1：wx_ 前缀 joiner → 成员行 WX_MINI）+ ArchUnit 22 绿 +
+  dev 冒烟 `/tmp/m21-smoke.zsh` **28/28**（A 建家+推数据 → wx_ 前缀 B join → 家庭视角
+  summary + members 来源标记 + 8301/8303 契约探针）。
+
+## 后续（M21+）
+
+- ~~V2.2 第二批：加入家庭（邀请码 join）/ 成员动态页~~ ✅ M21 已完成（小程序侧；见
+  `BabyLog-Mini/PROGRESS.md`；服务端配套改动见上方 M21 节）
+- V2.2 第三批（M22）：快速记录（push 单条 FEEDING/CARE，VIEWER 置灰预判，
+  雪花 ID 用登录响应 workerId 生成）
 - refresh token 轮换 + 复用检测（评估结论见上方 M17+ 清单：改 App 契约，单独排会话）
 - 权限按宝宝粒度裁决；疫苗时间表维护；多租户保持关闭（bl_ 表无 tenant_id）
 - App 端「谁记的」端到端与 FamilyApi leave/dissolve 接线 ✅ M19 已全部完成（上方 M18 节
