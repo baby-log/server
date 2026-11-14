@@ -78,6 +78,24 @@ class SyncTableSqlTest {
     }
 
     @Test
+    void feedingsPullExcludesInProgressHalfDoneRows() {
+        // M37 同步红线（服务端兜底）：进行中的计时半成品不下发——客户端 in_progress=1
+        // 的行永不进 outbox，这里再兜一道，两端对齐「只吃已完成记录」
+        assertThat(new SyncTableSql(SyncTable.FEEDINGS).selectChangesSql())
+                .contains("in_progress = 0");
+        // 其他表没有业务谓词，回归锁：拉取 SQL 不得被无关条件污染
+        assertThat(new SyncTableSql(SyncTable.DIAPERS).selectChangesSql())
+                .doesNotContain("in_progress");
+        assertThat(new SyncTableSql(SyncTable.SLEEPS).selectChangesSql())
+                .doesNotContain("in_progress");
+        // 谓词是附加条件，不得破坏既有结构（归属集合 + 双段游标 + 无 deleted = 0）
+        assertThat(new SyncTableSql(SyncTable.FEEDINGS).selectChangesSql())
+                .contains("WHERE user_id IN (:userIds)")
+                .contains("(server_updated_at > :since OR (server_updated_at = :since AND id > :sinceId))")
+                .doesNotContain("deleted = 0");
+    }
+
+    @Test
     void childrenFamilyIdIsServerOwned() {
         // family_id 由家庭服务回填（创建家庭时），客户端 Room 没有这列：
         // 出现在载荷里 = 客户端重推宝宝行会把回填值覆写回 null（家庭归属 silently 丢失）

@@ -58,4 +58,19 @@ public class BlFeeding extends BlSyncDO {
 
     /** 来源设备标识 */
     private String deviceId;
+
+    /** 计时进行中（M37，0/1；进行中的会话客户端不入队，落库的只有已完成行） */
+    private Integer inProgress;
+
+    /** 计时结束时刻（epoch millis；null = 旧数据无计时） */
+    private Long endedAt;
+
+    /** 总用时（秒，含暂停） */
+    private Integer totalSeconds;
+
+    /** 纯喂养用时（秒，减全部暂停段；喂养时长统计与均值用这个） */
+    private Integer activeSeconds;
+
+    /** 计时事件流 JSON：[{t:START|PAUSE|RESUME|END,at:epoch}] */
+    private String pauseEvents;
 }

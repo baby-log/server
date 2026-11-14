@@ -227,9 +227,13 @@ final class SyncTableSql {
      * 推导后传入，存储层不做任何权限判断。
      */
     private String buildSelectChangesSql() {
+        // M37：业务谓词（当前仅 feedings 的 in_progress = 0）拼在归属/游标条件之后——
+        // 进行中计时半成品不下发，与客户端「in_progress 不入 outbox」红线两端对齐。
+        String predicate = table.pullPredicate();
         return "SELECT " + String.join(", ", pullColumns) + ", server_updated_at"
                 + " FROM " + table.tableName()
                 + " WHERE user_id IN (:userIds)"
+                + (predicate.isEmpty() ? "" : " AND " + predicate)
                 + " AND (server_updated_at > :since OR (server_updated_at = :since AND " + idColumn + " > :sinceId))"
                 + " ORDER BY server_updated_at, " + idColumn;
     }
