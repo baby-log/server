@@ -766,3 +766,36 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
 - ~~喂养计时器服务端五列 + 拉取谓词~~ ✅ M37 已完成（本节）
 - M38 起为 ui 仓库批次（后台产品库图标上传），biz 侧零改动预期；M39 Android 本地规则引擎
   （服务端零改动）；M40 基础数据同步三要素（Android + 服务端，接 base 通道）
+
+## 后台产品库图标上传（M38，会话 2026-11-14，**纯 ui 仓库批次，服务端零改动**）
+
+> 需求 2 落地：`ui` 仓库（gitee `baby-log/manager`）`develop` 2f52f53 已双推。
+> 本节是 server 侧的进度锚点（本批 biz/file 插件均零改动）。
+
+### 交付（ui 仓库）
+
+| 东西 | 说明 |
+|---|---|
+| `apps/admin/src/api/file.ts` 新增 `uploadFileWithMeta` | presign → PUT 直传 → register 三步，返回 `{ id: sys_file 主键（Long→String）, fileUrl }`；既有 `uploadFile` 复用之，返回签名不变 |
+| `views/babylog/product/index.vue` 图标字段 | 手填 file_id 输入框改为内嵌 el-upload（custom http-request 直调 plugin-file，`/file/presign|register` 走 request 封装自动带 sys-user 登录态）；上传成功自动回填 `formModel.iconPath = file_id` + 即时预览 |
+| 预览链路 | `presign-download(fileUrl)` 换限时可访问 URL（私有桶口径，同 sys_user.avatar 回显策略）；`file_id→fileUrl` 映射存 sessionStorage（`babylog:product-icon-urls`）供编辑回显；**M38 前手填的旧 file_id 无映射不可预览，仅显示 file_id 文本**（plugin-file 无 id→objectKey 端点，ui-only 批不动服务端） |
+| 客户端限制 | 白名单 png/jpg/jpeg/webp/svg（plugin-file `allowed-extensions` 的图片子集）+ ≤500KB，`before` 校验拒绝并 ElMessage 提示；服务端扩展名白名单兜底仍生效 |
+| 替换/移除口径 | **旧文件不即时删除**：`iconPath` 引用解除后旧 sys_file 行即成孤儿，按 M13 孤儿差集清理同口径回收（不做 eager deleteFile） |
+
+### 契约注意（零变化）
+
+- `bl_product.icon_path` 语义不变：内置行 = plugin-file 的 file_id（V2.2.4 注释原文）；
+  App 端 base/products 拉取逻辑零改动（M38 前 App 端对内置行图标本就只认内置 drawable）。
+- 服务端校验面：register 只查扩展名白名单不查大小——500KB 是图标场景的客户端约定。
+
+### 验证记录（M38）
+
+- `pnpm typecheck`（vue-tsc）零错误；eslint 两个改动文件零告警；
+  临时 vite dev 起服：`/src/views/babylog/product/index.vue` 与 `/src/api/file.ts` 按需编译 200（含新逻辑符号）
+- dev 18080 后端联调与真机回归归龙哥（`VITE_API_BASE_URL=http://127.0.0.1:18080 pnpm dev`，admin/admin123）
+
+## 后续（M38+）
+
+- ~~后台产品库图标上传（M38）~~ ✅ 已完成（ui 仓库 2f52f53，本节）
+- M39 Android 本地规则引擎（数据分析与异常提醒，服务端零改动）；
+  M40 基础数据同步三要素（Android + 服务端，接 base 通道）
