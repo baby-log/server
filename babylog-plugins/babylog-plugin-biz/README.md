@@ -728,3 +728,41 @@ A 注册+推宝宝+建家 → B（wx_ 前缀，默认昵称「微信用户」）
 - App 端「谁记的」端到端与 FamilyApi leave/dissolve 接线 ✅ M19 已全部完成（上方 M18 节
   「App 端契约影响面」已消费，勿再排）
 
+
+## 喂养计时器（M37，会话 2026-11-14，V2.3 第一批：App+服务端同批）
+
+Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android PROGRESS「已完成（会话 M37）」节）
+同批交付。
+
+### 改动
+
+| 东西 | 说明 |
+|---|---|
+| Flyway **V2.2.11**（`V2.2.11__bl_feedings_timer.sql`） | `bl_feeding` 加 `in_progress` TINYINT NOT NULL DEFAULT 0 / `ended_at` BIGINT / `total_seconds` INT / `active_seconds` INT / `pause_events` VARCHAR(2048)。bl_ 表惯例**不加 tenant_id**；版本号落笔前 grep 已占用 |
+| `BlFeeding` 五字段 | `inProgress` 用 **Integer**（与 TINYINT 语义对齐：JSON 里是 0/1 不是 true/false——App 端解析一律 `JsonExt.boolOrNull`，M19 红线同口径）；`pauseEvents` 是事件流 JSON 文本，服务端**只透传不算** |
+| `SyncTable.pullPredicate`（新字段） | FEEDINGS 注册 `"in_progress = 0"` 拉取谓词——**进行中的计时半成品不下发**。客户端红线是 in_progress=1 永不进 outbox，这道谓词是服务端侧兜底（防御不合规客户端）；谓词拼在归属/游标条件之后（`SyncTableSql.buildSelectChangesSql`） |
+
+### 契约注意（写给 App 端与会后维护）
+
+- push 侧**不拦** in_progress=1（谓词只管拉不管推）：不合规客户端推上来的半成品会落库但永远不下发，等价无害；
+- 新列随 `changes` 正常下发：`inProgress` 是 **JSON 整数 0/1**（不是布尔），`endedAt` 是字符串形态
+  Long（全局 Long→String），`totalSeconds`/`activeSeconds` 是普通整数，`pauseEvents` 逐字透传；
+- 现有行（旧客户端推的无计时列报文）新列落 NULL/`in_progress=0`，拉下去旧客户端直接忽略，无兼容问题。
+
+### 验证记录（M37）
+
+- biz 单测 **167/167 全绿**（+1：`SyncTableSqlTest.feedingsPullExcludesInProgressHalfDoneRows` 锁死
+  半成品行不进拉取 SQL）；ArchUnit **P0 18/18** + commons 绿（零新端点，A11 无欠条）；
+  fat jar 复核（删 jar 重打包 + 解内嵌 biz jar 字节码核对五字段/pullPredicate/V2.2.11 在场）
+- dev 18080 起服：Flyway v2.2.11 应用成功（`Successfully applied 1 migration`）；
+  冒烟 `/tmp/m37-smoke.py` **13/13 全绿**：注册 → 记游标 → push 已完成行 → **记游标→增量拉**
+  断言新列逐字下发（inProgress=0/totalSeconds=600/activeSeconds=480/durationS=480/endedAt 字符串/
+  pauseEvents 逐字）→ push in_progress=1 半成品行 → 增量拉 + 全量拉均断言其**不出现**（pull 谓词）
+- `updateById` 前置空 serverUpdatedAt 红线：本批零 updateById 改动，M18 回归锁保持
+- 待办（真机，龙哥）：v8→v9 真机升级走一遍（先导出 JSON 留底）、计时全链路真机回归
+
+## 后续（M37+）
+
+- ~~喂养计时器服务端五列 + 拉取谓词~~ ✅ M37 已完成（本节）
+- M38 起为 ui 仓库批次（后台产品库图标上传），biz 侧零改动预期；M39 Android 本地规则引擎
+  （服务端零改动）；M40 基础数据同步三要素（Android + 服务端，接 base 通道）
