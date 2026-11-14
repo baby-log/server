@@ -1,5 +1,6 @@
 package com.babylog.biz.sync.store;
 
+import com.babylog.biz.sync.support.BaseDataTable;
 import com.babylog.biz.sync.support.SyncCursor;
 import com.babylog.biz.sync.support.SyncTable;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -31,11 +32,15 @@ public class JdbcSyncRecordStore implements SyncRecordStore {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final Map<SyncTable, SyncTableSql> sqlByTable = new EnumMap<>(SyncTable.class);
+    private final Map<BaseDataTable, BaseDataTableSql> sqlByBaseTable = new EnumMap<>(BaseDataTable.class);
 
     public JdbcSyncRecordStore(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
         for (SyncTable table : SyncTable.values()) {
             sqlByTable.put(table, new SyncTableSql(table));
+        }
+        for (BaseDataTable table : BaseDataTable.values()) {
+            sqlByBaseTable.put(table, new BaseDataTableSql(table));
         }
     }
 
@@ -83,6 +88,17 @@ public class JdbcSyncRecordStore implements SyncRecordStore {
     }
 
     @Override
+    public List<BaseRow> selectBaseChanges(BaseDataTable table, LocalDateTime since, long sinceId, int limit) {
+        BaseDataTableSql sql = sqlByBaseTable.get(table);
+        Map<String, Object> params = new HashMap<>(4);
+        params.put("since", since);
+        params.put("sinceId", sinceId);
+        // LIMIT 用数值内联：limit 已在服务层钳到 [1, MAX]，不存在注入面
+        List<Map<String, Object>> rows = jdbc.queryForList(sql.selectChangesSql() + " LIMIT " + limit, params);
+        return rows.stream().map(row -> toBaseRow(table, sql, row)).toList();
+    }
+
+    @Override
     public void upsert(SyncTable table, Map<String, Object> payload, long userId) {
         SyncTableSql sql = sqlByTable.get(table);
         Map<String, Object> params = new HashMap<>(payload.size() + 8);
@@ -113,6 +129,14 @@ public class JdbcSyncRecordStore implements SyncRecordStore {
             data.put(property, row.get(sql.columnOf(property)));
         }
         return new Row(table, asLong(row.get(sql.columnOf("id"))), cursorOf(row.get("server_updated_at")), data);
+    }
+
+    private static BaseRow toBaseRow(BaseDataTable table, BaseDataTableSql sql, Map<String, Object> row) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        for (String property : sql.pullProperties()) {
+            data.put(property, row.get(sql.columnOf(property)));
+        }
+        return new BaseRow(table, asLong(row.get(sql.columnOf("id"))), cursorOf(row.get("server_updated_at")), data);
     }
 
     /**

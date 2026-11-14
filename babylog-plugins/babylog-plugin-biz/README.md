@@ -799,3 +799,30 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
 - ~~后台产品库图标上传（M38）~~ ✅ 已完成（ui 仓库 2f52f53，本节）
 - M39 Android 本地规则引擎（数据分析与异常提醒，服务端零改动）；
   M40 基础数据同步三要素（Android + 服务端，接 base 通道）
+
+## 基础数据通道范围扩展（M40，会话 2026-11-14，V2.3 第二批：base 通道扩四类，为 M41 云端规则与 M39 阈值下发打底）
+
+### 交付
+
+| 东西 | 说明 |
+|---|---|
+| Flyway **V2.2.12** | ① bl_vaccine_schedule / bl_app_version 补 `server_updated_at DATETIME(3) ... ON UPDATE CURRENT_TIMESTAMP(3)` + `idx_sync_cursor`（列级自动前进，与 18 张同步表同口径）；② 新建 `bl_alert_threshold`（threshold_key UK / threshold_value 文本 / 审计 / deleted）；③ seed 疫苗时间表 28 行（id 1~28，跨表对齐 App 端 NationalImmunizationSchedule，双方案 note 标注）+ 阈值 18 行（键值逐字对齐 App 端 `AlertThresholds` 默认值，黄疸 μmol/L） |
+| `BaseDataTable` 注册表（sync/support，**不进 SyncTable**） | VACCINE_SCHEDULE / ALERT_THRESHOLDS / APP_VERSIONS 三张运营表走并列注册（apiName/表名/实体/pullPredicate）；`APP_VERSIONS` 谓词 `status = 'PUBLISHED'`——**不按 platform 过滤**，避免「过滤 × 游标分页」组合漏行（客户端自己按平台挑行比对 versionCode） |
+| 为什么不进 SyncTable | SyncTable 是 18 张业务同步表的唯一清单，进表即获得 sync/changes 通道资格；这三张是**服务端运营数据的 base 通道成员**，category 置 null 会混进业务游标口径。并列注册 + BaseDataTableSql（复用 SyncTableSql 的 camelToSnake，反射生成拉取 SQL）是刻意的通道隔离 |
+| 端点（BabyLogBaseDataController 追加 3 个，类级 @SaCheckLogin 已有，A11 无欠条） | `GET /app/babylog/base/vaccine-schedule` / `alert-thresholds` / `versions`，参数与 products 一致（since/sinceId/limit），changes 键 = apiName；products 路径零改动（M9 回归） |
+| 实体红线 | BlVaccineSchedule / BlAppVersion / BlAlertThreshold **刻意不声明 serverUpdatedAt**（M10/M18 教训：实体带非空游标列会被 MP NOT_NULL 策略显式写回 → ON UPDATE 不触发 → 游标不前进；已写进 V2.2.12 头注释） |
+| bl_ 表惯例 | 不加 tenant_id（同 M10 既有口径） |
+
+### 验证记录（M40）
+
+- `mvn test -pl babylog-plugins/babylog-plugin-biz`：**176/176 绿**（167 基线 + 9 新增：BaseDataOpsPullTest 4 + BaseDataTableSqlTest 5）；ArchUnit P0 **18/18 绿**
+- dev 18080 冒烟 **15/15 绿**（注册 → vaccine-schedule since=0 拉 28 行 → alert-thresholds 18 行且 milk_drop_ratio=0.7/黄疸六档/supplement_check_hour=21 → versions 空表退回游标 hasMore=false → 游标推进后增量 0 行且不回退 → products 回归 32 行 id 1~99 全在）
+- Flyway 在 babylog_dev 上 v2.2.11 → **v2.2.12**（冒烟起服时自动应用）
+- Android 端配套（开关/每日任务/立即更新/独立游标/阈值下发缓存）见 BabyLog-Android PROGRESS M40 节；全量单测 316 绿 = 306 基线 + 10 新增
+- **既有测试债（非 M40 引入，待龙哥拍板）**：admin-server 模块 4 个红——ProdOpsLoggingGuardTest×2 / NacosConfigImportGuardTest×2，根因是 5b3e8e6「废除环境变量注入，配置全部内联 yml」等后续提交推翻了 guard 测试守护的旧配置决策（修 = 按新配置口径改/删 guard 测试）；另 DruidPoolProductionConfigTest 期望已随 a0494de 的 prod 20/5 修正（M40 顺手对齐并加注释）
+
+## 后续（M40+）
+
+- ~~基础数据同步三要素 + 范围扩展（M40）~~ ✅ 已完成（本节）
+- M41 记录类型云端规则（bl_record_type_rule + 管理端维护页 + Android 合并层，走 base 通道；规划/10 第八节边界：只能调已有类型的开关/月龄/排序/分组/文案，不能新增类型）；
+  M42~M44 小程序全功能三批；M45 电视端

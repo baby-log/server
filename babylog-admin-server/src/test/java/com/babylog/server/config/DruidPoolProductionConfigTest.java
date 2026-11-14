@@ -136,10 +136,13 @@ class DruidPoolProductionConfigTest {
     }
 
     @Test
-    @DisplayName("B2-5 容量按 profile 收敛：prod 50/10，dev/test 保持 20/5")
+    @DisplayName("B2-5 容量按 profile 收敛：prod 20/5，dev/test 保持 20/5")
     void capacityIsProfileScoped() {
-        assertEquals(50, bind("prod").getMaxActive().intValue());
-        assertEquals(10, bind("prod").getMinIdle().intValue());
+        // M40 复核修正：a0494de「生产配置落定」把 prod 从 50/10 收小到 20/5
+        // （连同容量注释一并删除，容量口径以该提交为准），但本测试的期望未同步——
+        // develop 上此处自 a0494de 起即为红，非 M40 引入。随配置口径改期望。
+        assertEquals(20, bind("prod").getMaxActive().intValue());
+        assertEquals(5, bind("prod").getMinIdle().intValue());
 
         // dev/test 刻意不动：开发机多开、测试库并发有限，池子调大只会白白占连接
         assertEquals(20, bind("dev").getMaxActive().intValue());

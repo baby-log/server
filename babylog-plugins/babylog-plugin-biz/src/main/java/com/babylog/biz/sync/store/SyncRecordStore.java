@@ -1,5 +1,6 @@
 package com.babylog.biz.sync.store;
 
+import com.babylog.biz.sync.support.BaseDataTable;
 import com.babylog.biz.sync.support.SyncTable;
 
 import java.time.LocalDateTime;
@@ -21,6 +22,10 @@ public interface SyncRecordStore {
 
     /** 拉取出来的一行：{@code cursorMillis} 用于跨表归并排序与 nextSince 计算 */
     record Row(SyncTable table, long id, long cursorMillis, Map<String, Object> data) {
+    }
+
+    /** 基础数据通道（运营表）拉取的一行（M40）：无 SyncTable 归属，changes 键用 apiName */
+    record BaseRow(BaseDataTable table, long id, long cursorMillis, Map<String, Object> data) {
     }
 
     /**
@@ -54,6 +59,15 @@ public interface SyncRecordStore {
      * @throws IllegalArgumentException 该表没有 is_builtin 列（当前只有 products 支持）
      */
     List<Row> selectBuiltinChanges(SyncTable table, LocalDateTime since, long sinceId, int limit);
+
+    /**
+     * 基础数据运营表增量拉取（M40，<b>单向下发</b>）：疫苗时间表 / 异常提醒阈值 / 版本与公告。
+     *
+     * <p>游标口径与 {@link #selectBuiltinChanges} 完全一致（双段 {@code server_updated_at + id}），
+     * 区别只是这批表没有 is_builtin 列、不走 SyncTable 注册表（详见 {@link BaseDataTable}）。
+     * 含软删除行；版本表带 {@code status = 'PUBLISHED'} 业务谓词（草稿不下发）。
+     */
+    List<BaseRow> selectBaseChanges(BaseDataTable table, LocalDateTime since, long sinceId, int limit);
 
     /**
      * 单条 version 乐观锁 upsert。

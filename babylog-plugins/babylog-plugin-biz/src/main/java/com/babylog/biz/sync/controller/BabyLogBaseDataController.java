@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>鉴权与同步端点同口径：类上 {@code @SaCheckLogin(app-user)}——登录是前提
  * （防匿名批量拉基础数据），但内容对全部登录用户相同。
  */
-@Tag(name = "App 基础数据（BabyLog）", description = "内置产品增量下发")
+@Tag(name = "App 基础数据（BabyLog）", description = "内置产品/疫苗时间表/异常提醒阈值/版本公告增量下发（M40 扩范围）")
 @RestController
 @RequestMapping("/app/babylog/base")
 @SaCheckLogin(type = StpAppUtil.TYPE)
@@ -40,5 +40,29 @@ public class BabyLogBaseDataController {
                                      @RequestParam(required = false) Long sinceId,
                                      @RequestParam(required = false) Integer limit) {
         return R.ok(baseDataService.pullBuiltinProducts(since, sinceId, limit));
+    }
+
+    @Operation(summary = "疫苗时间表增量下发（M40 基础数据通道，changes 键 vaccine_schedule）")
+    @GetMapping("/vaccine-schedule")
+    public R<SyncChangesVO> vaccineSchedule(@RequestParam(required = false) Long since,
+                                            @RequestParam(required = false) Long sinceId,
+                                            @RequestParam(required = false) Integer limit) {
+        return R.ok(baseDataService.pullVaccineSchedule(since, sinceId, limit));
+    }
+
+    @Operation(summary = "异常提醒阈值增量下发（M40，changes 键 alert_thresholds，客户端替换本地默认值）")
+    @GetMapping("/alert-thresholds")
+    public R<SyncChangesVO> alertThresholds(@RequestParam(required = false) Long since,
+                                            @RequestParam(required = false) Long sinceId,
+                                            @RequestParam(required = false) Integer limit) {
+        return R.ok(baseDataService.pullAlertThresholds(since, sinceId, limit));
+    }
+
+    @Operation(summary = "版本与公告增量下发（M40，只下发 PUBLISHED 行，changes 键 app_versions）")
+    @GetMapping("/versions")
+    public R<SyncChangesVO> versions(@RequestParam(required = false) Long since,
+                                     @RequestParam(required = false) Long sinceId,
+                                     @RequestParam(required = false) Integer limit) {
+        return R.ok(baseDataService.pullPublishedVersions(since, sinceId, limit));
     }
 }

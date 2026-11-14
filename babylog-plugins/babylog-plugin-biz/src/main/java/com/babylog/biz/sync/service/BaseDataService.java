@@ -23,4 +23,23 @@ public interface BaseDataService {
      * @param limit       单页上限
      */
     SyncChangesVO pullBuiltinProducts(Long sinceMillis, Long sinceId, Integer limit);
+
+    /**
+     * 疫苗时间表增量下发（M40）：运营表 bl_vaccine_schedule 单向通道，changes 键
+     * {@code vaccine_schedule}。App 端 M40 只落缓存，消费方（云端规则批）后续接。
+     */
+    SyncChangesVO pullVaccineSchedule(Long sinceMillis, Long sinceId, Integer limit);
+
+    /**
+     * 异常提醒阈值增量下发（M40）：键值对行（thresholdKey/thresholdValue），changes 键
+     * {@code alert_thresholds}。App 端按键解析后替换 AlertThresholds 本地默认值。
+     */
+    SyncChangesVO pullAlertThresholds(Long sinceMillis, Long sinceId, Integer limit);
+
+    /**
+     * 版本与公告增量下发（M40）：只下发 PUBLISHED 行（DRAFT 是后台草稿），changes 键
+     * {@code app_versions}。不按 platform 过滤——客户端按自己平台挑行，
+     * 避免「platform 参数 × 游标分页」的组合陷阱。
+     */
+    SyncChangesVO pullPublishedVersions(Long sinceMillis, Long sinceId, Integer limit);
 }
