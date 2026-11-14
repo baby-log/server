@@ -73,6 +73,11 @@ public class BaseDataServiceImpl implements BaseDataService {
         return pullBase(BaseDataTable.APP_VERSIONS, sinceMillis, sinceId, limit);
     }
 
+    @Override
+    public SyncChangesVO pullRecordTypeRules(Long sinceMillis, Long sinceId, Integer limit) {
+        return pullBase(BaseDataTable.RECORD_TYPE_RULES, sinceMillis, sinceId, limit);
+    }
+
     /**
      * 运营表通用增量拉取（M40）：与 {@link #pullBuiltinProducts} 同一条游标语义，
      * 只是数据来自 {@link BaseDataTable} 注册表（无 is_builtin 谓词、可有业务谓词）。

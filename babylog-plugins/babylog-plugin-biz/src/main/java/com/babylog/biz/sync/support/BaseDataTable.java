@@ -2,6 +2,7 @@ package com.babylog.biz.sync.support;
 
 import com.babylog.biz.entity.BlAlertThreshold;
 import com.babylog.biz.entity.BlAppVersion;
+import com.babylog.biz.entity.BlRecordTypeRule;
 import com.babylog.biz.entity.BlVaccineSchedule;
 
 /**
@@ -35,6 +36,12 @@ public enum BaseDataTable {
      * （过滤条件变了，同一对游标就不再对应稳定的时间线）。
      */
     APP_VERSIONS("app_versions", "bl_app_version", BlAppVersion.class, "status = 'PUBLISHED'"),
+
+    /**
+     * 记录类型云端规则（21 行 seed，V2.2.13；M41 起下发，客户端规则缓存表消费）。
+     * 边界：只调已有类型参数，不能新增类型——本表没有管理端新增入口。
+     */
+    RECORD_TYPE_RULES("record_type_rules", "bl_record_type_rule", BlRecordTypeRule.class, ""),
     ;
 
     private final String apiName;

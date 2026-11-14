@@ -62,4 +62,14 @@ class BaseDataTableSqlTest {
         assertThat(new BaseDataTableSql(BaseDataTable.ALERT_THRESHOLDS).pullProperties())
                 .contains("thresholdKey", "thresholdValue", "description");
     }
+
+    @Test
+    void recordTypeRules_pullsAllTunableColumnsWithNoPredicate() {
+        // M41 边界：下发的可调列一个不能少（缺了客户端那项就永远调不动），也不带业务谓词
+        assertThat(new BaseDataTableSql(BaseDataTable.RECORD_TYPE_RULES).pullProperties())
+                .contains("recordType", "category", "enabled", "startAgeDays", "endAgeDays",
+                        "sortOrder", "groupKey", "displayLabel");
+        assertThat(new BaseDataTableSql(BaseDataTable.RECORD_TYPE_RULES).selectChangesSql())
+                .contains("FROM bl_record_type_rule WHERE (server_updated_at > :since");
+    }
 }

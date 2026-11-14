@@ -96,6 +96,9 @@ public enum BabyLogErrorCode implements ErrorCode {
     /** 已发布（PUBLISHED）的版本锁定不可再改/再发/删除——用户可能已经看到过这版公告 */
     APP_VERSION_NOT_DRAFT(8391, "仅草稿状态的版本可修改/发布/删除"),
 
+    // ---------- 记录类型云端规则（8392-8394，M41） ----------
+    RECORD_TYPE_RULE_NOT_FOUND(8392, "记录类型规则不存在"),
+
     // ---------- 小程序认证（8395-8399，M20） ----------
     /** 小程序应用未配置（babylog.wechat.miniapp.configs.babylog 缺 appid/secret），对齐 8374 MAIL_NOT_CONFIGURED 的先例模式 */
     WX_MINI_NOT_CONFIGURED(8395, "小程序登录暂未配置，请联系管理员"),

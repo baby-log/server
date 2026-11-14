@@ -88,6 +88,31 @@ class BaseDataOpsPullTest {
     }
 
     @Test
+    void recordTypeRules_delegatesToRegistryEntryUnderRecordTypeRulesKey() {
+        // M41：路由到 RECORD_TYPE_RULES 注册项 + changes 键 record_type_rules；
+        // 行字段原样透传（enabled 的 null 语义由客户端合并层解释）
+        when(store.selectBaseChanges(eq(BaseDataTable.RECORD_TYPE_RULES), any(LocalDateTime.class), anyLong(), anyInt()))
+                .thenReturn(List.of(
+                        baseRow(BaseDataTable.RECORD_TYPE_RULES, 4L, 3000L,
+                                Map.of("id", 4L, "recordType", "SOLID", "category", "FEEDING",
+                                        "startAgeDays", 180, "sortOrder", 40, "displayLabel", "辅食")),
+                        baseRow(BaseDataTable.RECORD_TYPE_RULES, 6L, 3000L,
+                                Map.of("id", 6L, "recordType", "PUMP", "category", "FEEDING",
+                                        "enabled", 0, "endAgeDays", 730, "sortOrder", 60))));
+
+        SyncChangesVO vo = service.pullRecordTypeRules(0L, 0L, null);
+
+        verify(store).selectBaseChanges(eq(BaseDataTable.RECORD_TYPE_RULES), any(LocalDateTime.class), eq(0L), eq(100));
+        assertThat(vo.getChanges()).containsOnlyKeys("record_type_rules");
+        assertThat(vo.getChanges().get("record_type_rules")).hasSize(2);
+        assertThat(vo.getChanges().get("record_type_rules").get(0))
+                .containsEntry("recordType", "SOLID")
+                .containsEntry("displayLabel", "辅食");
+        assertThat(vo.getNextSince()).isEqualTo(3000L);
+        assertThat(vo.getNextSinceId()).isEqualTo(6L);
+    }
+
+    @Test
     void fullPageSetsHasMoreAndTruncates() {
         when(store.selectBaseChanges(any(), any(), anyLong(), eq(1)))
                 .thenReturn(List.of(

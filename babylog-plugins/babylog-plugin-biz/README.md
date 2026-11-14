@@ -824,5 +824,27 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
 ## 后续（M40+）
 
 - ~~基础数据同步三要素 + 范围扩展（M40）~~ ✅ 已完成（本节）
-- M41 记录类型云端规则（bl_record_type_rule + 管理端维护页 + Android 合并层，走 base 通道；规划/10 第八节边界：只能调已有类型的开关/月龄/排序/分组/文案，不能新增类型）；
-  M42~M44 小程序全功能三批；M45 电视端
+- ~~M41 记录类型云端规则~~ ✅ 已完成（下节）
+- M42~M44 小程序全功能三批；M45 电视端
+
+## 记录类型云端规则（M41，会话 2026-11-14，base 通道第五类：运营可调已有类型的默认开关/起止月龄/排序/分组/文案，**不能新增类型**）
+
+### 交付
+
+| 东西 | 说明 |
+|---|---|
+| Flyway **V2.2.13** | 新建 `bl_record_type_rule`：`record_type` UK；`enabled/start_age_days/end_age_days` **可空 = 该项不覆盖**（运营只想改文案不用被迫填齐）；`sort_order NOT NULL DEFAULT 0`；`server_updated_at` 列级 `ON UPDATE`（双段游标同 18 表口径）；审计四件套 + deleted。seed 21 行（id 1~21）**逐字对齐 Android RecordType 注册表**：PUMP/MEDICINE enabled=0、SOLID/WATER start=180、PUMP end=730、CORD 60、SPIT_UP 365、VACCINE 2190、FOLLOW_UP 90、DIAPER 1095，sort 10 起步进（= 注册表顺序，拉过规则包但未改排序时客户端行为不变），display_label = 现行文案。菜单 5050（目录）/5051（列表）/5052（编辑），5050 visible=0 直接可见 |
+| `BaseDataTable` 注册（**不进 SyncTable**，同 M40 三表口径） | `RECORD_TYPE_RULES("record_type_rules", "bl_record_type_rule", BlRecordTypeRule.class, "")`——空谓词全行下发 |
+| 端点 | App 侧 `GET /app/babylog/base/record-type-rules`（类级 @SaCheckLogin 已有）；管理侧 `/babylog/record-type-rule`：`GET /page`、`GET /{id}`、`PUT /{id}`——**只有 page/get/edit 三个，无 add/remove**，新类型只能随客户端发版进来（边界红线） |
+| 实体红线 | BlRecordTypeRule **刻意不声明 serverUpdatedAt**（M10/M18 教训：updateById 不 SET 游标列 → ON UPDATE 触发 → 游标前进）；空谓词 = 拉取 SQL 无 where，BaseDataTableSql 反射列跳过游标列/审计列（同 18 表口径） |
+| 管理端写路径 | edit 全字段可空：blank 归一为 null（**null = 删除该项覆盖**，回落客户端代码默认）；错误码 `RECORD_TYPE_RULE_NOT_FOUND(8392)` |
+| ui 仓库配套 | `apps/admin/src/views/babylog/recordTypeRule/index.vue` + `api/babylog/recordTypeRule.ts` + `@pivotos/types` 三个类型：21 行一页（pageSize 100）、enabled 三态（''回落/1/0）、**无新增按钮**、v-hasPermi 三权限点 |
+
+### 验证记录（M41）
+
+- `mvn test -pl babylog-plugins/babylog-plugin-biz`：**178/178 绿**（M40 基线 176 + 新增 2 用例文件增量：BaseDataTableSql 1 + BaseDataOpsPull 1 + AdminControllerPermissionContract +1 控制器/3 权限点）
+- dev 18080 冒烟 `/tmp/m41-smoke.py` **22/22 绿**：注册 → record-type-rules since=0 拉 21 行（PUMP/MEDICINE enabled=0、SOLID start=180/文案「辅食」、changes 键 `record_type_rules`）→ 增量 0 行游标不回退 → admin/admin123 登录 → page 21 行 → edit SOLID 文案+排序 → App 端增量拉即时反映 → POST/DELETE 无映射被拒（框架包成 HTTP 200+业务 code≠0，已写进脚本断言）→ 无 token code=1002 → 复原数据
+- Flyway 在 babylog_dev 上随起服自动应用 v2.2.13（冒烟 21 行 seed 即证据）
+- Android 端配套（规则缓存表 v10 + 合并层 + 渲染改读）见 BabyLog-Android PROGRESS M41 节；全量单测 **332 绿 = 306 基线 + M40 13 + M41 13**
+- **既有测试债（非 M41 引入）**：`babylog-starter-auth` 的 DemoAcceptanceTest 6 红——测试配置 Redis **空密码** vs 云端实例已设密码（dev yml 有密码 `ZpHSQ9qe22Y1UoHV`，WRONGPASS 实锤），与 M40 记的 admin-server 4 红同属「待龙哥拍板」类（修 = 测试 yml 补密码）
+- 遗留：dev 库留一个 m41 冒烟注册账号，可清可留

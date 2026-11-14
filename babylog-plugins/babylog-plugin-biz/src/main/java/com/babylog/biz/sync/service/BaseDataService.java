@@ -42,4 +42,11 @@ public interface BaseDataService {
      * 避免「platform 参数 × 游标分页」的组合陷阱。
      */
     SyncChangesVO pullPublishedVersions(Long sinceMillis, Long sinceId, Integer limit);
+
+    /**
+     * 记录类型云端规则增量下发（M41）：bl_record_type_rule 单向通道，changes 键
+     * {@code record_type_rules}。App 端落规则缓存表后按优先级链合并
+     * （用户覆盖 &gt; 云端规则 &gt; 代码默认），月龄判定最外层过滤照旧。
+     */
+    SyncChangesVO pullRecordTypeRules(Long sinceMillis, Long sinceId, Integer limit);
 }

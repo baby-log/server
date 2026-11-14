@@ -5,6 +5,7 @@ import com.babylog.biz.appversion.controller.AdminAppVersionController;
 import com.babylog.biz.device.controller.AdminDeviceController;
 import com.babylog.biz.feedback.controller.AdminFeedbackController;
 import com.babylog.biz.product.controller.AdminProductController;
+import com.babylog.biz.recordtype.controller.AdminRecordTypeRuleController;
 import com.babylog.starter.auth.account.StpSysUtil;
 import com.babylog.starter.web.annotation.RepeatSubmit;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,8 @@ class AdminControllerPermissionContractTest {
             AdminProductController.class,
             AdminDeviceController.class,
             AdminAppVersionController.class,
-            AdminFeedbackController.class);
+            AdminFeedbackController.class,
+            AdminRecordTypeRuleController.class);
 
     /** controller#method → 期望权限字符（与 V2.2.9 菜单 SQL 对齐） */
     private static final Map<String, String> EXPECTED_PERMS = buildExpectedPerms();
@@ -57,6 +59,10 @@ class AdminControllerPermissionContractTest {
         // 5040 意见反馈
         map.put("AdminFeedbackController#page", "babylog:feedback:list");
         map.put("AdminFeedbackController#reply", "babylog:feedback:reply");
+        // 5050 记录类型规则（M41；无新增/删除端点——边界：不能云端新增类型）
+        map.put("AdminRecordTypeRuleController#page", "babylog:recordTypeRule:list");
+        map.put("AdminRecordTypeRuleController#get", "babylog:recordTypeRule:query");
+        map.put("AdminRecordTypeRuleController#edit", "babylog:recordTypeRule:edit");
         return map;
     }
 
@@ -85,8 +91,8 @@ class AdminControllerPermissionContractTest {
                 }
             }
         }
-        // 防规则空转：本批 4 个 controller 共 14 个 handler
-        assertThat(handlerCount).isGreaterThanOrEqualTo(14);
+        // 防规则空转：本批 5 个 controller 共 17 个 handler
+        assertThat(handlerCount).isGreaterThanOrEqualTo(17);
         assertThat(violations).as("管理端权限字符契约违规：%s", violations).isEmpty();
     }
 

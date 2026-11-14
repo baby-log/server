@@ -65,4 +65,12 @@ public class BabyLogBaseDataController {
                                      @RequestParam(required = false) Integer limit) {
         return R.ok(baseDataService.pullPublishedVersions(since, sinceId, limit));
     }
+
+    @Operation(summary = "记录类型云端规则增量下发（M41，changes 键 record_type_rules，客户端规则缓存表消费）")
+    @GetMapping("/record-type-rules")
+    public R<SyncChangesVO> recordTypeRules(@RequestParam(required = false) Long since,
+                                            @RequestParam(required = false) Long sinceId,
+                                            @RequestParam(required = false) Integer limit) {
+        return R.ok(baseDataService.pullRecordTypeRules(since, sinceId, limit));
+    }
 }
