@@ -18,6 +18,7 @@ import com.babylog.common.core.enums.error.ErrorCode;
  *   <li>8380-8389 反馈</li>
  *   <li>8390-8394 版本公告（M10 管理端）</li>
  *   <li>8395-8399 小程序认证（M20，wx.login code 换 app-user 双 token）</li>
+ *   <li>8400-8419 电视设备码绑定（M45）</li>
  * </ul>
  */
 public enum BabyLogErrorCode implements ErrorCode {
@@ -106,6 +107,14 @@ public enum BabyLogErrorCode implements ErrorCode {
     WX_CODE_INVALID(8396, "微信登录凭证无效或已过期，请重新登录"),
     /** 绑定冲突：openid 已绑定其他账号，或绑定指向不存在的账号（孤儿绑定）——换绑是管理动作，登录路不做 */
     WX_MINI_BOUND_CONFLICT(8397, "该微信已绑定其他账号，请联系管理员"),
+
+    // ---------- 电视设备码绑定（8400-8419，M45） ----------
+    /** 不区分输错、过期、已处理，避免把 6 位码状态变成枚举 oracle。 */
+    DEVICE_BIND_CODE_INVALID(8400, "设备码无效、已过期或已处理"),
+    DEVICE_BIND_RATE_LIMITED(8401, "设备码操作过于频繁，请稍后再试"),
+    DEVICE_BIND_CONFIRM_LOCKED(8402, "设备码确认失败次数过多，请稍后再试"),
+    /** 一次性领奖：已消费或失去最终消费权时都绝不重复返回 token。 */
+    DEVICE_BIND_ALREADY_CLAIMED(8403, "设备登录凭证已领取，请重新申请设备码"),
 
     ;
 

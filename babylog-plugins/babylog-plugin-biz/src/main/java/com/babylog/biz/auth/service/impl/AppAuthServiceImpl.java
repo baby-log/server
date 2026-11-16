@@ -255,6 +255,21 @@ public class AppAuthServiceImpl implements AppAuthService {
         return requireUser(userId);
     }
 
+    /**
+     * 电视设备码确认后的登录路（M45）：用户身份来自手机确认时写入的绑定记录，
+     * 仍走统一 completeLogin，不复制 token、设备行或 workerId 逻辑。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LoginTokenVO loginByBoundDevice(long userId, DeviceInfo device) {
+        UserDTO user = userFacade.getById(userId);
+        if (user == null) {
+            throw new ServiceException(BabyLogErrorCode.DEVICE_BIND_CODE_INVALID);
+        }
+        requireEnabled(user);
+        return completeLogin(user, false, device, "");
+    }
+
     @Override
     public LoginTokenVO refresh(RefreshTokenCmd cmd) {
         RefreshTokenRecord record = refreshTokenStore.resolve(cmd.getRefreshToken())

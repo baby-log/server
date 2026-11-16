@@ -498,6 +498,47 @@ class AppAuthServiceImplTest {
         verify(refreshTokenStore).revoke("refresh-token");
     }
 
+    // ---------------- 电视设备码绑定登录（M45） ----------------
+
+    @Test
+    void loginByBoundDevice_reusesTokenDeviceAndWorkerIdPipeline() {
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "mom", "妈妈", ""));
+        DeviceInfo tv = device();
+        tv.setDeviceUuid("living-room-tv");
+        tv.setDeviceName("客厅电视");
+        tv.setPlatform("android_tv");
+
+        LoginTokenVO vo = service.loginByBoundDevice(USER_ID, tv);
+
+        assertThat(vo.getAccessToken()).isEqualTo("access-token");
+        assertThat(vo.getRefreshToken()).isEqualTo("refresh-token");
+        assertThat(vo.getDeviceId()).isEqualTo(9001L);
+        assertThat(vo.getWorkerId()).isZero();
+        assertThat(vo.isNewUser()).isFalse();
+        ArgumentCaptor<BlDevice> inserted = ArgumentCaptor.forClass(BlDevice.class);
+        verify(deviceMapper).insert(inserted.capture());
+        assertThat(inserted.getValue().getDeviceUuid()).isEqualTo("living-room-tv");
+        assertThat(inserted.getValue().getPlatform()).isEqualTo("ANDROID_TV");
+        verify(userAccountFacade, never()).createAccount(any());
+    }
+
+    @Test
+    void loginByBoundDevice_rejectsDisabledAccount() {
+        when(userFacade.getById(USER_ID)).thenReturn(user(USER_ID, "mom", "妈妈", "", 1));
+
+        assertBizError(() -> service.loginByBoundDevice(USER_ID, device()), SystemErrorCode.USER_DISABLED);
+        verify(tokenService, never()).issueAccessToken(any(), any());
+    }
+
+    @Test
+    void loginByBoundDevice_rejectsMissingAccount() {
+        when(userFacade.getById(USER_ID)).thenReturn(null);
+
+        assertBizError(() -> service.loginByBoundDevice(USER_ID, device()),
+                BabyLogErrorCode.DEVICE_BIND_CODE_INVALID);
+        verify(tokenService, never()).issueAccessToken(any(), any());
+    }
+
     @Test
     void logout_revokesRefreshTokenAndCurrentAccess() {
         service.logout("refresh-token");

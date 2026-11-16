@@ -1,5 +1,6 @@
 package com.babylog.biz.auth.service;
 
+import com.babylog.biz.auth.dto.DeviceInfo;
 import com.babylog.biz.auth.dto.EmailCodeCmd;
 import com.babylog.biz.auth.dto.EmailLoginCmd;
 import com.babylog.biz.auth.dto.MiniLoginCmd;
@@ -32,6 +33,9 @@ public interface AppAuthService {
 
     /** 微信小程序登录：code 换 session → 绑定或自动建档 → 发 app-user 双 token（M20） */
     LoginTokenVO loginByWxMini(MiniLoginCmd cmd);
+
+    /** 电视设备码确认后的登录：复用统一双 token、设备落行与 workerId 出口（M45） */
+    LoginTokenVO loginByBoundDevice(long userId, DeviceInfo device);
 
     /** 用 refresh token 换新的 access token */
     LoginTokenVO refresh(RefreshTokenCmd cmd);
