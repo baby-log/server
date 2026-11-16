@@ -2,7 +2,7 @@
 
 BabyLog 育儿记录的业务插件（V2.0 云基座，会话 M4 落地骨架与建表，会话 M5 落地 App 认证）。
 
-- 契约模块：`babylog-plugin-biz-api`（`com.babylog.biz.api`）——错误码 `BabyLogErrorCode`（**8300-8399**，8xxx 段内空闲子段，migration/search/datainspect 已占 8000-8221）
+- 契约模块：`babylog-plugin-biz-api`（`com.babylog.biz.api`）——错误码 `BabyLogErrorCode`（**8300-8419**，8xxx 段内空闲子段，migration/search/datainspect 已占 8000-8221）
 - 实现模块：`babylog-plugin-biz`（`com.babylog.biz`）——表前缀 **`bl_`**（ArchUnit A8 白名单已登记）
 - 路由规划：App 端 `/app/babylog/**`（app-user 体系，注解 + `StpAppUtil` 校验）、管理端 `/babylog/**`（`@SaCheckPermission`，M10 已落地，见「管理端第一批（M10）」节）
 
@@ -848,3 +848,75 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
 - Android 端配套（规则缓存表 v10 + 合并层 + 渲染改读）见 BabyLog-Android PROGRESS M41 节；全量单测 **332 绿 = 306 基线 + M40 13 + M41 13**
 - **既有测试债（非 M41 引入）**：`babylog-starter-auth` 的 DemoAcceptanceTest 6 红——测试配置 Redis **空密码** vs 云端实例已设密码（dev yml 有密码 `ZpHSQ9qe22Y1UoHV`，WRONGPASS 实锤），与 M40 记的 admin-server 4 红同属「待龙哥拍板」类（修 = 测试 yml 补密码）
 - 遗留：dev 库留一个 m41 冒烟注册账号，可清可留
+
+
+## 服务端数据导出（M44，会话 2026-11-15，小程序档案与设置批）
+
+### 端点与鉴权
+
+`GET /app/babylog/export?format=json|csv&includeReminders=false`
+
+- 类级 `@SaCheckLogin(type = app-user)`，`Authorization` 请求头使用既有裸 token；**query 中的 token 不参与鉴权**。
+- 每次请求重新执行 `SyncAccessScopeResolver.resolveAccess`：登录态、当前家庭可见账号集合与分类可读减窄即时生效。退出家庭后不会凭旧文件地址继续读新请求。
+- **没有永久公开 URL、下载专用 token、公开对象存储或 web-view 免登页**。小程序直接 `wx.downloadFile`，401 或 HTTP 200 文件体内的 `R{code:1002}` 都走 refresh，成功后只重试一次。
+- `format` 非法使用既有 `1001`；未登录使用既有 `1002`。无新增 8xxx、无新表、无 Flyway。
+- 附件头为 UTF-8 `Content-Disposition`，并带 `Cache-Control: no-store` / `X-Content-Type-Options: nosniff`。
+- 控制器同步返回 `byte[]`，不使用 `StreamingResponseBody`。dev 实测发现后者异步完成后的二次 dispatch 会重走 app-user 注解鉴权，但 Sa-Token 请求上下文已清，导致完整 JSON 后追加错误 R 体；同步二进制已修复并通过真实下载。服务实现原本就全量装配行，当前不额外引入流式查询的复杂度。
+
+### 文件规格（逐表对照 Android 会话 G）
+
+- `ExportTableSpecs` 是 Android Room **schema v10 的 18 表**服务端镜像，列清单同时约束 JSON 与 CSV，防止 `user_id/family_id/remote_key/user_type` 等服务端专属列混入。
+- JSON：`meta.schema_version=10`、`app_version=server-3.2.0`、数字 `exported_at`、`include_reminders`、`total_rows/table_counts`；`tables` 使用 snake_case 列名，保留软删行，ID 与 epoch 全是 JSON number。独立 `ObjectMapper`，刻意不复用 Web 全局 Long→String。
+- CSV ZIP：排除软删行，UTF-8 BOM、CRLF、中文表头、中文枚举、是/否布尔、可读时间与原列 `_epoch` 双列、RFC 4180 转义；按宝宝拆文件，含已归档宝宝并标注，宝宝名路径字符消毒。全局表保持 `全局-*.csv`。
+- 默认排除派生表 `reminders`，所以文件为 17 表；`includeReminders=true` 时才纳入。
+- `family_members.family_key` 在导出边界由 `familyId/familyKey` 显式转字符串；内置产品通过 `selectBuiltinChanges` 合并，不能只查家庭 userIds。
+- 查询复用 `SyncRecordStore.selectChanges` 的双段游标，每页 500，持续至末页；服务端不静默截断。CSV 宝宝清单按 `created_at/id` 排序。
+- 只含服务端已同步数据，小程序未补传草稿不在文件内；附件口径仍同 Android 的索引行，不新增二进制附件上传/导出能力。
+
+### 验证
+
+- `mvn test -pl babylog-plugins/babylog-plugin-biz`：**183 tests，0 failures，0 errors**。新增导出 5 项覆盖 Android 列/数字 epoch/墓碑/内置产品/501 行翻页/分类减窄/reminders 可选/CSV 格式。
+- `P0ArchitectureTest`：通过（完整 reactor 命令，无指定测试模块跳过）。
+- `BabyLog-Mini/tests/m44-dev-smoke.py`：dev 18080 **65/0**。随机 OWNER/家人/陌生账号，覆盖建家加入、VIEWER 8343、三类医疗全字段与 version=2 墓碑、summary/HEALTH/MEDICAL 取数、OWNER/家人/陌生账号 JSON+CSV 实际下载、字段/软删/BOM/CRLF/中文枚举/时间双列/费用备注/归档文件、1001/1002/query token 不绕鉴权、refresh 后新 access 下载。
+- 小程序 `wx.downloadFile` 与真机分享边界见 `BabyLog-Mini/PROGRESS.md` M44；生产环境仍需配置 HTTPS `downloadFile` 合法域名。
+
+## 电视设备码绑定（M45，会话 2026-11-15）
+
+### 四个端点与身份边界
+
+统一前缀 `POST /app/babylog/device-bind`：
+
+| 子路径 | 鉴权 | 请求与结果 |
+|---|---|---|
+| `/apply` | TV 匿名 | `{device:{deviceUuid,deviceName,platform,appVersion}}`；返回 6 位 `userCode`、高熵 `deviceCode`、数字 `expiresIn=600` 与 `pollIntervalSeconds=5` |
+| `/poll` | TV 匿名 | 只接受 `{deviceCode}`；返回 `pending/approved/denied/expired` 与 `retryAfterSeconds`；只有一次性 `approved` 带 `login=LoginTokenVO` |
+| `/confirm` | 手机 `@SaCheckLogin(app-user)` | 只接受 `{userCode}`；绑定身份只从 `LoginContext.getUserId()` 取，DTO 没有 `userId` |
+| `/deny` | 手机同上 | 拒绝仍为 `PENDING` 的申请，返回 `status=denied` |
+
+`AppAuthService.loginByBoundDevice(userId, device)` 回读账号并校验启用状态，然后复用统一 `completeLogin`：app-user 双 token、`bl_device` 落行／复用、`workerId` 分配与其它登录方式完全一致。TV 建议 `platform=ANDROID_TV`；服务端归一为大写。没有新增写记录端点，TV 后续仍走 `sync/push`，VIEWER 的 8343 终判不变。
+
+### Redis 状态机、一次性领奖与限流
+
+- 不新增表或 Flyway。`bl:device-bind:user:<sha256(userCode)>` 是短码索引，`device:<sha256(deviceCode)>` 保存状态与设备 JSON，`claim:<sha256(deviceCode)>` 是 30 秒独占领奖锁；另有 create/poll/confirm-fail 限流键。
+- 原始 userCode/deviceCode 不进入 Redis 值或业务日志，只在申请响应中返回。`approvedBy` 始终以**字符串**穿过 Lua cjson，避免 63 位 userId 被 double 截断；散列不等于给 6 位码增加抗离线枚举能力。
+- 内部 `PENDING → APPROVED/DENIED → CONSUMED`（仅 APPROVED 可领奖）。确认／拒绝脚本原子检查 PENDING、改状态并删除短码索引；重复确认、过期、已处理统一 8400。
+- 领奖脚本先检查 device 状态并 `SET claim NX PX`；并发另一侧只见 pending。签发失败释放锁、保留 APPROVED；最终原子消费失败时撤销刚签发的 access/refresh 并返回 8403。CONSUMED 重放也返回 8403，绝不二次发 token。
+- 申请每 IP 5 次/分钟；同 deviceCode 轮询间隔 5 秒；确认失败同账号 10 分钟 5 次或同 IP 20 次后锁 8402，成功确认／拒绝清计数。计数与首次 TTL 也在 Lua 内完成。
+- 默认配置在 `babylog.device-bind.*`：`code-ttl-seconds=600`、`poll-interval-seconds=5`、`claim-ttl-seconds=30`、`apply-per-ip-per-minute=5`、`confirm-fail-user-limit=5`、`confirm-fail-ip-limit=20`、`confirm-fail-window-seconds=600`，无需向环境 yml 增加密钥。
+- 来源 IP 解析沿用 App 登录审计的 XFF 首段口径。**生产 Nginx／网关必须覆盖客户端传入的 XFF**；若允许客户端直连并伪造该头，IP 限流可被换头绕过，账号失败计数仍是独立兜底。
+
+### 错误码与匿名登记
+
+- 8400 `DEVICE_BIND_CODE_INVALID`：短码无效、过期或已处理，不细分原因。
+- 8401 `DEVICE_BIND_RATE_LIMITED`：申请或轮询过频。
+- 8402 `DEVICE_BIND_CONFIRM_LOCKED`：账号／IP 确认失败窗口已锁。
+- 8403 `DEVICE_BIND_ALREADY_CLAIMED`：已领奖或失去最终消费权。
+- `P0ArchitectureTest.ANONYMOUS_ENDPOINTS` 只登记 `apply` 与 `poll`；`confirm` / `deny` 有 app-user 注解，不属于匿名面。
+
+### 验证与未验边界
+
+- `mvn test -pl babylog-plugins/babylog-plugin-biz`：**209 tests，0 failures，0 errors**（M44 183 + 设备码 23 + 绑定登录 3）。覆盖短码碰撞、原始码不进 store、双维失败计数、四状态、claim busy、签发失败释放、消费失败撤销、高位 userId、并发单侧领奖与停用账号。
+- `P0ArchitectureTest`：**22/0**；完整 reactor `package` 成功，并直接核对 fat jar 内嵌 biz jar 含 `BabyLogDeviceBindController.class`。
+- `scripts/e2e/m45-device-bind-smoke.py`：dev 18080 **36/0**。覆盖申请→pending→手机确认→领奖→refresh→summary/today→TV token 写完整 feeding（`inProgress=0`、真实 memberId）→OWNER 增量可见；另测 VIEWER 设备 token 8343、陌生账号请求体伪造 userId 无效、家庭隔离、deny、8400/8401/8402/8403、同设备重绑复用 deviceId/workerId，以及真实 Redis 两路并发只有一侧获得 token。
+- `scripts/e2e/m45-device-bind-expiry-smoke.py`：以 `--babylog.device-bind.code-ttl-seconds=2` 临时启动后 **2/0**，通过公开 API 实测 pending→真实 TTL 到期 expired。两个 dev 进程验证后均已停止。
+- **未验边界**：工作区仍无 BabyLog-TV 工程，无 TV APK、Leanback 启动、DPAD、模拟器或真机结果；手机端短码输入／确认 UI 也未在本批新增，手机确认由已登录 API 代替。详细建工程指导与后续提示词见 `独立产品规划/14-V2.4电视端启动评估.md`。
