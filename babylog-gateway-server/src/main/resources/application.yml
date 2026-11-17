@@ -20,11 +20,12 @@ spring:
     # ⚠️ 缩进必须是 2 空格：spring 的直接子项写成 4 空格会落进别的子树，属性静默失效且不报错。
     nacos:
       config:
-        server-addr: 127.0.0.1:8848
-        username: 
-        password: 
-        namespace: 
-        group: DEFAULT_GROUP
+        # 连接信息一律环境变量占位符（yml 进 git，落明文即事故）；默认值仅供本地单体形态
+        server-addr: ${BABYLOG_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        username: ${BABYLOG_NACOS_USERNAME:}
+        password: ${BABYLOG_NACOS_PASSWORD:}
+        namespace: ${BABYLOG_NACOS_NAMESPACE:}
+        group: ${BABYLOG_NACOS_GROUP:DEFAULT_GROUP}
         # dataId 后缀必须与 file-extension 一致，否则内容解析不到
         file-extension: yaml
         # optional: 已兜住失败，这里只是别让不可达时白等 30s

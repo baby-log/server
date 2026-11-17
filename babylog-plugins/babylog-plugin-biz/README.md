@@ -920,3 +920,166 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
 - `scripts/e2e/m45-device-bind-smoke.py`：dev 18080 **36/0**。覆盖申请→pending→手机确认→领奖→refresh→summary/today→TV token 写完整 feeding（`inProgress=0`、真实 memberId）→OWNER 增量可见；另测 VIEWER 设备 token 8343、陌生账号请求体伪造 userId 无效、家庭隔离、deny、8400/8401/8402/8403、同设备重绑复用 deviceId/workerId，以及真实 Redis 两路并发只有一侧获得 token。
 - `scripts/e2e/m45-device-bind-expiry-smoke.py`：以 `--babylog.device-bind.code-ttl-seconds=2` 临时启动后 **2/0**，通过公开 API 实测 pending→真实 TTL 到期 expired。两个 dev 进程验证后均已停止。
 - **未验边界**：工作区仍无 BabyLog-TV 工程，无 TV APK、Leanback 启动、DPAD、模拟器或真机结果；手机端短码输入／确认 UI 也未在本批新增，手机确认由已登录 API 代替。详细建工程指导与后续提示词见 `独立产品规划/14-V2.4电视端启动评估.md`。
+
+
+## 服务端 PivotOS 严格整改（S2，会话 2026-11-16，BabyLog V2 修复链）
+
+> S1 四端统一契约（独立产品规划/15 号文档）已落地 Android 侧；本会话只做 **server 仓库**
+> 的严格整改，不动 Android/iOS/小程序/TV/管理 Web 功能代码。
+> **勘误（S3 补记）**：本节原写「四个任务全部收口」「遗留：无」**言过其实**——T2 当时
+> 只做了白名单/形态锁/LIMIT 钳位的**安全加固**，`SyncTableSql`/`BaseDataTableSql`/
+> `JdbcSyncRecordStore` 的动态 SQL 本体仍在，不等于 PivotOS「一律类型化」合规；
+> 真正的类型化改造由 **S3（见下节）** 完成，本节 T1/T2 的描述保留作历史记录，
+> 其中 T2 的全部内容与「T1 的 deleted IN (0,1) 恒真条件」均已被 S3 取代/清除。
+
+### T1 BlDeviceMapper：唯一 @Select 手写 SQL 消除
+
+- 原 `SELECT COALESCE(MAX(worker_id), -1) … WHERE user_id = #{userId}`（参数化无注入面，
+  但属手写 SQL，违 PivotOS「一律 LambdaQueryWrapper」契约）改为 **default 方法 +
+  LambdaQueryWrapper**：`.select(workerId).eq(userId).and(deleted=0 OR deleted=1)`，
+  MAX 聚合移到 Java 侧（`maxWorkerIdOf` 纯函数）。
+- **deleted IN (0,1) 的来由（踩坑记录）**：MyBatis-Plus 3.5.17 的逻辑删除是给
+  wrapper 查询**建 MappedStatement 时静态烘焙**进 SQL 的（`sqlWhereEntityWrapper` →
+  `getLogicDeleteSql`），`IgnoreStrategy` 没有 logicDelete 字段、
+  `InterceptorIgnoreHelper` 对 selectList 运行时**不可绕过**。而 bl_device 全插件无任何
+  软删代码路径（踢出 = status KICKED），deleted 列 NOT NULL——显式声明
+  `deleted=0 OR deleted=1` 与自动追加的 `deleted=0` 合取后 ≡ 全行，**零 SQL 改写保住
+  「软删行仍占 workerId」旧语义**，且全部类型引用、参数全占位符。
+- 空条件语义逐条核对：无设备/全 null workerId → -1（同 COALESCE(MAX, -1)）；
+  userId 必非空（token 派生）。新增 `BlDeviceMapperTest` 4 例钉死。
+
+### T2 动态 SQL 收口（SyncTableSql / BaseDataTableSql / JdbcSyncRecordStore）
+
+- **表名白名单**：两构造器统一 fail-fast 校验 `bl_[a-z0-9_]+`（表名只来自
+  SyncTable/BaseDataTable 枚举 = 编译期清单，这是第二道复核）。
+- **列名/谓词形态锁死**：标识符 `^[a-z][a-z0-9_]*$`、谓词 `^[a-zA-Z0-9_ =()']*$`
+  （谓词是唯一被直接拼进 SQL 文本的片段，必须是代码内常量形态）。
+- **LIMIT 内联收口**：`JdbcSyncRecordStore.withLimit`（包级，便于单测）——数值型 int、
+  服务层已钳位，拼前最后防线 [1,1000] 越界即拒。
+- 客户端载荷自始至终只走 `:占位符` 绑定（upsert 循环键是 `payloadProperties()` 内部清单，
+  值才是载荷），墓碑/乐观锁/归属盖章语义零变化。
+- 新增单测：`SyncTableSqlTest` +3（无拼接值/谓词形态/LIMIT 越界）、
+  `BaseDataTableSqlTest` +1（base 通道同款白名单）。
+
+### T3 A11 登记核对
+
+- 本次**零新端点**；同步/设备/设备码/基础数据控制器逐个人工核对 + A11 全绿：
+  sync/base/device 类级 `@SaCheckLogin(app-user)`，device-bind confirm/deny 方法级，
+  apply/poll 在 `ANONYMOUS_ENDPOINTS` 在册（M45），AdminDeviceController 方法级
+  `@SaCheckPermission`——登记无缺失、无新增欠条。
+- **踩坑（环境债）**：本地 .m2 的 biz jar 停在 11-14（M45 之前），admin-server 单独
+  `-pl` 测试解析到旧 jar → A11 报 apply/poll「登记失效」假红。修法 =
+  `mvn install -DskipTests -pl babylog-plugins/babylog-plugin-biz -am` 后重跑。
+  教训：**admin-server 的 ArchUnit 吃的是本地仓 jar，biz 改动后必须先 install**。
+
+### T4 Nacos 配置门禁 → 敏感配置启动门禁
+
+- **NacosConfigImportGuardTest 整改**（原 2 例恒红，根因 = M4 拍板「单体形态不接
+  Nacos、配置内联 yml」推翻了旧假设）：改为条件式——import 若存在必须 `optional:` 前缀、
+  nacos 连接键若存在必须 `${...}` 占位符；单体没接线是合法终态。
+- **ProdOpsLoggingGuardTest 2 例整改**：不再要求 yml 字面出现 `BABYLOG_LOG_DIR` 等
+  环境变量占位符（违背内联拍板）；改为断言 tunable 接在 `babylog.log.*` 且 logback
+  `springProperty source` 真实接线（防 yml 改了不生效的静默失效）。
+- **新增 `SensitiveConfigGuard` + `SensitiveConfigEnvironmentPostProcessor`**
+  （admin-server）：密钥/口令/连接串缺失即 fail-fast——prod 硬拒（EnvironmentPostProcessor
+  在 ConfigData 之后、**任何数据源/Redis Bean 创建之前**抛 IllegalStateException，
+  进程非零退出），非 prod 逐条 WARN 不拦截（dev 零配置起服不受影响，与
+  FieldEncryptKeyGuard 同口径）。规则：主库口令 + Redis 口令无条件必配（prod）；
+  SMTP 配 host→要口令、file 通道 s3 形态→要 access/secret key、小程序配 appid→要
+  secret（功能条件触发）；值残留 `${...}` 视为缺失；报告只含键名不回显密钥值；
+  紧急绕过开关 `babylog.startup.sensitive-config-guard-enabled=false` 留 WARN 痕。
+- **踩坑（S2 首版即中）**：Spring Framework 7 的 SpringFactoriesLoader 只读
+  `META-INF/spring.factories`，Boot 2.4~3.x 的
+  `META-INF/spring/...EnvironmentPostProcessor.imports` 在 Boot 4 下**静默失效**
+  （类不加载、零报错）。已改 spring.factories 并用新增 `SensitiveConfigWiringTest`
+  2 例锁死「正确文件存在 + 废弃文件不存在」。
+
+### 验证记录（S2）
+
+- biz 单测 **217/217 绿**（209 基线 + T1 4 + T2 4）；admin-server **52/52 绿**
+  （含 P0ArchitectureTest 18 条、整改后 Nacos×2 / ProdOps×7 / Druid×5 /
+  SensitiveConfigGuard×10 / SensitiveConfigWiring×2）
+- 回归红线全部实测未回退：version 乐观锁（重推 skipped）、软删墓碑（deleted=1 推送
+  可被拉到）、8343/8344/8350 拦截语义（单测锁死 + M16/M18 用例保持绿）、
+  并发 push 语义（ODKU 版本门禁 SQL 逐字未动）、S1 契约（feedings 计时五列下发、
+  pauseEvents 逐字透传、奶量 null → 90 补录全链路）
+- dev 18080 冒烟 **27/27 绿**（脚本 `/tmp/s2-smoke.py`，运行时账号）：注册首设备
+  workerId=0 → 第二设备 workerId=1（T1 真库聚合）、push/pull/分页/base 四通道、
+  未登录 1002；门禁日志 `[敏感配置门禁] 通过（形态=非prod）` 在场
+- fail-fast 反向实证：prod 形态 + 命令行置空主库口令 → 进程 exit=1、报告仅键名、
+  拦截在 Druid 数据源初始化之前
+- 遗留：**T2 动态 SQL 未真正消除（伪收口）**——白名单/形态锁只是加固，SQL 文本拼接
+  本体仍在，PivotOS 合规留待 S3 类型化改造。两个 yml 的未提交敏感配置改动按龙哥要求
+  原样保留（未读未动未提交）。
+
+
+## 服务端 PivotOS 严格整改（S3，会话 2026-11-17，续 S2 伪收口）
+
+> S2 的 T2 只是安全加固（白名单/形态锁/LIMIT 钳位），动态 SQL 本体仍在——本节把
+> 「SyncTableSql/BaseDataTableSql/JdbcSyncRecordStore 动态 SQL 彻底消除」真正做完，
+> 同步语义零回退。
+
+### T2 真正收口：视图实体 + MyBatis-Plus 类型化存储
+
+- **删除** `JdbcSyncRecordStore` / `SyncTableSql` / `BaseDataTableSql`（及两个旧 SQL
+  形状测试）。`SyncTable`/`BaseDataTable` 枚举移除 `pullPredicate` 字符串字段——
+  谓词改由注册规格（`SyncViewRegistry`）以 Lambda 列表达，枚举只剩编译期表名清单。
+- **23 个视图实体**（`com.babylog.biz.sync.entity`）：18 同步表 `BlXxxSyncView` +
+  4 base 表 + `BlDeviceView`，每个 `extends` 业务实体 + `@TableName` + **遮蔽
+  `deleted`（不带 @TableLogic）**，同步表还遮蔽 `version`/`serverUpdatedAt`。
+  这是本方案的核心：S2 已实证 MP 3.5.17 的逻辑删除是 MappedStatement **静态烘焙**
+  进 SQL 的（`IgnoreStrategy` 没有 logicDelete 字段、运行时就绪不可绕过），所以不靠
+  绕过——靠视图实体让 MP 字段收集**子类优先**，逻辑删除从同步表 SQL 中彻底消失；
+  墓碑可读、可下发、可复活（H2 实测）。
+- **`SyncLambdas`**：LambdaMetafactory 从实体 getter 纺 `SFunction`。**踩坑**：实例化
+  类型必须强制为视图类（`MethodType.methodType(getter.getReturnType(), type)`），
+  否则 MP 按 instantiatedType 查 TableInfo 缓存会落到父类报
+  `can not find lambda cache`。
+- **upsert 三态**（替代 ODKU）：版本门禁条件 UPDATE（`WHERE id=? AND version<?`）
+  → 0 行则 INSERT（归属/审计列只在 INSERT 盖章）→ `DuplicateKeyException` 回退再
+  条件 UPDATE，再 0 行 = 幂等 skip。NOT NULL 带默认列（children: isPremature/archived；
+  feedings: inProgress）收到显式 null 时抛 `DataIntegrityViolationException`，
+  对齐旧库拒绝语义（上层据此走 8342 单条拒收）。
+- 22 个显式 `@Bean`（`SyncStoreHandlerConfiguration`）；存储构造时 fail-fast 校验
+  18+4 全覆盖；limit [1,1000] 钳位。全链路零 `.last()`/`.apply()`/字符串列名。
+
+### T1 收尾
+
+- `BlDeviceMapper` 还原为纯 `BaseMapper<BlDevice>`；改由 `BlDeviceViewMapper`
+  （视图实体，`deleted` 遮蔽后无需恒真条件）承载 `selectMaxWorkerId`，
+  `deleted IN (0,1)` 恒真条件**全仓清除**；`DeviceWorkerIdAllocator` 改注入视图
+  Mapper。软删行仍占 workerId 的旧语义由「不查 deleted」天然保住。
+
+### 网关 Nacos 配置修复
+
+- `babylog-gateway-server` `application.yml` 的 nacos config 5 键改为
+  `${BABYLOG_NACOS_SERVER_ADDR:127.0.0.1:8848}` / USERNAME / PASSWORD / NAMESPACE /
+  GROUP 占位符（原硬编码值在环境外不可用），`GatewayNacosConfigWiringTest` 4/4 修复。
+
+### dev 冒烟抓到的真 bug（已修）
+
+- 存储层门禁 `asLong` 只认 `Number`，而真实 JSON 链路中 id/version 以**字符串**形式
+  到达泛型 Map（服务层 `SyncServiceImpl.asLong` 是字符串容忍的，两层口径不一）→
+  feedings push 全部 1500。已把存储层 `asLong` 改为与服务层同口径，并加 H2 回归
+  用例 `stringIdAndVersionFromJsonPayloadAreAccepted`（字符串 id/version 落库成功）。
+- **教训**：H2 测试载荷全部用 Java Long 构造，掩盖了 JSON 字符串形态；dev 冒烟
+  （真实 Jackson 反序列化）才是这类分层差异的试金石。
+
+### 验证记录（S3）
+
+- biz 单测 **226/226 绿**（S2 基线 217 + 26 新增 −16 旧 SQL 形状删除 −1 注释误报修正
+  期计数调整）：`SyncViewRegistryTest` 11 / `SyncStoreWiringTest` 4 /
+  `SyncStoreH2Test` 12（H2 1.4.197 test 依赖已入 pom，真实 SqlSessionTemplate 链路：
+  8 线程 48 版本并发收敛、跨用户归属保持、墓碑三态、同毫秒双游标翻页不重不漏、
+  M37 谓词、amountMl=null/pauseEvents 透传、NOT NULL 拒收、字符串 id/version）
+- admin-server **52/52 绿**（P0ArchitectureTest 22 条含 A10 last() 红线、A11 登记）；
+  gateway **7/7 绿**；starter/commons 19 模块与其余 12 个插件模块 reactor 全绿
+- dev 18080 冒烟 **27/27 绿**（`/tmp/s2-smoke.py`，新 fat jar）：T1 workerId=0→1 回归、
+  push/pull/双段游标分页/墓碑/版本门禁/base 四通道/未登录 1002；门禁 WARN 在场；
+  验证后进程已停
+- **环境债（与本阶段无关，未跑/失败）**：starter-auth（6 错）、starter-tenant（13 错）、
+  plugin-message、plugin-system 的测试 yml 硬编码远程中间件（175.24.176.176 的
+  Redis/MySQL），该服务器凭据已轮换（WRONGPASS/1045），MySQL 用例会无限重试挂死。
+  修复方向 = 测试改嵌件/本地容器，属独立整改项。
+- 遗留：上述 4 个模块的环境债；两个 yml 的未提交敏感配置改动按龙哥要求原样保留
+  （未读未动未提交）。

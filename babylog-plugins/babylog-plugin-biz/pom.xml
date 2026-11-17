@@ -82,5 +82,13 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- 同步存储类型化改造的本地隔离集成测试（S3）：真实 MyBatis-Plus 链路 + 内存库，
+             验证并发 upsert/墓碑/双游标分页/谓词过滤，不依赖外部 MySQL（版本以本地仓 1.4.197 为准） -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>1.4.197</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

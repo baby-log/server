@@ -33,10 +33,13 @@ import java.util.Set;
  *   <li>{@link #apiName}：JSON 里的表标识，<b>与 App 端 Room 表名逐字相同</b>
  *       （feedings / record_type_settings …），客户端不用做映射表；</li>
  *   <li>{@link #tableName}：库表名（bl_ 前缀，A8 白名单管辖）；</li>
- *   <li>{@link #entityClass}：列清单的来源。SQL 列名由实体字段反射推导
- *       （见 {@code SyncTableSql}），新增列只改实体 + 迁移，不必回来改 SQL；</li>
+ *   <li>{@link #entityClass}：列清单与同步视图实体（{@code com.babylog.biz.sync.entity}）
+ *       的来源，新增列只改实体 + 迁移；</li>
  *   <li>{@link #category}：拉取过滤分类，{@code null} = 不参与分类过滤。</li>
- * </ol>
+ * </ul>
+ *
+ * <p>SQL 一律由 {@code MybatisPlusSyncRecordStore} 的类型化 Handler
+ * （LambdaQueryWrapper/LambdaUpdateWrapper）生成，本枚举不再携带任何 SQL 片段。
  *
  * <p><b>为什么不用 24 张表全量同步</b>：bl_family / bl_device / bl_feedback / bl_app_version /
  * bl_vaccine_schedule / bl_ai_quota 是服务端专属或运营表，App 端没有对应 Room 表，
@@ -73,11 +76,12 @@ public enum SyncTable {
     /**
      * 喂养（M37 计时器）。
      *
-     * <p>拉取谓词 {@code in_progress = 0}：进行中的计时半成品不下发——客户端红线是
-     * in_progress=1 的行永不进 outbox，这道谓词是服务端侧的兜底（防御不合规客户端），
-     * 「服务端推送只吃已完成记录」由此在 pull 通道落死。
+     * <p>拉取谓词 {@code in_progress = 0}（登记在 {@code SyncViewRegistry} 的类型化规格里）：
+     * 进行中的计时半成品不下发——客户端红线是 in_progress=1 的行永不进 outbox，
+     * 这道谓词是服务端侧的兜底（防御不合规客户端），「服务端推送只吃已完成记录」
+     * 由此在 pull 通道落死。
      */
-    FEEDINGS("feedings", "bl_feedings", BlFeeding.class, SyncCategory.FEEDING, java.util.Set.of(), "in_progress = 0"),
+    FEEDINGS("feedings", "bl_feedings", BlFeeding.class, SyncCategory.FEEDING, java.util.Set.of()),
 
     /** 尿布 */
     DIAPERS("diapers", "bl_diapers", BlDiaper.class, SyncCategory.CARE, java.util.Set.of()),
@@ -111,12 +115,6 @@ public enum SyncTable {
     private final SyncCategory category;
     /** 本表额外的服务端独占属性（payload 与 pull 都排除；family_members 的 familyId 不在此列——它是客户端可推的载荷列） */
     private final java.util.Set<String> serverOwnedProperties;
-    /**
-     * 增量拉取的额外 WHERE 片段（M37 起）：为空串 = 无附加条件。
-     * 目前仅 feedings 用（in_progress = 0，进行中的计时半成品不下发）；
-     * 归属/游标条件由 {@code SyncTableSql} 统一拼装，这里只管业务谓词。
-     */
-    private final String pullPredicate;
 
     /** 服务端管理表（M16）：这两张由家庭服务维护，客户端只拉不推（push 拒收 8350） */
     private static final java.util.Set<SyncTable> SERVER_MANAGED =
@@ -124,17 +122,11 @@ public enum SyncTable {
 
     SyncTable(String apiName, String tableName, Class<? extends BlSyncDO> entityClass, SyncCategory category,
               java.util.Set<String> serverOwnedProperties) {
-        this(apiName, tableName, entityClass, category, serverOwnedProperties, "");
-    }
-
-    SyncTable(String apiName, String tableName, Class<? extends BlSyncDO> entityClass, SyncCategory category,
-              java.util.Set<String> serverOwnedProperties, String pullPredicate) {
         this.apiName = apiName;
         this.tableName = tableName;
         this.entityClass = entityClass;
         this.category = category;
         this.serverOwnedProperties = java.util.Set.copyOf(serverOwnedProperties);
-        this.pullPredicate = pullPredicate == null ? "" : pullPredicate;
     }
 
     public String apiName() {
@@ -166,14 +158,6 @@ public enum SyncTable {
      */
     public boolean isServerManaged() {
         return SERVER_MANAGED.contains(this);
-    }
-
-    /**
-     * 增量拉取的额外业务谓词（SQL 片段，不含 WHERE 关键字）；空串 = 无附加条件。
-     * 目前仅 feedings（in_progress = 0，进行中的计时半成品不下发）。
-     */
-    public String pullPredicate() {
-        return pullPredicate;
     }
 
     /** 客户端传的表标识 → 注册表项（大小写敏感：与 Room 表名逐字相同） */

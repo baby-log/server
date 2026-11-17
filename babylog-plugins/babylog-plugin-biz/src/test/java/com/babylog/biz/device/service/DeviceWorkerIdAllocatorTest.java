@@ -1,7 +1,7 @@
 package com.babylog.biz.device.service;
 
 import com.babylog.biz.api.enums.BabyLogErrorCode;
-import com.babylog.biz.mapper.BlDeviceMapper;
+import com.babylog.biz.sync.mapper.BlDeviceViewMapper;
 import com.babylog.common.core.exception.ServiceException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,7 +21,7 @@ class DeviceWorkerIdAllocatorTest {
     private static final long USER_ID = 1001L;
 
     @Mock
-    private BlDeviceMapper deviceMapper;
+    private BlDeviceViewMapper deviceMapper;
 
     @Test
     void firstDeviceGetsZero() {

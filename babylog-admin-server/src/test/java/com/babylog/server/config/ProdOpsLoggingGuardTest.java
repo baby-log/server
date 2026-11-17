@@ -106,6 +106,12 @@ class ProdOpsLoggingGuardTest {
                 "控制台分支必须是 !prod & !test；写成 !prod 会让 test 同时命中两块（滚动文件 + 控制台双写）");
     }
 
+    /**
+     * S2 口径（2026-11-16，M4「配置内联 yml、废除环境变量注入」拍板后的整改）：
+     * 可调项必须真的接在 {@code babylog.log.*} 上（logback 用 springProperty 从 yml 取值），
+     * 运维改 yml（或按 Spring 宽松绑定用 BABYLOG_LOG_DIR 等环境变量覆盖）即可调整、不改代码。
+     * 不再要求 yml 里字面出现环境变量占位符——拍板后全仓配置内联，字面占位符反而违背新口径。
+     */
     @Test
     void logTunablesAreExposedForOverride() throws IOException {
         String yml = Files.readString(APP_YML, StandardCharsets.UTF_8);
@@ -113,7 +119,12 @@ class ProdOpsLoggingGuardTest {
             assertTrue(yml.contains(key),
                     "application.yml 的 babylog.log 下必须暴露 %s（运维要能在不改代码的前提下调整）".formatted(key));
         }
-        assertTrue(yml.contains("BABYLOG_LOG_DIR"), "日志目录必须可由环境变量覆盖");
+        String xml = Files.readString(LOGBACK, StandardCharsets.UTF_8);
+        for (String key : List.of("max-file-size", "max-history", "total-size-cap", "dir")) {
+            assertTrue(xml.contains("source=\"babylog.log." + key + "\""),
+                    "logback 必须通过 <springProperty source=\"babylog.log.%s\"> 接 yml 的值——".formatted(key)
+                            + "漏了接线，yml 里改了也不生效（静默失效）");
+        }
     }
 
     /**
@@ -163,6 +174,11 @@ class ProdOpsLoggingGuardTest {
                 "主文件必须用 LevelFilter 精确挡级别；ThresholdFilter 只能表达「>=」语义，做不到「低于某级别才收」");
     }
 
+    /**
+     * S2 口径（同 {@link #logTunablesAreExposedForOverride}）：错误文件的保留策略必须
+     * 接在 {@code babylog.log.error-*} 上并由 logback springProperty 接线，不再要求
+     * yml 字面出现环境变量占位符。
+     */
     @Test
     void errorLogRetentionIsExposedForOverride() throws IOException {
         String yml = Files.readString(APP_YML, StandardCharsets.UTF_8);
@@ -170,9 +186,11 @@ class ProdOpsLoggingGuardTest {
             assertTrue(yml.contains(key),
                     "application.yml 的 babylog.log 下必须暴露 %s".formatted(key));
         }
-        assertTrue(yml.contains("BABYLOG_LOG_ERROR_MAX_HISTORY")
-                        && yml.contains("BABYLOG_LOG_ERROR_TOTAL_SIZE_CAP"),
-                "错误文件的保留策略必须可由环境变量覆盖（不同环境磁盘预算不同）");
+        String xml = Files.readString(LOGBACK, StandardCharsets.UTF_8);
+        for (String key : List.of("error-max-history", "error-total-size-cap")) {
+            assertTrue(xml.contains("source=\"babylog.log." + key + "\""),
+                    "logback 必须通过 <springProperty source=\"babylog.log.%s\"> 接 yml 的值".formatted(key));
+        }
     }
 
     private static int countMatches(String text, String token) {

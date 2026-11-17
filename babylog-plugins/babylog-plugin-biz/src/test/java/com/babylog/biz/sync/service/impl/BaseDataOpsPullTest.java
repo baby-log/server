@@ -73,7 +73,7 @@ class BaseDataOpsPullTest {
 
     @Test
     void versions_delegatesToAppVersionsRegistryEntry() {
-        // PUBLISHED 谓词不在服务层而在 SQL 骨架（BaseDataTableSqlTest 锁形状），
+        // PUBLISHED 谓词不在服务层而在存储层（SyncViewRegistry 类型化规格钉死），
         // 这里只锁「路由到 APP_VERSIONS 注册项 + changes 键 app_versions」
         when(store.selectBaseChanges(eq(BaseDataTable.APP_VERSIONS), any(LocalDateTime.class), anyLong(), anyInt()))
                 .thenReturn(List.of());

@@ -11,19 +11,21 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code application.yml} 配置中心接线的静态守卫（V3-S2 L6）。
+ * 配置中心（Nacos）接线的静态守卫（V3-S2 L6 创立，BabyLog S2 按单体形态拍板整改）。
  *
- * <p>守的是两条会「静默失效」或「静默泄密」的红线：
+ * <p><b>2026-11-16 S2 口径变更</b>（依据 07 文档 M4 拍板：单体形态<b>不接 Nacos</b>，
+ * 仅 {@code -P cloud/-P alibaba} 打包才生效；配置全部内联 yml）：
+ * 原测试强制「application.yml 必须有 spring.config.import 的 nacos 项」，与拍板直接冲突、
+ * 恒红。整改后两条规则都改为<b>条件式</b>——单体形态没接线是合法的；一旦有人重新接回
+ * Nacos，两条旧红线立即重新生效：
  * <ol>
- *     <li>{@code spring.config.import} 的 nacos dataId 必须带 {@code optional:} 前缀。
- *         少了它，「Nacos 不可达 / 鉴权失败 / dataId 不存在 / 默认形态无 nacos: 解析器」
- *         四态都会直接打断启动——而开发机上 Nacos 常常是可达的，改动后本地根本试不出来。</li>
- *     <li>Nacos 连接信息（username / password / server-addr / namespace / group）只能是
- *         {@code ${...}} 占位符。yml 会进 git，写明文凭据就是一次事故。</li>
+ *     <li>{@code spring.config.import} 若存在，每一项必须带 {@code optional:} 前缀
+ *         （少了它，Nacos 不可达/鉴权失败/dataId 不存在都会直接打断启动）；</li>
+ *     <li>Nacos 连接信息（username / password / server-addr / namespace / group）若出现，
+ *         只能是 {@code ${...}} 占位符——yml 进 git，写明文凭据就是事故。</li>
  * </ol>
  *
  * <p>刻意不用 YAML 解析器：这里要断言的是「原文形态」（前缀、占位符），
@@ -40,22 +42,19 @@ class NacosConfigImportGuardTest {
         Pattern.compile("^\\s{8}(username|password|server-addr|namespace|group)\\s*:\\s*(\\S.*)$");
 
     @Test
-    void 配置中心导入必须带optional前缀() throws IOException {
+    void 配置中心导入若存在必须带optional前缀() throws IOException {
         List<String> imports = collectImports();
-        assertFalse(imports.isEmpty(),
-            "application.yml 里找不到 spring.config.import 的导入项，配置中心接线被删了？");
         for (String item : imports) {
             assertTrue(item.startsWith("optional:"),
                 "spring.config.import 的每一项都必须以 optional: 开头，发现违规项：" + item
-                    + "（去掉前缀 = Nacos 不可达时直接打断启动）");
+                    + "（单体形态可不接配置中心；重新接回时去掉前缀 = Nacos 不可达时直接打断启动）");
         }
     }
 
     @Test
-    void nacos连接信息只能是环境变量占位符() throws IOException {
+    void nacos连接信息若存在只能是环境变量占位符() throws IOException {
         List<String> lines = Files.readAllLines(YML, StandardCharsets.UTF_8);
         boolean inNacos = false;
-        int checked = 0;
         for (String raw : lines) {
             String line = stripComment(raw);
             if (line.isBlank()) {
@@ -78,11 +77,9 @@ class NacosConfigImportGuardTest {
                 String value = m.group(2).trim();
                 assertTrue(PLACEHOLDER.matcher(value).matches(),
                     "Nacos 的 " + m.group(1) + " 必须是 ${...} 环境变量占位符，yml 进 git 不得落明文。当前值：" + value);
-                checked++;
             }
         }
-        assertTrue(checked >= 5,
-            "nacos 段里应有至少 5 个连接信息键（config/discovery 各若干），实际只扫到 " + checked + " 个——块缩进变了？");
+        // S2 口径：单体形态没有 nacos 段是合法终态，不做存在性断言（见类注释）
     }
 
     private static List<String> collectImports() throws IOException {
