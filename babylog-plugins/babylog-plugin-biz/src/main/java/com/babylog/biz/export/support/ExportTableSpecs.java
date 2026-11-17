@@ -9,8 +9,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Android 会话 G 的 18 表导出规格（Room schema v10 + ExportTables.kt）服务端镜像。
+ * Android 会话 G 的 18 表导出规格（Room schema v11 + ExportTables.kt）服务端镜像。
  * 列清单同时约束 JSON 与 CSV，服务端 user_id/family_id/remote_key 等专属列不会混入恢复文件。
+ * M47（18 号契约 §七-6）：镜像补 baths.ended_at / sleeps.transitions（v11 新列，
+ * 与 Android 端 ExportTables.kt 同口径：baths.ended_at 进 CSV，sleeps.transitions 照
+ * pause_events 先例 CSV 跳过、JSON 全字段保留）。
  */
 public final class ExportTableSpecs {
 
@@ -26,7 +29,7 @@ public final class ExportTableSpecs {
     }
 
     public static final String DERIVED_TABLE = "reminders";
-    public static final int ANDROID_SCHEMA_VERSION = 10;
+    public static final int ANDROID_SCHEMA_VERSION = 11;
     private static final Set<String> SKIP_SYNC = Set.of("updated_at", "deleted", "device_id");
     private static final Map<String, String> COMMON_HEADERS = Map.of(
             "id", "ID", "child_id", "宝宝ID", "note", "备注", "created_by", "记录者ID", "created_at", "创建时间");
@@ -81,12 +84,12 @@ public final class ExportTableSpecs {
             child("diapers", "尿布", "id child_id type consistency color started_at created_by created_at updated_at deleted version device_id",
                     set("started_at"), set(), enums("type", DIAPER_TYPE, "consistency", DIAPER_CONSISTENCY, "color", DIAPER_COLOR), set(),
                     headers("type", "类型", "consistency", "性状", "color", "颜色", "started_at", "记录时间")),
-            child("sleeps", "睡眠", "id child_id started_at ended_at place created_by created_at updated_at deleted version device_id",
-                    set("started_at", "ended_at"), set(), enums("place", SLEEP_PLACE), set(),
+            child("sleeps", "睡眠", "id child_id started_at ended_at place transitions created_by created_at updated_at deleted version device_id",
+                    set("started_at", "ended_at"), set(), enums("place", SLEEP_PLACE), set("transitions"),
                     headers("started_at", "入睡时间", "ended_at", "醒来时间", "place", "地点")),
-            child("baths", "洗澡", "id child_id started_at water_temp_c hair_washed cord_status note created_by created_at updated_at deleted version device_id",
-                    set("started_at"), set("hair_washed"), enums("cord_status", CORD_STATUS), set(),
-                    headers("started_at", "时间", "water_temp_c", "水温(℃)", "hair_washed", "洗头", "cord_status", "脐带状态")),
+            child("baths", "洗澡", "id child_id started_at ended_at water_temp_c hair_washed cord_status note created_by created_at updated_at deleted version device_id",
+                    set("started_at", "ended_at"), set("hair_washed"), enums("cord_status", CORD_STATUS), set(),
+                    headers("started_at", "时间", "ended_at", "结束时间", "water_temp_c", "水温(℃)", "hair_washed", "洗头", "cord_status", "脐带状态")),
             child("spits", "吐奶", "id child_id started_at amount timing note created_by created_at updated_at deleted version device_id",
                     set("started_at"), set(), enums("amount", SPIT_AMOUNT, "timing", SPIT_TIMING), set(),
                     headers("started_at", "时间", "amount", "量级", "timing", "时机")),

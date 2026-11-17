@@ -73,7 +73,7 @@ class ExportServiceImplTest {
 
         JsonNode root = mapper.readTree(exportJson(false));
 
-        assertThat(root.at("/meta/schema_version").asInt()).isEqualTo(10);
+        assertThat(root.at("/meta/schema_version").asInt()).isEqualTo(11);
         assertThat(root.at("/meta/total_rows").asInt()).isEqualTo(root.at("/meta/table_counts").properties().stream()
                 .mapToInt(e -> e.getValue().asInt()).sum());
         assertThat(root.at("/tables/vaccinations")).hasSize(2);
