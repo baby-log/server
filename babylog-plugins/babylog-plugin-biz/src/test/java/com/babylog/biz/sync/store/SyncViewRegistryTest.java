@@ -197,6 +197,30 @@ class SyncViewRegistryTest {
                         "sortOrder", "groupKey", "displayLabel");
     }
 
+    @Test
+    void m46NewColumnsAreInheritedByViewEntitiesWithoutShadowing() {
+        // M46（18 号契约 §七-2）：baths.endedAt / sleeps.transitions 只加在业务实体上，
+        // S3 视图实体「字段收集子类优先 + 继承」会自动把新列收进 payload/pull——
+        // 锁死这个继承事实，防止未来误以为「加列须改视图实体」而引入遮蔽或遗漏
+        SyncEntityMeta baths = SyncEntityMeta.from(
+                SyncViewRegistry.syncSpec(SyncTable.BATHS).viewClass(),
+                SyncTable.BATHS.serverOwnedProperties());
+        assertThat(baths.payloadProperties()).as("baths 载荷列").contains("endedAt");
+        assertThat(baths.pullProperties()).as("baths 拉取列").contains("endedAt");
+
+        SyncEntityMeta sleeps = SyncEntityMeta.from(
+                SyncViewRegistry.syncSpec(SyncTable.SLEEPS).viewClass(),
+                SyncTable.SLEEPS.serverOwnedProperties());
+        assertThat(sleeps.payloadProperties()).as("sleeps 载荷列").contains("transitions");
+        assertThat(sleeps.pullProperties()).as("sleeps 拉取列").contains("transitions");
+
+        // 两表均无新谓词、无 NOT NULL 拒收列（新列可空，旧行为零变化）
+        assertThat(SyncViewRegistry.syncSpec(SyncTable.BATHS).predicateProperty()).isNull();
+        assertThat(SyncViewRegistry.syncSpec(SyncTable.SLEEPS).predicateProperty()).isNull();
+        assertThat(SyncViewRegistry.syncSpec(SyncTable.BATHS).rejectNullProperties()).isEmpty();
+        assertThat(SyncViewRegistry.syncSpec(SyncTable.SLEEPS).rejectNullProperties()).isEmpty();
+    }
+
     private static Field declaredField(Class<?> type, String name) {
         try {
             return type.getDeclaredField(name);

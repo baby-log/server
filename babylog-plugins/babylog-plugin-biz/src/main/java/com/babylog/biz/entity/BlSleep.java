@@ -26,8 +26,15 @@ public class BlSleep extends BlSyncDO {
     /** 醒来时刻（epoch millis），null = 进行中 */
     private Long endedAt;
 
-    /** 睡觉地点（枚举 name，自由列） */
+    /** 睡觉地点（枚举 name，自由列；transitions 非空时为首方式投影，见 M46） */
     private String place;
+
+    /**
+     * 睡眠方式段事件流 JSON（M46，18 号契约 §四）：
+     * [{"place":"CRIB|BIG_BED|HELD|STROLLER","at":epochMillis}]，首条 = 入睡方式。
+     * 服务端只透传不算（与 feedings.pause_events 同口径）；为空回落 place 列，旧数据零迁移。
+     */
+    private String transitions;
 
     /** 谁记的（成员显示名） */
     private String createdBy;

@@ -1083,3 +1083,47 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
   修复方向 = 测试改嵌件/本地容器，属独立整改项。
 - 遗留：上述 4 个模块的环境债；两个 yml 的未提交敏感配置改动按龙哥要求原样保留
   （未读未动未提交）。
+
+## 记录增强链契约定稿 + 新列（M46，会话 2026-11-17，18 号契约第一棒）
+
+> 记录增强链（M46~M51）的契约与服务端数据模型批次。**单一事实源 =
+> `独立产品规划/18-记录增强统一契约.md`**（结构照 15 号；四端 M47~M50 逐端对齐，
+> 本批 Android/iOS/Mini/TV 四仓零改动）。
+
+### 交付
+
+| 东西 | 说明 |
+|---|---|
+| Flyway **V2.2.14**（`V2.2.14__bl_bath_ended_at_sleep_transitions.sql`） | `bl_baths` 加 `ended_at BIGINT NULL`（D1：无进行中状态机，null=单点）；`bl_sleeps` 加 `transitions TEXT NULL`（D2：方式段事件流 JSON `[{"place":"CRIB\|BIG_BED\|HELD\|STROLLER","at":epoch}]`，首条=入睡方式，为空回落 `place` 旧列）。版本号落笔前已 grep：2.2.4~2.2.13 已占用。bl_ 表不加 tenant_id；MySQL DDL 不进事务 |
+| `BlBath.endedAt`（Long）/ `BlSleep.transitions`（String） | 业务实体加字段。**S3 架构下加列只需改业务实体**：`SyncEntityMeta` 从视图实体反射收集字段（子类继承），新列自动进 payload/pull 清单——`BlBathSyncView`/`BlSleepSyncView`/`SyncViewRegistry` 零代码改动，由 `SyncViewRegistryTest` 新增锁断言实证（baths 载荷含 endedAt、sleeps 载荷含 transitions、两表无新谓词/无 NOT NULL 拒收列）。**注意：17 号 D2 把枚举简写成 BED/HOLD，18 号定稿纠偏为四端既有枚举 CRIB/BIG_BED/HELD/STROLLER** |
+| `SyncStoreH2Test` +1 用例 | H2 真链路：新形态 push（endedAt 字符串形态 Long / transitions 逐字透传）→ 旧形态 push（无新列键 → 落 NULL 不 8342）→ 同 id 版本+1 旧形态覆盖（更新路径 SET NULL 不粘旧值）→ 拉取下发 camelCase 键 |
+
+### 契约注意（写给 M47+ 各端会话，详见 18 号 §七）
+
+1. **全局 NON_NULL：新列值为 null 时 JSON 键直接缺省**（M46 冒烟实测，M21 inviteCode 同款坑）——
+   四端解析必须按键取值容忍缺键，禁止假设字段必在。存储层（Map）null 键在场，序列化后才缺键。
+2. `endedAt` 下发是字符串形态 Long（全局 Long→String），push 收字符串/数字两种形态（`SyncPropertyAccess.coerce` 收窄）；
+   `transitions` 逐字透传，服务端零解析（与 `pause_events` 同口径）。
+3. 无新端点、无新错误码、无新拉取谓词、biz-api 零改动；summary/today 聚合**不消费新列**。
+4. `ExportTableSpecs` 未加新列（镜像对象还是 Room v10）——**M47 随 Room v11 同步补**并升 `meta.schema_version`。
+
+### 验证记录（M46）
+
+- biz 单测 **228/228 绿**（S3 基线 226 + 2：`SyncViewRegistryTest` +1 继承锁、`SyncStoreH2Test` +1 新列全链路）
+- fat jar 复核：删旧 jar 重打包 + javap 解内嵌 biz jar 核对 `BlBath.getEndedAt` /
+  `BlSleep.getTransitions` / V2.2.14 在场（biz 模块 0.15s 秒过更必须复核）
+- dev 18080 冒烟 **19/19 全绿**（脚本 `/tmp/m46-smoke.py`，运行时账号，**全程记游标→增量拉**）：
+  空账号基线 0 行 → 旧形态三行（children+baths+sleeps）首推 upserted → 全量拉旧行
+  新列键缺省（NON_NULL）→ 新形态两行 push（endedAt 字符串 Long / transitions 逐字）→
+  增量拉只见新两行（游标判据）且新列逐字下发、hairWashed 整数 0/1 → 旧形态 version+2
+  覆盖（更新路径 SET NULL）→ 数字形态 endedAt 落库 + 同版本重推 skipped（幂等）→
+  下发仍字符串（Long→String）→ CARE 分类过滤回归 → 未登录 1002；Flyway 起服时
+  v2.2.13 → **v2.2.14** 应用成功；验证后进程已停
+- 本批未验项（如实）：四端 UI 零实现（M47~M50）；ExportTableSpecs 新列（M47）；
+  正式服部署（M51，S3 整改 fat jar 也未部署，届时一起）；TV 仓 16 个未提交文件未触碰
+
+## 后续（M46+）
+
+- M47 Android 基线：Room v10→v11 + 补录统一入口页 + 计时环节编辑器 + 睡眠方式段 +
+  洗澡起止（提示词见 18 号契约附录）
+- M48 Mini / M49 iOS 对齐（含全类型编辑补齐）；M50 TV 对齐 + TV-4 收口；M51 验收交付

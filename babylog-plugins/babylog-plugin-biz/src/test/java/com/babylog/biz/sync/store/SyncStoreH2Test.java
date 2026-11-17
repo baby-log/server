@@ -5,9 +5,13 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean;
+import com.babylog.biz.sync.entity.BlBathSyncView;
 import com.babylog.biz.sync.entity.BlFeedingSyncView;
+import com.babylog.biz.sync.entity.BlSleepSyncView;
 import com.babylog.biz.sync.mapper.BlAppVersionSyncViewMapper;
+import com.babylog.biz.sync.mapper.BlBathSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlFeedingSyncViewMapper;
+import com.babylog.biz.sync.mapper.BlSleepSyncViewMapper;
 import com.babylog.biz.sync.support.BaseDataTable;
 import com.babylog.biz.sync.support.SyncCursor;
 import com.babylog.biz.sync.support.SyncTable;
@@ -91,6 +95,8 @@ class SyncStoreH2Test {
         this.factoryHolder = new SqlSessionFactoryHolder(ds, configuration);
         factoryHolder.factory.getConfiguration().addMapper(BlFeedingSyncViewMapper.class);
         factoryHolder.factory.getConfiguration().addMapper(BlAppVersionSyncViewMapper.class);
+        factoryHolder.factory.getConfiguration().addMapper(BlBathSyncViewMapper.class);
+        factoryHolder.factory.getConfiguration().addMapper(BlSleepSyncViewMapper.class);
 
         try (Connection conn = ds.getConnection(); Statement st = conn.createStatement()) {
             st.execute("CREATE TABLE bl_feedings (" +
@@ -139,8 +145,64 @@ class SyncStoreH2Test {
                     "update_time TIMESTAMP," +
                     "deleted TINYINT NOT NULL DEFAULT 0)");
         }
+        try (Connection conn = ds.getConnection(); Statement st = conn.createStatement()) {
+            // M46：镜像 V2.2.4 + V2.2.14 的 bl_baths / bl_sleeps（含新列 ended_at / transitions）
+            st.execute("CREATE TABLE bl_baths (" +
+                    "id BIGINT NOT NULL PRIMARY KEY," +
+                    "child_id BIGINT NOT NULL," +
+                    "started_at BIGINT NOT NULL," +
+                    "ended_at BIGINT," +
+                    "water_temp_c DOUBLE," +
+                    "hair_washed TINYINT," +
+                    "cord_status VARCHAR(32)," +
+                    "note VARCHAR(500)," +
+                    "created_by VARCHAR(50)," +
+                    "created_at BIGINT," +
+                    "updated_at BIGINT," +
+                    "device_id VARCHAR(64)," +
+                    "user_id BIGINT NOT NULL," +
+                    "version BIGINT NOT NULL," +
+                    "server_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                    "create_by BIGINT," +
+                    "create_time TIMESTAMP," +
+                    "update_by BIGINT," +
+                    "update_time TIMESTAMP," +
+                    "deleted TINYINT NOT NULL DEFAULT 0)");
+            st.execute("CREATE TABLE bl_sleeps (" +
+                    "id BIGINT NOT NULL PRIMARY KEY," +
+                    "child_id BIGINT NOT NULL," +
+                    "started_at BIGINT NOT NULL," +
+                    "ended_at BIGINT," +
+                    "place VARCHAR(32)," +
+                    "transitions TEXT," +
+                    "created_by VARCHAR(50)," +
+                    "created_at BIGINT," +
+                    "updated_at BIGINT," +
+                    "device_id VARCHAR(64)," +
+                    "user_id BIGINT NOT NULL," +
+                    "version BIGINT NOT NULL," +
+                    "server_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                    "create_by BIGINT," +
+                    "create_time TIMESTAMP," +
+                    "update_by BIGINT," +
+                    "update_time TIMESTAMP," +
+                    "deleted TINYINT NOT NULL DEFAULT 0)");
+        }
 
         this.handler = newFeedingHandler();
+    }
+
+    /** M46（18 号契约 §七）：baths.ended_at / sleeps.transitions 两张表的真实链路 handler */
+    private GenericSyncTableHandler<BlBathSyncView> newBathHandler() {
+        BlBathSyncViewMapper mapper = factoryHolder.template.getMapper(BlBathSyncViewMapper.class);
+        return new GenericSyncTableHandler<>(SyncTable.BATHS, mapper,
+                BlBathSyncView.class, SyncViewRegistry.syncSpec(SyncTable.BATHS));
+    }
+
+    private GenericSyncTableHandler<BlSleepSyncView> newSleepHandler() {
+        BlSleepSyncViewMapper mapper = factoryHolder.template.getMapper(BlSleepSyncViewMapper.class);
+        return new GenericSyncTableHandler<>(SyncTable.SLEEPS, mapper,
+                BlSleepSyncView.class, SyncViewRegistry.syncSpec(SyncTable.SLEEPS));
     }
 
     /** 每个调用方拿一条独立线程安全的 Mapper 代理（与生产的注入语义一致） */
@@ -515,6 +577,101 @@ class SyncStoreH2Test {
                 .containsEntry("deleted", 1);
         assertThat(rows.stream().filter(r -> r.id() == 881001L).findFirst().orElseThrow().data())
                 .containsEntry("status", "PUBLISHED");
+    }
+
+    // ------------------------------------------------------------------
+    // M46（18 号契约 §七）：baths.ended_at / sleeps.transitions 新列全链路
+    // ------------------------------------------------------------------
+
+    @Test
+    void bathEndedAtAndSleepTransitionsSurviveTheUpsertChain() {
+        GenericSyncTableHandler<BlBathSyncView> bathHandler = newBathHandler();
+        GenericSyncTableHandler<BlSleepSyncView> sleepHandler = newSleepHandler();
+
+        // 1) baths：带 endedAt 的新形态 push → 落库 + 拉取下发（含字符串形态 Long，同 S3 教训）
+        long bathId = 882001L;
+        Map<String, Object> bath = new HashMap<>();
+        bath.put("id", bathId);
+        bath.put("version", 1L);
+        bath.put("childId", 7001L);
+        bath.put("startedAt", 1_700_000_000_000L);
+        bath.put("endedAt", "1700001800000"); // JSON Long 字符串形态，coerce 收窄
+        bath.put("hairWashed", 1);
+        bathHandler.upsert(bath, 100L);
+        assertThat(readColumn("bl_baths", bathId, "ended_at"))
+                .as("baths.ended_at 字符串形态 Long 落库").isEqualTo(1_700_001_800_000L);
+
+        // 2) baths：不带 endedAt 的旧客户端形态 push 同 id version+1 → 更新路径也带新列（NULL）
+        Map<String, Object> bathOld = new HashMap<>();
+        bathOld.put("id", bathId);
+        bathOld.put("version", 2L);
+        bathOld.put("childId", 7001L);
+        bathOld.put("startedAt", 1_700_000_000_000L);
+        bathHandler.upsert(bathOld, 100L);
+        assertThat(readColumn("bl_baths", bathId, "ended_at"))
+                .as("旧形态载荷（无新列键）→ 落 NULL，upserted 不 8342").isNull();
+
+        // 3) sleeps：transitions 逐字透传（服务端零解析）+ place 旧列并存
+        long sleepId = 883001L;
+        String transitions = "[{\"place\":\"HELD\",\"at\":1700000000000},{\"place\":\"CRIB\",\"at\":1700001200000}]";
+        Map<String, Object> sleep = new HashMap<>();
+        sleep.put("id", sleepId);
+        sleep.put("version", 1L);
+        sleep.put("childId", 7001L);
+        sleep.put("startedAt", 1_700_000_000_000L);
+        sleep.put("endedAt", 1_700_005_400_000L);
+        sleep.put("place", "HELD");
+        sleep.put("transitions", transitions);
+        sleepHandler.upsert(sleep, 100L);
+        assertThat(String.valueOf(readColumn("bl_sleeps", sleepId, "transitions")))
+                .as("sleeps.transitions 逐字透传").isEqualTo(transitions);
+
+        // 4) sleeps：旧形态（无 transitions）→ NULL
+        Map<String, Object> sleepOld = new HashMap<>();
+        sleepOld.put("id", 883002L);
+        sleepOld.put("version", 1L);
+        sleepOld.put("childId", 7001L);
+        sleepOld.put("startedAt", 1_700_000_000_000L);
+        sleepOld.put("endedAt", 1_700_003_600_000L);
+        sleepOld.put("place", "CRIB");
+        sleepHandler.upsert(sleepOld, 100L);
+        assertThat(readColumn("bl_sleeps", 883002L, "transitions")).isNull();
+
+        // 5) 拉取通道：新列随 changes 下发（camelCase 键 + 原值）
+        LocalDateTime since = SyncCursor.toLocalDateTime(0L);
+        List<SyncRecordStore.Row> bathRows = bathHandler.selectChanges(List.of(100L), since, 0L, 100);
+        assertThat(bathRows).hasSize(1);
+        assertThat(bathRows.get(0).data()).containsKey("endedAt").containsKey("hairWashed");
+        assertThat(bathRows.get(0).data().get("endedAt")).isNull(); // version=2 旧形态覆盖后的值
+
+        List<SyncRecordStore.Row> sleepRows = sleepHandler.selectChanges(List.of(100L), since, 0L, 100);
+        assertThat(sleepRows).hasSize(2);
+        Map<String, Object> withTransitions = sleepRows.stream()
+                .filter(r -> r.id() == sleepId).findFirst().orElseThrow().data();
+        assertThat(withTransitions.get("transitions")).isEqualTo(transitions);
+        assertThat(withTransitions.get("place")).isEqualTo("HELD");
+        Map<String, Object> withoutTransitions = sleepRows.stream()
+                .filter(r -> r.id() == 883002L).findFirst().orElseThrow().data();
+        assertThat(withoutTransitions).containsKey("transitions");
+        assertThat(withoutTransitions.get("transitions")).isNull();
+    }
+
+    private Object readColumn(String table, long id, String column) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT " + column + " FROM " + table + " WHERE id = ?")) {
+            ps.setLong(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                assertThat(rs.next()).as("%s 行 %s 应存在", table, id).isTrue();
+                Object value = rs.getObject(1);
+                if (value instanceof java.sql.Clob clob) {
+                    value = clob.getSubString(1, (int) clob.length());
+                }
+                return value;
+            }
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
     }
 
     private void insertVersionRow(long id, String status, int deleted) {

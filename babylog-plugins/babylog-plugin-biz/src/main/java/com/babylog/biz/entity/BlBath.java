@@ -23,6 +23,12 @@ public class BlBath extends BlSyncDO {
     /** 发生时刻（epoch millis） */
     private Long startedAt;
 
+    /**
+     * 结束时刻（epoch millis），null = 只记单点（M46，18 号契约 §五）。
+     * D1 决策：洗澡无进行中状态机；填了结束客户端才显示时长，旧数据恒 null 零迁移。
+     */
+    private Long endedAt;
+
     /** 水温（℃） */
     private Double waterTempC;
 
