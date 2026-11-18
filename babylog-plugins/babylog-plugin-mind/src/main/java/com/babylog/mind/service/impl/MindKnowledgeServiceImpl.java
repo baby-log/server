@@ -39,10 +39,11 @@ public class MindKnowledgeServiceImpl extends ServiceImpl<MindKnowledgeMapper, M
 
     @Override
     public List<KnowledgeVO> recentKnowledge(Long userId, int limit) {
-        return list(Wrappers.<MindKnowledge>lambdaQuery()
-                .eq(MindKnowledge::getUserId, userId)
-                .orderByDesc(MindKnowledge::getCreateTime)
-                .last("LIMIT " + Math.min(limit, 50)))
+        return page(new Page<MindKnowledge>(1, Math.min(limit, 50)),
+                Wrappers.<MindKnowledge>lambdaQuery()
+                        .eq(MindKnowledge::getUserId, userId)
+                        .orderByDesc(MindKnowledge::getCreateTime))
+                .getRecords()
                 .stream().map(this::toVo).toList();
     }
 

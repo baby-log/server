@@ -236,7 +236,8 @@ class P0ArchitectureTest {
                     "com.babylog.mind.api..")))
         .allowEmptyShould(true);
 
-    // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========    @ArchTest
+    // ========== A3：Starter 不依赖 Plugin 任何包（实现 + api 均禁止） ==========
+    @ArchTest
     static final ArchRule a3_starters_must_not_depend_on_plugins = noClasses()
         .that().resideInAPackage("com.babylog.starter..")
         .should().dependOnClassesThat().resideInAnyPackage(
@@ -349,15 +350,10 @@ class P0ArchitectureTest {
     // 规则卡两件事：① 任何**新增**文件出现 last( 立即失败；② 已登记文件的出现次数必须
     // 与登记值一致（次数不符 = 有人新增或有人忘了同步，同样失败）——
     // 白名单由此不会烂尾：清理掉一处就必须同步删登记，否则规则红。
-    private static final java.util.Map<String, Integer> ALLOWED_LAST_USAGES = java.util.Map.of(
-        "babylog-plugin-ai-kb/KbEvalServiceImpl", 1,          // 评测记录列表 LIMIT（数值常量）
-        "babylog-plugin-ai/AiApprovalAdviceServiceImpl", 1,   // 取最近一条建议 LIMIT 1
-        "babylog-plugin-system/UserLocalFacade", 1,           // 用户面下拉 LIMIT（数值常量）
-        "babylog-plugin-system/MiniAuthServiceImpl", 1,       // openid 精确取一条 LIMIT 1
-        "babylog-plugin-system/SocialUserServiceImpl", 1,     // 第三方账号精确取一条 LIMIT 1
-        "babylog-plugin-system/NoticeServiceImpl", 1,         // 公告置顶列表 LIMIT（Math.clamp 边界值）
-        "babylog-plugin-mind/MindTodoServiceImpl", 1,         // 个人待办 LIMIT（Math.min 边界值）
-        "babylog-plugin-mind/MindKnowledgeServiceImpl", 1);   // 个人知识 LIMIT（Math.min 边界值）
+    // M52（2026-11-18）：原 8 处历史 last( 已全部清偿——列表类改类型化分页
+    // （Page + selectPage / IService.page），精确取一条改 getOne(wrapper, false)。
+    // 白名单清零后规则依然有效：任何新增 last( 立即失败；空表即「全仓零 last(」。
+    private static final java.util.Map<String, Integer> ALLOWED_LAST_USAGES = java.util.Map.of();
 
     @Test
     void a10_sql_last_fragment_forbidden_unless_registered() throws Exception {
@@ -589,6 +585,49 @@ class P0ArchitectureTest {
             .as("A11：REST 端点必须有鉴权信号（类/方法 @SaCheck*，或方法体读登录上下文），"
                     + "否则须登记进 ANONYMOUS_ENDPOINTS 并写明理由。无信号端点 %d 个：%s",
                 violations.size(), violations.isEmpty() ? "无" : violations)
+            .isEmpty();
+    }
+
+    // ========== A12：SQL 红线「禁 ${} 字符串拼接」（M52，2026-11-18） ==========
+    // 背景：A5 已禁 mapper XML（XML 里最容易写出 ${}），但**注解 SQL**（@Select/@Update/
+    // @Insert/@Delete 以及 <script> 片段）同样能写 ${}。两者语义差一层：
+    //   #{col} → PreparedStatement 占位，值永远不参与 SQL 语法（安全）；
+    //   ${col} → **字符串直插**，原样进 SQL（一处就是一条注入口）。
+    // 这类问题编译期、启动期、原有 11 条规则全绿、零信号——与 A10 的 last() 同属
+    // 「红线只写在文档里等于没有」。
+    //
+    // 口径（M52 全仓实测：107 个 Mapper 接口，${ 出现 0 次，故无需登记制，直接一刀切）：
+    // 插件与 starter 的 *Mapper.java 一律禁出现 ${。确需动态列名/表名的走 JDBC 拼接，
+    // 但**必须先过标识符白名单**（范例：MySqlInspector#validIdentifier + isTableAllowed，
+    // 白名单外一律 FORBIDDEN 拒绝），并且刻意不放在 Mapper 接口里——让「绕过本规则」
+    // 这个动作本身成为一次显式设计决定，而不是顺手写一个 ${}。
+    @Test
+    void a12_sql_string_interpolation_forbidden_in_mapper_interfaces() throws Exception {
+        Path[] roots = {Path.of("..", "babylog-plugins"), Path.of("..", "babylog-starters")};
+        java.util.List<String> violations = new java.util.ArrayList<>();
+        int scanned = 0;
+        for (Path root : roots) {
+            if (!Files.isDirectory(root)) {
+                continue;
+            }
+            try (var stream = Files.walk(root)) {
+                for (Path javaFile : stream
+                        .filter(p -> p.toString().contains(File.separator + "src" + File.separator + "main"))
+                        .filter(p -> p.getFileName().toString().endsWith("Mapper.java")).toList()) {
+                    scanned++;
+                    if (Files.readString(javaFile).contains("${")) {
+                        violations.add(normalizeKey(javaFile));
+                    }
+                }
+            }
+        }
+        // 防空转：全仓 107 个 Mapper 接口；扫描口径若失效会静默扫到 0 个 → 假绿
+        org.assertj.core.api.Assertions.assertThat(scanned)
+            .as("A12 自检：只扫到 %d 个 *Mapper.java，疑似扫描路径失效（规则正在空转）", scanned)
+            .isGreaterThanOrEqualTo(50);
+        org.assertj.core.api.Assertions.assertThat(violations)
+            .as("SQL 红线：Mapper 接口禁止 ${} 字符串拼接（改用 #{} 参数绑定）。"
+                    + "确需动态标识符的走 JDBC + 标识符白名单，且不放在 Mapper 接口里。违规文件：%s", violations)
             .isEmpty();
     }
 

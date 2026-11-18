@@ -106,11 +106,12 @@ public class NoticeServiceImpl extends ServiceImpl<SysNoticeMapper, SysNotice>
 
     @Override
     public List<NoticeVO> listPublished(int limit) {
-        List<SysNotice> list = list(Wrappers.<SysNotice>lambdaQuery()
-                .eq(SysNotice::getStatus, STATUS_PUBLISHED)
-                .select(SysNotice.class, info -> !"content".equals(info.getProperty()))
-                .orderByDesc(SysNotice::getPublishTime)
-                .last("LIMIT " + Math.clamp(limit, 1, 50)));
+        List<SysNotice> list = page(new Page<SysNotice>(1, Math.clamp(limit, 1, 50)),
+                Wrappers.<SysNotice>lambdaQuery()
+                        .eq(SysNotice::getStatus, STATUS_PUBLISHED)
+                        .select(SysNotice.class, info -> !"content".equals(info.getProperty()))
+                        .orderByDesc(SysNotice::getPublishTime))
+                .getRecords();
         return noticeConvert.toVoList(list);
     }
 

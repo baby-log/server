@@ -51,10 +51,11 @@ public class MindTodoServiceImpl extends ServiceImpl<MindTodoMapper, MindTodo>
 
     @Override
     public List<TodoVO> recentTodo(Long userId, int limit) {
-        return list(Wrappers.<MindTodo>lambdaQuery()
-                .eq(MindTodo::getUserId, userId)
-                .orderByDesc(MindTodo::getCreateTime)
-                .last("LIMIT " + Math.min(limit, 50)))
+        return page(new Page<MindTodo>(1, Math.min(limit, 50)),
+                Wrappers.<MindTodo>lambdaQuery()
+                        .eq(MindTodo::getUserId, userId)
+                        .orderByDesc(MindTodo::getCreateTime))
+                .getRecords()
                 .stream().map(this::toVo).toList();
     }
 

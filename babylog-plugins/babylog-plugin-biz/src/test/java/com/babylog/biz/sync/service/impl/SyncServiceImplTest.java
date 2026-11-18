@@ -62,10 +62,77 @@ class SyncServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new SyncServiceImpl(store, permissionGuard, accessScopeResolver);
+        service = new SyncServiceImpl(store, permissionGuard, accessScopeResolver, noopTransactionManager());
         // M15 回归锁的基线场景：无家庭用户 = 可见集合只有自己 + 读写全开（行为与 V2.0 零变化）
         org.mockito.Mockito.when(accessScopeResolver.resolveAccess(org.mockito.ArgumentMatchers.anyLong()))
                 .thenAnswer(inv -> SyncAccessScope.singleUser(inv.getArgument(0)));
+    }
+
+    /**
+     * 无事务的 {@link PlatformTransactionManager}：单测里 {@code push} 的事务模板直接同步执行回调，
+     * 不做任何 begin/commit——本类全部走 Mock 存储，本来就没有真事务可开。
+     */
+    private static org.springframework.transaction.PlatformTransactionManager noopTransactionManager() {
+        return new org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+            @Override
+            protected Object doGetTransaction() {
+                return new Object();
+            }
+
+            @Override
+            protected void doBegin(Object transaction, org.springframework.transaction.TransactionDefinition definition) {
+                // no-op
+            }
+
+            @Override
+            protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus status) {
+                // no-op
+            }
+
+            @Override
+            protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus status) {
+                // no-op
+            }
+        };
+    }
+
+    // ==================================================================
+    // 死锁重试（M52）
+    // ==================================================================
+
+    @Test
+    void push_retriesOnce_whenFirstAttemptDeadlocks() {
+        org.mockito.Mockito.when(store.selectExisting(eq(SyncTable.SLEEPS), any()))
+                .thenThrow(new org.springframework.dao.DeadlockLoserDataAccessException("死锁", null))
+                .thenReturn(Map.of());
+        SyncPushCmd cmd = cmd(SyncTable.SLEEPS.apiName(), List.of(payload(1L, 1)));
+
+        SyncPushResultVO result = service.push(USER_ID, cmd);
+
+        assertThat(result.getUpserted()).isEqualTo(1);
+        verify(store, times(2)).selectExisting(eq(SyncTable.SLEEPS), any());
+    }
+
+    @Test
+    void push_doesNotRetry_whenFailureIsNotLockRelated() {
+        org.mockito.Mockito.when(store.selectExisting(eq(SyncTable.SLEEPS), any()))
+                .thenThrow(new IllegalStateException("库连不上不是死锁，不该重试"));
+        SyncPushCmd cmd = cmd(SyncTable.SLEEPS.apiName(), List.of(payload(1L, 1)));
+
+        assertThatThrownBy(() -> service.push(USER_ID, cmd))
+                .isInstanceOf(IllegalStateException.class);
+        verify(store, times(1)).selectExisting(eq(SyncTable.SLEEPS), any());
+    }
+
+    @Test
+    void push_givesUpAfterMaxAttempts_whenDeadlockPersists() {
+        org.mockito.Mockito.when(store.selectExisting(eq(SyncTable.SLEEPS), any()))
+                .thenThrow(new org.springframework.dao.DeadlockLoserDataAccessException("死锁", null));
+        SyncPushCmd cmd = cmd(SyncTable.SLEEPS.apiName(), List.of(payload(1L, 1)));
+
+        assertThatThrownBy(() -> service.push(USER_ID, cmd))
+                .isInstanceOf(org.springframework.dao.DeadlockLoserDataAccessException.class);
+        verify(store, times(3)).selectExisting(eq(SyncTable.SLEEPS), any());
     }
 
     // ==================================================================

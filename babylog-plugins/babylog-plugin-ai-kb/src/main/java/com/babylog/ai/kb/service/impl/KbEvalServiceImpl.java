@@ -1,6 +1,7 @@
 package com.babylog.ai.kb.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.babylog.ai.kb.domain.dto.KbEvalRecordSaveRequest;
 import com.babylog.ai.kb.domain.dto.KbEvalSaveRequest;
 import com.babylog.ai.kb.domain.entity.KbEvalQuestion;
@@ -145,11 +146,12 @@ public class KbEvalServiceImpl implements KbEvalService {
 
     @Override
     public List<KbEvalRecordVO> listRecords(Long kbId) {
-        return evalRecordMapper.selectList(
+        return evalRecordMapper.selectPage(
+                        new Page<KbEvalRecord>(1, RECORD_LIST_LIMIT),
                         Wrappers.<KbEvalRecord>lambdaQuery()
                                 .eq(KbEvalRecord::getKbId, kbId)
-                                .orderByDesc(KbEvalRecord::getCreateTime)
-                                .last("LIMIT " + RECORD_LIST_LIMIT))
+                                .orderByDesc(KbEvalRecord::getCreateTime))
+                .getRecords()
                 .stream()
                 .map(this::toRecordVO)
                 .toList();

@@ -17,8 +17,10 @@ import com.babylog.common.core.exception.ServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -67,15 +69,38 @@ public class SyncServiceImpl implements SyncService {
      */
     private static final long CURSOR_FUTURE_TOLERANCE_MILLIS = 10 * 60 * 1000L;
 
+    /**
+     * 死锁重试总次数（含首次）。3 次足够：死锁是「两个事务交叉加锁」的瞬态碰撞，
+     * 重试窗口比一次往返还短；真持续死锁说明是设计问题，重试只会放大它。
+     */
+    private static final int MAX_PUSH_ATTEMPTS = 3;
+    /** 重试退避基数（毫秒）：第 N 次失败后等 N×25ms，给对手事务时间提交 */
+    private static final long PUSH_RETRY_BACKOFF_MILLIS = 25L;
+
     private final SyncRecordStore store;
     private final SyncPermissionGuard permissionGuard;
     private final SyncAccessScopeResolver accessScopeResolver;
+    /**
+     * 推送事务模板。
+     *
+     * <p><b>为什么不用 {@code @Transactional}</b>：死锁重试必须落在<b>事务外层</b>
+     * ——MySQL 遇到死锁回滚的是<b>整个事务</b>（不是单条语句），语句级 catch 再重试
+     * 只会在一个已经作废的事务里继续跑，必然接着报错。而「外层重试 + 内层事务」在
+     * 同一个类里用 {@code @Transactional} 写不出来（自调用不走代理），
+     * 所以显式用模板把事务边界画出来。
+     *
+     * <p>语义与原来的 {@code @Transactional(rollbackFor = Exception.class)} 等价：
+     * {@link #push} 不声明受检异常，出任何异常都回滚。
+     */
+    private final TransactionTemplate transactionTemplate;
 
     public SyncServiceImpl(SyncRecordStore store, SyncPermissionGuard permissionGuard,
-                           SyncAccessScopeResolver accessScopeResolver) {
+                           SyncAccessScopeResolver accessScopeResolver,
+                           PlatformTransactionManager transactionManager) {
         this.store = store;
         this.permissionGuard = permissionGuard;
         this.accessScopeResolver = accessScopeResolver;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     // ==================================================================
@@ -151,9 +176,78 @@ public class SyncServiceImpl implements SyncService {
     // 推送
     // ==================================================================
 
+    /**
+     * 推送入口：<b>外层死锁重试 + 内层单事务</b>。
+     *
+     * <p>为什么需要重试（M52 实测）：iOS 真机链路压测时 dev 服报过
+     * {@code Deadlock found when trying to get lock} → 整批 push 变成 1500「系统内部错误」。
+     * 触发场景是<b>真实</b>的：家庭成员的两台设备同时首推同一个宝宝，
+     * {@code INSERT … ON DUPLICATE KEY} 在唯一键上互相等待即成死锁。
+     * 死锁是瞬态碰撞，MySQL 自己的错误信息就写着「try restarting transaction」——
+     * 不重试等于把这类偶发碰撞直接升级成客户端可见的失败（客户端只能等下一轮同步自愈）。
+     *
+     * <p>重试范围刻意收窄到死锁/锁等待：只认
+     * {@link PessimisticLockingFailureException}（Spring 对 MySQL 1213/1205 的翻译）
+     * 与 SQLState 40xxx，其它异常（含业务拒绝）原样抛出，不做「无脑重试掩盖问题」。
+     */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public SyncPushResultVO push(long userId, SyncPushCmd cmd) {
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= MAX_PUSH_ATTEMPTS; attempt++) {
+            try {
+                return transactionTemplate.execute(status -> pushInTransaction(userId, cmd));
+            } catch (RuntimeException e) {
+                if (!isTransientLockFailure(e) || attempt == MAX_PUSH_ATTEMPTS) {
+                    throw e;
+                }
+                lastFailure = e;
+                log.warn("[BABYLOG][sync] push 死锁重试 userId={} attempt={}/{} 原因={}",
+                        userId, attempt, MAX_PUSH_ATTEMPTS, rootMessage(e));
+                sleepQuietly(PUSH_RETRY_BACKOFF_MILLIS * attempt);
+            }
+        }
+        // 循环必然在最后一次 attempt 抛出或返回，走到这里说明尝试次数常量被改成了 0
+        throw lastFailure == null
+                ? new IllegalStateException("push 重试循环未执行（MAX_PUSH_ATTEMPTS 必须 ≥ 1）")
+                : lastFailure;
+    }
+
+    /** 死锁/锁等待：Spring 翻成 {@link PessimisticLockingFailureException}，兜底看 SQLState 40001/41000 */
+    private static boolean isTransientLockFailure(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            if (t instanceof PessimisticLockingFailureException) {
+                return true;
+            }
+            if (t instanceof java.sql.SQLException sql && sql.getSQLState() != null
+                    && sql.getSQLState().startsWith("40")) {
+                return true;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private static String rootMessage(Throwable error) {
+        Throwable t = error;
+        while (t.getCause() != null && t.getCause() != t) {
+            t = t.getCause();
+        }
+        return t.getMessage();
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("push 重试退避被中断", e);
+        }
+    }
+
+    /** 一次推送的完整事务体（原 {@code push} 的实现，事务边界上移到 {@link #push}） */
+    private SyncPushResultVO pushInTransaction(long userId, SyncPushCmd cmd) {
         Map<String, List<Map<String, Object>>> changes = cmd == null ? null : cmd.getChanges();
         if (changes == null || changes.isEmpty()) {
             throw new ServiceException(BabyLogErrorCode.SYNC_RECORD_INVALID, "changes 不能为空");

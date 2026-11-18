@@ -1,6 +1,7 @@
 package com.babylog.system.facade;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.babylog.system.api.dto.UserDTO;
 import com.babylog.system.api.facade.IUserFacade;
 import com.babylog.system.convert.UserConvert;
@@ -41,14 +42,13 @@ public class UserLocalFacade implements IUserFacade {
     @Override
     public List<UserDTO> listActiveOptions(int limit, String keyword) {
         int size = Math.min(limit <= 0 ? 50 : limit, 100);
-        return userConvert.toDtoList(userService.list(
+        return userConvert.toDtoList(userService.page(new Page<SysUser>(1, size),
                 Wrappers.<SysUser>lambdaQuery()
                         .eq(SysUser::getStatus, 0)
                         .and(keyword != null && !keyword.isBlank(), w -> w
                                 .like(SysUser::getUsername, keyword)
                                 .or()
                                 .like(SysUser::getNickname, keyword))
-                        .orderByAsc(SysUser::getId)
-                        .last("LIMIT " + size)));
+                        .orderByAsc(SysUser::getId)).getRecords());
     }
 }

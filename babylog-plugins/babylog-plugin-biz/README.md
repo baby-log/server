@@ -1127,3 +1127,114 @@ Room v9 计时五列的服务端半边。与 Android 端（见 BabyLog-Android P
 - M47 Android 基线：Room v10→v11 + 补录统一入口页 + 计时环节编辑器 + 睡眠方式段 +
   洗澡起止（提示词见 18 号契约附录）
 - M48 Mini / M49 iOS 对齐（含全类型编辑补齐）；M50 TV 对齐 + TV-4 收口；M51 验收交付
+
+---
+
+## M51 验收交付（会话 2026-11-18 · dev 服验证 + 打包留档；未解冻，零正式服变更）
+
+> 发布节奏判定见 `独立产品规划/12-V3解冻待办清单.md` 与
+> `发布包/2026-11-18-M51-dev留档/M51-交付清单.md`：D1 于 M32 特批提前完成 ≠ 解冻日 D0
+> （13 号 §七），本批只做 dev 18080 验证 + 打包留档。
+
+### §七-6 状态复核 + fat jar 修正（本批最重要的修复）
+
+- 源码侧 M47 已落地：`ExportTableSpecs.ANDROID_SCHEMA_VERSION = 11`；`sleeps` 列清单含
+  `transitions`（`extraSkips` 跳过 CSV、JSON 全字段保留）、`baths` 含 `ended_at`（`timeColumns` + CSV 表头）；
+  `ExportServiceImpl` 第 62 行写 `meta.schema_version`。Android `ExportTables.kt` 同口径镜像。
+  **18 号契约 §七-6 / §十一 已同步状态（只补状态、不改口径）**。
+- **M10 坑复现并修复**：11-17 22:26 的 fat jar 内嵌 `ANDROID_SCHEMA_VERSION = 10`、
+  `sleeps` 列清单不含 `transitions`（M47 只改源码跑单测，未重打包、未 install 到 m2）。
+  处置：删 `target/babylog-admin-server.jar` + `.jar.original` →
+  `mvn -o -pl babylog-plugin-biz -am install -DskipTests` →
+  `mvn -o -pl babylog-admin-server -am package -DskipTests`（均 BUILD SUCCESSFUL）→
+  `javap` 复核内嵌 = **11**、列清单含 `transitions`、`V2.2.14` SQL 在场。
+- 留档 jar：`发布包/2026-11-18-M51-dev留档/babylog-admin-server.jar`，
+  SHA-256 `da44cf2f901c25a0f41d76790a5ea75241b43d7713a46ec9ba17d28fddbadfc7`（343099409 B）。
+  **该 jar 未部署到正式服**；M32 正服在跑的仍是 `发布包/2026-11-15-正服/` 的旧 jar
+  （哈希 `341ff3bf6fc27913af1ff3a715f1f8814c5475ff6967c847ebea9409e269b08a`）。
+
+### Flyway 版本号核对（写 ALTER 前先 grep）
+
+- 实测 `V2.2.0` ~ `V2.2.14` 全部占用，**下一可用版本号 = 2.2.15**。
+- M51 不需要新增 DDL；`V2.2.14` 仍只在 dev 库应用，正式服未应用。
+
+### dev 服验证（新 fat jar，14:02:41 起服）
+
+| 项 | 结果 |
+|---|---|
+| `/tmp/m46-smoke.py` | **19/19**（记游标 → 增量拉） |
+| `BabyLog-Mini/tests/m48-incremental-check.js` | **16/16**（补录增量可见 + 反证 `true` → 8342） |
+| `/tmp/m51-export-check.py` | **9/9**（导出 `meta.schema_version=11`、CSV 列口径、建家端点无尾斜杠） |
+| 合计 | **44/44，0 失败** |
+
+起服口径 `env -u SERVER__PORT java -jar ... --spring.profiles.active=dev --server.port=18080`，
+连 dev 库 `babylog_dev`，启动日志无 ERROR、Flyway 无需新迁移；日志 `/tmp/m51-dev-18080.log`。
+dev/prod yml 的龙哥自填凭据保持未暂存，本批未 commit / 未 push。
+
+### 未验项（如实）
+
+- 正式服部署、`V2.2.14` 正式库应用、正服冒烟：未执行（未解冻，作业单见交付清单第四节）。
+- `summary/today` 聚合、管理端、base 通道零改动口径不变；**S3 整改 fat jar 仍未上线正服**。
+
+---
+
+## M52 收口（会话 2026-11-18 · PivotOS 严整改 + 测试分层 + 死锁重试）
+
+> 台账见 `独立产品规划/19-V2收口执行档案-2026-11-18.md` §六（本批对应 #11/#12/#13/#14）。
+
+### 1. 全量 reactor 首次 BUILD SUCCESS（#11）
+
+- `mvn -o test`：**56/56 模块 SUCCESS，0 failures / 0 errors**（离线模式 1:54）。
+- 之前「6+13 红 + 挂死 20 分钟」的根因有两个，均已处置：
+  1. **依赖内网中间件的集成测试**（13 个类，连 `175.24.176.176` 的 MySQL/Redis，凭据已轮换）
+     → 根 pom surefire `excludes` 排除；Druid 的 `CreateConnectionThread` 会无限重试，
+     实测单个模块可挂死 20 分钟以上（`SaveBatchClasspathGuardTest` 是最后暴露的那个）。
+  2. **排查时才发现 pom 注释写「13 个类」而实际只列了 11 条**——本次补齐
+     `SaveBatchClasspathGuardTest`、`MessageFacadeContractTest` 后对账一致。
+- 排除**不降低**覆盖：架构门禁（A1~A12/C1~C4）全量生效；`SaveBatchClasspathGuardTest`
+  的 classpath 维度已由 `WarmFlowVersionGuardTest#w3`（反射断言 `executeBatch(Collection,int,BiFunction)`
+  存在，零依赖）在默认门禁里守住，被排掉的只是「真落库一次 saveBatch」那一层。
+- **坑**：`mvn test` 必须加 `-o`。非离线时公共仓库探测会把每模块拖长，且远程库不可达时的
+  重试让「看起来在跑」和「其实在等死锁」难以区分。
+
+### 2. A10 白名单清零 + A12 新增 SQL 插值门禁（#13/#14）
+
+- **A10（禁 `.last(`）**：原 8 处历史写法全部清偿——列表类改类型化分页
+  （`Page` + `selectPage` / `IService.page`），精确取一条改 `getOne(wrapper, false)`。
+  全仓 `grep -c '\.last('` = **0**，`ALLOWED_LAST_USAGES` 已清空（空表即「新增即红」）。
+- **A11（17 条匿名端点登记）**：不是待修项而是**已接受匿名面**——登录入口/发码/注册/公钥/
+  Prometheus 抓取本就该匿名，逐条写明了理由；规则同时校验「登记已失效」（端点改名/删除后
+  登记必须同步删），所以它不会烂尾。**结论：无代码待办，口径记在此处即闭环。**
+- **A12（新增，注解 SQL 禁 `${}`）**：A5 只禁了 mapper XML，注解 SQL
+  （`@Select/@Update/@Insert/@Delete` + `<script>`）同样能写 `${}`。实测全仓 107 个
+  `*Mapper.java` 里 `${` 出现 **0 次**，故直接一刀切（不做登记制）。规则含防空转下限（≥50 个），
+  防止路径口径失效时静默假绿。
+- **拼接 SQL 复核结论**：`generator` / `datainspect` / `ai-coding` 的 `information_schema`
+  查询确实用字符串拼接，但**已过标识符白名单**（`MySqlInspector#validIdentifier` 正则 +
+  `isTableAllowed` 白名单 + `tenantId` 取 Long），且刻意不放在 Mapper 接口里——A12 的注释
+  把这条「绕过规则必须是一次显式设计决定」写成了口径。`<script>` 全部是
+  `<foreach …>#{item}</foreach>`（参数绑定，非插值）。
+
+### 3. push 死锁重试（M52 实测缺陷，iOS 真机链路暴露）
+
+- 现象：iOS 全量测试并行跑 `FamilyLiveTests` 时，dev 服报
+  `Deadlock found when trying to get lock` → 整批 push 变 1500「系统内部错误」。
+- 定性：**不是测试脚本问题**。家庭成员两台设备同时首推同一个宝宝时，
+  `INSERT … ON DUPLICATE KEY` 在唯一键上互相等待即成死锁。MySQL 自己的错误信息就写着
+  「try restarting transaction」——不重试等于把偶发碰撞升级成客户端可见失败。
+- 落法：`SyncServiceImpl` 的 `@Transactional` 换成 **显式 `TransactionTemplate`**
+  （`push` = 外层重试 3 次 + 内层单事务 `pushInTransaction`）。
+  **为什么不能在方法上加 `@Retryable`**：死锁回滚的是**整个事务**，语句级重试只会
+  在已作废的事务里继续报错；而「外层重试 + 内层事务」在同一个类里用 `@Transactional`
+  写不出来（自调用不走代理）——所以把事务边界显式画出来。
+- 重试范围刻意收窄：只认 `PessimisticLockingFailureException`（Spring 对 MySQL 1213/1205
+  的翻译）与 SQLState `40xxx`；其它异常原样抛出，不做「无脑重试掩盖问题」。
+- 回归：`SyncServiceImplTest` 新增 3 条（首次死锁→重试成功 / 非锁异常不重试 / 持续死锁
+  3 次后放弃）。biz **231/231 绿**（原 228）。iOS 侧同一套并行测试复跑 **297/297 全绿**。
+
+### 4. ArchUnit A3 规则未注册（#12）
+
+- 病灶：`@ArchTest` 注解行被写进了 `//` 行注释里，规则**从未执行**（注释里宣称「已注册」）。
+- 处置后实测报告里出现 `a3_starters_must_not_depend_on_plugins`，P0ArchitectureTest 全绿。
+- 教训：ArchUnit 的规则失效是**静默**的——「加了一条规则」不等于「这条规则在跑」，
+  必须看 surefire 报告里有没有对应 testcase 名。A12 因此自带防空转下限。

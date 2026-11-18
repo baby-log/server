@@ -3,6 +3,7 @@ package com.babylog.ai.service.impl;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.babylog.ai.api.enums.AiErrorCode;
 import com.babylog.ai.api.usage.AiUsageContext;
 import com.babylog.ai.client.AiClientRegistry;
@@ -188,11 +189,12 @@ public class AiApprovalAdviceServiceImpl implements AiApprovalAdviceService {
 
     /** 本人在该任务上的最近一条建议——userId 过滤即归属闸：建议记录只对生成者本人可见 */
     private AiApprovalAdvice latestAdviceEntity(Long userId, Long taskId) {
-        return adviceMapper.selectOne(Wrappers.<AiApprovalAdvice>lambdaQuery()
-                .eq(AiApprovalAdvice::getTaskId, taskId)
-                .eq(AiApprovalAdvice::getUserId, userId)
-                .orderByDesc(AiApprovalAdvice::getId)
-                .last("LIMIT 1"));
+        var records = adviceMapper.selectPage(new Page<AiApprovalAdvice>(1, 1),
+                Wrappers.<AiApprovalAdvice>lambdaQuery()
+                        .eq(AiApprovalAdvice::getTaskId, taskId)
+                        .eq(AiApprovalAdvice::getUserId, userId)
+                        .orderByDesc(AiApprovalAdvice::getId)).getRecords();
+        return records.isEmpty() ? null : records.get(0);
     }
 
     /* ================= A4E 受控自动预审（S117） ================= */

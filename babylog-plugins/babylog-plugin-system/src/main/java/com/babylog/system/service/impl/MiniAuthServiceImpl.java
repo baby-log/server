@@ -58,8 +58,7 @@ public class MiniAuthServiceImpl implements MiniAuthService {
         WechatSession session = wechatMiniService.code2Session(loginCode);
         String phone = wechatMiniService.getPhoneNumber(phoneCode);
         SysUser user = userService.getOne(Wrappers.<SysUser>lambdaQuery()
-                .eq(SysUser::getMobile, phone)
-                .last("LIMIT 1"));
+                .eq(SysUser::getMobile, phone), false);
         if (user == null) {
             user = registerByPhone(phone);
         }

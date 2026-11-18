@@ -19,8 +19,7 @@ public class SocialUserServiceImpl extends ServiceImpl<SysSocialUserMapper, SysS
     public SysSocialUser findByChannelOpenId(String channel, String openId) {
         return getOne(Wrappers.<SysSocialUser>lambdaQuery()
                 .eq(SysSocialUser::getChannel, channel)
-                .eq(SysSocialUser::getOpenId, openId)
-                .last("LIMIT 1"));
+                .eq(SysSocialUser::getOpenId, openId), false);
     }
 
     @Override
