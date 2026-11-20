@@ -7,6 +7,8 @@ import com.babylog.biz.family.dto.MemberRoleCmd;
 import com.babylog.biz.family.service.FamilyService;
 import com.babylog.biz.family.vo.FamilyMemberVO;
 import com.babylog.biz.family.vo.FamilyVO;
+import com.babylog.biz.sync.support.SyncAccessScopeResolver;
+import com.babylog.biz.sync.support.SyncChangeNotifier;
 import com.babylog.common.core.enums.error.GlobalErrorCode;
 import com.babylog.common.core.exception.ServiceException;
 import com.babylog.common.core.result.R;
@@ -23,7 +25,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * App 端家庭管理端点（V2.1 M15）。
@@ -31,6 +35,11 @@ import java.util.List;
  * <p>与 M5/M6/M8 的 App 端点同口径：类上 {@code @SaCheckLogin(app-user)}、
  * token 走 {@code Authorization: <裸值>}、userId 一律从 token 取（请求传什么都不算数）。
  * 无家庭用户（多数存量用户）走创建/加入前不碰其它端点。
+ *
+ * <p><b>M56 · P2-b</b>：家庭写操作（建家/加入/改角色/踢出/退出/解散/重置邀请码）也会改同步表，
+ * 但不经过 {@code /sync/push}，旧实现不会抬高 ping 变更戳 → 其它成员要等兜底轮询才感知。
+ * 现在每个写端点在操作前后各取一次可见范围并抬高<b>并集</b>：操作前的范围保证
+ * 「被踢出 / 解散后已回落单用户」的成员也能收到通知，操作后的范围保证新加入的成员被覆盖。
  */
 @Tag(name = "App 家庭管理（BabyLog）", description = "创建家庭 / 邀请码 / 成员管理")
 @RestController
@@ -39,15 +48,24 @@ import java.util.List;
 public class BabyLogFamilyController {
 
     private final FamilyService familyService;
+    private final SyncChangeNotifier changeNotifier;
+    private final SyncAccessScopeResolver accessScopeResolver;
 
-    public BabyLogFamilyController(FamilyService familyService) {
+    public BabyLogFamilyController(FamilyService familyService,
+                                   SyncChangeNotifier changeNotifier,
+                                   SyncAccessScopeResolver accessScopeResolver) {
         this.familyService = familyService;
+        this.changeNotifier = changeNotifier;
+        this.accessScopeResolver = accessScopeResolver;
     }
 
     @Operation(summary = "创建家庭（创建者默认 OWNER，宝宝归属自动回填）")
     @PostMapping
     public R<FamilyVO> create(@Validated @RequestBody FamilyCreateCmd cmd) {
-        return R.ok(familyService.create(currentUserId(), cmd));
+        Set<Long> before = snapshotScope();
+        R<FamilyVO> result = R.ok(familyService.create(currentUserId(), cmd));
+        bumpScope(before);
+        return result;
     }
 
     @Operation(summary = "我的家庭（无家庭返回 8300；邀请码仅 OWNER 可见）")
@@ -59,13 +77,19 @@ public class BabyLogFamilyController {
     @Operation(summary = "重置邀请码（仅 OWNER；旧码立即失效）")
     @PostMapping("/invite/reset")
     public R<FamilyVO> resetInviteCode() {
-        return R.ok(familyService.resetInviteCode(currentUserId()));
+        Set<Long> before = snapshotScope();
+        R<FamilyVO> result = R.ok(familyService.resetInviteCode(currentUserId()));
+        bumpScope(before);
+        return result;
     }
 
     @Operation(summary = "凭邀请码加入家庭（新成员默认 VIEWER 只读）")
     @PostMapping("/join")
     public R<FamilyVO> join(@Validated @RequestBody FamilyJoinCmd cmd) {
-        return R.ok(familyService.join(currentUserId(), cmd));
+        Set<Long> before = snapshotScope();
+        R<FamilyVO> result = R.ok(familyService.join(currentUserId(), cmd));
+        bumpScope(before);
+        return result;
     }
 
     @Operation(summary = "成员列表（含已被移除的成员，按加入时间正序）")
@@ -77,29 +101,48 @@ public class BabyLogFamilyController {
     @Operation(summary = "修改成员角色（仅 OWNER；OWNER 不可指定不可转让）")
     @PutMapping("/members/{id}/role")
     public R<Void> changeRole(@PathVariable("id") Long id, @Validated @RequestBody MemberRoleCmd cmd) {
+        Set<Long> before = snapshotScope();
         familyService.changeRole(currentUserId(), id, cmd);
+        bumpScope(before);
         return R.ok();
     }
 
     @Operation(summary = "踢出成员（仅 OWNER；行保留仅置 REMOVED，被踢者立即回落单用户范围，可凭新邀请码再加入）")
     @PostMapping("/members/{id}/kick")
     public R<Void> kick(@PathVariable("id") Long id) {
+        Set<Long> before = snapshotScope();
         familyService.kick(currentUserId(), id);
+        bumpScope(before);
         return R.ok();
     }
 
     @Operation(summary = "成员自助退出（OWNER 不可退出须先解散 → 8305；退出后立即回落单用户范围）")
     @PostMapping("/leave")
     public R<Void> leave() {
+        Set<Long> before = snapshotScope();
         familyService.leave(currentUserId());
+        bumpScope(before);
         return R.ok();
     }
 
     @Operation(summary = "解散家庭（仅 OWNER → 8304；家庭置 DISSOLVED，成员全部 REMOVED，宝宝归属清空待重建家庭回填）")
     @PostMapping("/dissolve")
     public R<Void> dissolve() {
+        Set<Long> before = snapshotScope();
         familyService.dissolve(currentUserId());
+        bumpScope(before);
         return R.ok();
+    }
+
+    /** 写操作前的可见范围快照（家庭被解散/成员被踢出后 resolve 会回落单用户，故必须提前取） */
+    private Set<Long> snapshotScope() {
+        return new HashSet<>(accessScopeResolver.resolveAccess(currentUserId()).visibleUserIds());
+    }
+
+    /** 前后范围取并集抬高变更戳：覆盖新加入者与被移出者两侧 */
+    private void bumpScope(Set<Long> before) {
+        before.addAll(accessScopeResolver.resolveAccess(currentUserId()).visibleUserIds());
+        changeNotifier.markChanged(before);
     }
 
     /** 与 BabyLogSyncController / BabyLogDeviceController 同口径：会话被清时按 1002 回，让客户端走 refresh */
