@@ -6,10 +6,11 @@
 
 BabyLog 服务端是一个**插件化 + AI 原生底座 + 单代码库双部署形态（单体/微服务）**的后端：同一套后端支撑 Android / iOS 原生 App、微信小程序、Android TV 与 PC 运营管理端。
 
-## 当前状态（V2 收官，2026-11-19）
+## 当前状态（V2 固定版 V2.4.0，2026-11-19）
 
 | 项 | 结果 |
 |---|---|
+| 版本 | **产品版本 `V2.4.0`**；Maven 坐标 `3.2.0` 是 PivotOS 框架版本（双轨保留，不改坐标，改了会破坏依赖树） |
 | 业务范围 | 认证（app-user / wx-mini-user 双 token）、云同步（双段游标 + 逐条 version 乐观锁）、家庭七端点与权限矩阵、设备管理、快速记录、内置产品 base 通道、18 号契约两列增强（`bl_baths.ended_at` / `bl_sleeps.transitions`） |
 | 测试 | `mvn -o test` **56/56 模块 BUILD SUCCESS**（0 failures / 0 errors，1:27）；biz **231/231**；ArchUnit **24 个 testcase 全绿**（A1~A12 / C1~C4） |
 | 规范 | PivotOS 硬约束全量生效：禁 `${}` 拼接（A5/A12）、禁 `.last()`（A10 白名单已清空）、SQL 一律 `LambdaQueryWrapper`、DDL/DML 一律 Flyway、雪花 ID 禁自增 |
