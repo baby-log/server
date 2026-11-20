@@ -483,8 +483,9 @@ class SyncStoreH2Test {
     }
 
     @Test
-    void pullPredicateExcludesInProgressHalfDoneRows() {
-        // M37：进行中计时半成品不下发（服务端兜底谓词 in_progress = 0）
+    void pullIncludesInProgressRowsForCrossDeviceVisibility() {
+        // M53：进行中计时行正常下发（用户验收问题 3——手机点「开始喝奶」，其它终端要看到「喝奶中」）。
+        // 多设备同时开计时的重复行由 closeOtherOngoingFeedings 在收到结束行时收敛。
         handler.upsert(feedingPayload(880200L, 1L, 100), 100L);
         Map<String, Object> halfDone = feedingPayload(880201L, 1L, 50);
         halfDone.put("inProgress", 1);
@@ -492,7 +493,30 @@ class SyncStoreH2Test {
 
         LocalDateTime since = SyncCursor.toLocalDateTime(0L);
         List<SyncRecordStore.Row> rows = handler.selectChanges(List.of(100L), since, 0L, 100);
-        assertThat(rows.stream().map(SyncRecordStore.Row::id)).containsExactly(880200L);
+        assertThat(rows.stream().map(SyncRecordStore.Row::id)).containsExactly(880200L, 880201L);
+        assertThat(String.valueOf(rows.get(1).data().get("inProgress"))).isEqualTo("1");
+    }
+
+    @Test
+    void closingOneTimerSoftDeletesOtherDevicesOngoingRows() {
+        // M53：两台设备各开一个「喝奶中」，其中一台结束时，另一台的进行中副本应被软删，
+        // 否则其它终端会一直显示多个进行中卡、结束后残留成重复记录。
+        Map<String, Object> keptTimer = feedingPayload(880210L, 7L, 60);
+        keptTimer.put("inProgress", 1);
+        Map<String, Object> otherTimer = feedingPayload(880211L, 7L, 90);
+        otherTimer.put("inProgress", 1);
+        handler.upsert(keptTimer, 100L);
+        handler.upsert(otherTimer, 100L);
+
+        int closed = handler.closeOtherOngoingFeedings(100L, 7001L, "BOTTLE", 880210L);
+        assertThat(closed).isEqualTo(1);
+
+        List<SyncRecordStore.Row> rows = handler.selectChanges(
+                List.of(100L), SyncCursor.toLocalDateTime(0L), 0L, 100);
+        Map<Long, Object> deletedById = new java.util.HashMap<>();
+        rows.forEach(r -> deletedById.put(r.id(), r.data().get("deleted")));
+        assertThat(deletedById.get(880210L)).isEqualTo(0);
+        assertThat(deletedById.get(880211L)).isEqualTo(1);
     }
 
     // ------------------------------------------------------------------

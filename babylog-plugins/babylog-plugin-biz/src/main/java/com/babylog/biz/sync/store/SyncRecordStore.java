@@ -79,4 +79,13 @@ public interface SyncRecordStore {
      * @param userId  当前账号：既是归属列取值，也是审计列的 actor
      */
     void upsert(SyncTable table, Map<String, Object> payload, long userId);
+
+    /**
+     * M53：一条计时行结束后收敛同 (用户, 宝宝, 类型) 的其它进行中行（软删）。
+     * 默认空实现，保证已有 Mock/测试装配不受影响；真实存储由
+     * {@link MybatisPlusSyncRecordStore} 转发到 feedings 的 Handler。
+     */
+    default int closeOtherOngoingFeedings(long userId, long childId, String type, long keepId) {
+        return 0;
+    }
 }

@@ -52,4 +52,18 @@ public interface SyncTableHandler {
      * 归属与审计列不被覆盖方改写。
      */
     void upsert(Map<String, Object> payload, long userId);
+
+    /**
+     * M53：一条计时行结束后，把同一账号 / 宝宝 / 喂养类型下其它「进行中」行软删。
+     *
+     * <p>多设备各自点「开始喝奶」时，服务端会收到多条 in_progress=1 的行；
+     * 若不做收敛，其它终端会一直显示多个「喝奶中」，且结束后残留成重复记录。
+     * 软删走 deleted=1 的同步事实，各端下次增量拉取即把多余进行中卡移除。
+     * 非 feedings 表默认不处理。
+     *
+     * @return 被软删的行数
+     */
+    default int closeOtherOngoingFeedings(long userId, long childId, String type, long keepId) {
+        return 0;
+    }
 }

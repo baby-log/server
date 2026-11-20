@@ -76,10 +76,10 @@ public enum SyncTable {
     /**
      * 喂养（M37 计时器）。
      *
-     * <p>拉取谓词 {@code in_progress = 0}（登记在 {@code SyncViewRegistry} 的类型化规格里）：
-     * 进行中的计时半成品不下发——客户端红线是 in_progress=1 的行永不进 outbox，
-     * 这道谓词是服务端侧的兜底（防御不合规客户端），「服务端推送只吃已完成记录」
-     * 由此在 pull 通道落死。
+     * <p>M53 起进行中计时行（{@code in_progress = 1}）正常参与同步下发：一台设备
+     * 开始喝奶后，其它终端的「进行中」卡才有数据来源；四端「in_progress=1 永不进
+     * outbox」红线同步解除。多设备同时开计时产生的重复行，由 {@code SyncServiceImpl}
+     * 在收到结束行时按 (user, child, type) 软删其它进行中行收敛。
      */
     FEEDINGS("feedings", "bl_feedings", BlFeeding.class, SyncCategory.FEEDING, java.util.Set.of()),
 

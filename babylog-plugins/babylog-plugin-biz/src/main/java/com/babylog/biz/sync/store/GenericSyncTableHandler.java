@@ -152,6 +152,24 @@ public class GenericSyncTableHandler<E extends BlSyncDO> implements SyncTableHan
         }
     }
 
+    @Override
+    public int closeOtherOngoingFeedings(long userId, long childId, String type, long keepId) {
+        if (table != SyncTable.FEEDINGS || type == null || type.isBlank()) {
+            return 0;
+        }
+        // 类型化条件（零手写 SQL）：只动自己的行、只动进行中且未删除的行、保留刚落库的那条。
+        // deleted 置 1 后 server_updated_at 由库自动刷新 → 各端增量拉取拿到这条墓碑。
+        LambdaUpdateWrapper<E> wrapper = new LambdaUpdateWrapper<E>()
+                .eq(column("userId"), userId)
+                .eq(column("childId"), childId)
+                .eq(column("type"), type)
+                .eq(column("inProgress"), 1)
+                .eq(column("deleted"), 0)
+                .ne(column("id"), keepId)
+                .set(column("deleted"), 1);
+        return mapper.update(null, wrapper);
+    }
+
     // ------------------------------------------------------------------
     // 以下全部是类型化条件拼装与对象映射，无任何 SQL 文本
     // ------------------------------------------------------------------

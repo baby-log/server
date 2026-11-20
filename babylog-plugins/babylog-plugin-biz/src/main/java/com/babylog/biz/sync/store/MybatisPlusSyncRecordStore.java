@@ -94,6 +94,11 @@ public class MybatisPlusSyncRecordStore implements SyncRecordStore {
         syncHandlers.get(table).upsert(payload, userId);
     }
 
+    @Override
+    public int closeOtherOngoingFeedings(long userId, long childId, String type, long keepId) {
+        return syncHandlers.get(SyncTable.FEEDINGS).closeOtherOngoingFeedings(userId, childId, type, keepId);
+    }
+
     private static int checkLimit(int limit) {
         if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
             throw new IllegalArgumentException("limit 越界（须在 [1, 1000] 内，服务层钳位失效？）：" + limit);

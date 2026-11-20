@@ -128,15 +128,14 @@ class SyncViewRegistryTest {
 
     @Test
     void predicatesAreRegisteredOnlyForFeedingsAndPublishedVersions() {
-        // M37：feedings 拉取谓词 in_progress = 0（类型化等值条件，替代旧 SQL 片段）
+        // M53：feedings 的 in_progress = 0 谓词已移除——进行中计时行要下发到其它终端，
+        // 否则一台设备点「开始喝奶」另一台永远看不到「喝奶中」。所有同步表现在都无业务谓词。
         SyncViewRegistry.SyncSpec feedings = SyncViewRegistry.syncSpec(SyncTable.FEEDINGS);
-        assertThat(feedings.predicateProperty()).isEqualTo("inProgress");
-        assertThat(feedings.predicateValue()).isEqualTo(0);
+        assertThat(feedings.predicateProperty()).isNull();
+        assertThat(feedings.predicateValue()).isNull();
         for (SyncTable table : SyncTable.values()) {
-            if (table != SyncTable.FEEDINGS) {
-                assertThat(SyncViewRegistry.syncSpec(table).predicateProperty())
-                        .as("%s 不应有业务谓词", table.apiName()).isNull();
-            }
+            assertThat(SyncViewRegistry.syncSpec(table).predicateProperty())
+                    .as("%s 不应有业务谓词（M53：进行中行正常下发）", table.apiName()).isNull();
         }
         // M10：版本表只有 PUBLISHED 行对外下发
         SyncViewRegistry.BaseSpec versions = SyncViewRegistry.baseSpec(BaseDataTable.APP_VERSIONS);

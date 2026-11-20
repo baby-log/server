@@ -24,6 +24,9 @@ public class SyncPushResultVO {
     @Schema(description = "被拒明细（不影响其他记录落库）")
     private List<SyncPushRejectVO> rejected = new ArrayList<>();
 
+    @Schema(description = "M53：版本冲突明细（库内版本不旧于推送版本，服务端优先；客户端可提示用户）")
+    private List<SyncConflictVO> conflicts = new ArrayList<>();
+
     @Schema(description = "服务端当前时间（同一套游标编码）")
     private long serverTime;
 }

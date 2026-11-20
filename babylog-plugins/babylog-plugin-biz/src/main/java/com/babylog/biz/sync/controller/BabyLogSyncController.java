@@ -3,6 +3,7 @@ package com.babylog.biz.sync.controller;
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.babylog.biz.sync.dto.SyncPushCmd;
 import com.babylog.biz.sync.service.SyncService;
+import com.babylog.biz.sync.support.SyncChangeNotifier;
 import com.babylog.biz.sync.vo.SyncChangesVO;
 import com.babylog.biz.sync.vo.SyncPushResultVO;
 import com.babylog.common.core.enums.error.GlobalErrorCode;
@@ -19,6 +20,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * App 端增量同步端点。
@@ -37,9 +41,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class BabyLogSyncController {
 
     private final SyncService syncService;
+    private final SyncChangeNotifier changeNotifier;
 
-    public BabyLogSyncController(SyncService syncService) {
+    public BabyLogSyncController(SyncService syncService, SyncChangeNotifier changeNotifier) {
         this.syncService = syncService;
+        this.changeNotifier = changeNotifier;
     }
 
     @Operation(summary = "增量拉取（按服务端游标 since + sinceId）")
@@ -54,7 +60,26 @@ public class BabyLogSyncController {
     @Operation(summary = "批量推送（单次上限 200 条，逐条 version 乐观锁 upsert）")
     @PostMapping("/push")
     public R<SyncPushResultVO> push(@Validated @RequestBody SyncPushCmd cmd) {
-        return R.ok(syncService.push(currentUserId(), cmd));
+        long userId = currentUserId();
+        SyncPushResultVO result = syncService.push(userId, cmd);
+        // M53：只要有行落库就抬高变更戳，让同账号其它设备的 ping 立刻返回 changed=true。
+        // 放在 Controller 层是为了确保事务已提交，回滚不会误报。
+        if (result.getUpserted() > 0) {
+            changeNotifier.markChanged(userId);
+        }
+        return R.ok(result);
+    }
+
+    @Operation(summary = "M53：轻量变更探测（四端前台轮询，返回是否有新数据）")
+    @GetMapping("/ping")
+    public R<Map<String, Object>> ping(@RequestParam(required = false) Long since) {
+        long server = changeNotifier.lastChangeAt(currentUserId());
+        long client = since == null ? 0L : since;
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("changed", server > client);
+        data.put("lastChangeAt", server);
+        data.put("serverTime", System.currentTimeMillis());
+        return R.ok(data);
     }
 
     /**

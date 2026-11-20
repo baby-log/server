@@ -48,9 +48,12 @@ public final class SyncViewRegistry {
                     null, null, Set.of()),
             new SyncSpec(SyncTable.REMINDERS, com.babylog.biz.sync.entity.BlReminderSyncView.class,
                     null, null, Set.of()),
-            // M37 拉取谓词：进行中的计时半成品不下发（类型化等值条件，替代旧 "in_progress = 0" SQL 片段）
+            // M53：进行中计时行改为正常下发（用户验收问题 3——一台设备点「开始喝奶」，
+            // 其它终端要能看到「喝奶中」）。原先的 in_progress = 0 谓词会让这类行永远不可见。
+            // 多设备各自开计时产生的重复行由 SyncServiceImpl 的「进行中行唯一」逻辑收敛：
+            // 收到结束行时把同 (user, child, type) 的其它进行中行软删。
             new SyncSpec(SyncTable.FEEDINGS, com.babylog.biz.sync.entity.BlFeedingSyncView.class,
-                    "inProgress", 0, Set.of("inProgress")),
+                    null, null, Set.of("inProgress")),
             new SyncSpec(SyncTable.DIAPERS, com.babylog.biz.sync.entity.BlDiaperSyncView.class,
                     null, null, Set.of()),
             new SyncSpec(SyncTable.SLEEPS, com.babylog.biz.sync.entity.BlSleepSyncView.class,

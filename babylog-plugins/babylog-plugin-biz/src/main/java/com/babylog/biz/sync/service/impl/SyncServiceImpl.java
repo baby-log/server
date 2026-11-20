@@ -11,6 +11,7 @@ import com.babylog.biz.sync.support.SyncCursor;
 import com.babylog.biz.sync.support.SyncPermissionGuard;
 import com.babylog.biz.sync.support.SyncTable;
 import com.babylog.biz.sync.vo.SyncChangesVO;
+import com.babylog.biz.sync.vo.SyncConflictVO;
 import com.babylog.biz.sync.vo.SyncPushRejectVO;
 import com.babylog.biz.sync.vo.SyncPushResultVO;
 import com.babylog.common.core.exception.ServiceException;
@@ -341,8 +342,11 @@ public class SyncServiceImpl implements SyncService {
                 continue;
             }
             if (current != null && current.version() >= version) {
-                // last-write-wins：库内不旧于推送，服务端优先。重推同一批（幂等重试）走的就是这条路
+                // last-write-wins：库内不旧于推送，服务端优先。重推同一批（幂等重试）走的就是这条路。
+                // M53：裁决语义不变，但把冲突行回给客户端，避免「另一台设备改过、本机毫无感知」。
                 result.setSkipped(result.getSkipped() + 1);
+                result.getConflicts().add(new SyncConflictVO(
+                        table.apiName(), String.valueOf(id), current.version(), version));
                 continue;
             }
             try {
@@ -355,6 +359,23 @@ public class SyncServiceImpl implements SyncService {
             try {
                 store.upsert(table, row, userId);
                 result.setUpserted(result.getUpserted() + 1);
+                // M53：收到「一次计时会话的收尾行」时，把同一账号/宝宝/类型下其它设备留下的
+                // in_progress=1 副本软删——避免多设备各自点开始后残留成重复记录。
+                // 判据两道缺一不可：①库里已有同 ID 行（是 start 行的后续更新，不是新增/补录）；
+                // ②载荷带计时事件流 + 结束时刻（不是手动录入/编辑已完成行）。
+                // 少了这两道，用户「手动记一条奶」也会把另一台设备正在跑的计时软删掉。
+                Long progress = asLong(row.get("inProgress"));
+                Long childId = asLong(row.get("childId"));
+                Object typeValue = row.get("type");
+                Object pauseEvents = row.get("pauseEvents");
+                boolean timerClosing = current != null
+                        && pauseEvents != null && !String.valueOf(pauseEvents).isBlank()
+                        && asLong(row.get("endedAt")) != null;
+                if (table == SyncTable.FEEDINGS && timerClosing
+                        && (progress == null || progress == 0L)
+                        && childId != null && typeValue != null) {
+                    store.closeOtherOngoingFeedings(userId, childId, String.valueOf(typeValue), id);
+                }
             } catch (DataIntegrityViolationException e) {
                 // 契约层面的脏数据（必填列缺失、超长等）：单条拒绝，不拖累同批
                 log.warn("[BABYLOG][sync] 写入被库拒绝 table={} id={} reason={}", table.apiName(), id,
