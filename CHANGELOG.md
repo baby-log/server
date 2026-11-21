@@ -79,6 +79,12 @@ dev 服同账号双设备 push/pull 实测互通（含 `categories` 四分类 + 
 | M46 | 记录增强链第一棒：18 号契约 + Flyway V2.2.14（`bl_baths.ended_at` / `bl_sleeps.transitions`），biz 228/228 + dev 冒烟 19/19 |
 | M56 | 同步修复：`/sync/ping` 长轮询改 `CountDownLatch` 阻塞式（弃 `DeferredResult`，避免 SaToken ThreadLocal 在 async dispatch 丢失导致 1500）+ `markChanged(visibleUserIds())` 可见范围级变更戳；五仓提交推送，biz 245/245 |
 | M57 | 契约层：Flyway `V2.2.16` 给 `bl_children` 加 `feeding_method VARCHAR(16) NULL`；`BlChild` / `ExportTableSpecs`（`ANDROID_SCHEMA_VERSION` 保持 11）/ `AdminConsoleService` 补齐；新增 `ChildrenFeedingMethodContractTest`；biz 247/247（工作区未提交） |
+| M58 | 收口：M57 契约层随五仓 conventional commit 入库（`ec818ce` 等，**只 commit 未 push**）；授权重启 dev 服重跑联机（`m44-dev-smoke.py` 首次实跑 65/65、iOS 325/325 含 8 条联机，M56 jar 基线回归、不覆盖 M57 服务端新代码）后优雅关闭；两处 test 域名临时改动保留；「发布包重建 + 正服部署」仅出配置对比表、未执行 |
+| M59 | 决策收口：龙哥确认 M57 五仓提交「现在 push」（AI 交付逐仓命令、由龙哥自跑、未代跑未验证远端）；test 环境「验收未完成、暂不恢复」两处 test 域名保留；发布包重建与正服部署均不授权、正服保持 M32；只读核查六仓零漂移；口径修正「6 个文档文件」实为 5 个（server 无 PROGRESS.md） |
+| M60 | 执行收口：四项全授权（push / 恢复 / 六端重建 / 部署）；两处 test 域名临时改动按第 3 节恢复且 diff 归零；五仓 tracking 引用全部到 M57（push 完成、远端实时待龙哥核实）；六端发布包重建判 OK（fat jar 内嵌 `V2.2.16` 已核对、Android/TV APK 带签名、Mini 显式覆盖正式域名、iOS/macOS `.app` 用 `OTHER_SWIFT_FLAGS=-disable-sandbox` 绕过 SwiftData 宏沙箱嵌套、`.app.zip`/DMG 重打）；正服部署因无服务器地址/凭据/1Panel 会话交回龙哥，正服 ping/changes 均 1002 与 11-20 实测不同、「正服=M32」存疑 |
+| M61 | 决策收口：龙哥四项拍板 —— ① push 远端实时 SHA「不单独核实」（接受五仓 tracking 到 M57 作证据、留痕远端实时未核实，AI 沙箱 SSH 读私钥被 deny 不重试/不绕路）；② 发布包重建产物「验收通过」（6 端判 OK + 8 件 `-newermt 16:41` 全 NEW 实证、本轮不动不重跑）；③ 正服部署「龙哥手动、AI 不碰」（产出 `独立产品规划/13-D1正服部署前核对单-M61.md`：4.1 契约矩阵 + 1Panel 部署前确认项 + 单实例/Flyway/回滚/mp 域名/安全）；④ `临时接口地址改动记录.md` 补记恢复收尾（状态行改「已恢复」+ 新增第 5 节）。M61 只读复核六仓零漂移、两处临时域名 diff 归零、18080 无监听；5 个文档文件仍未提交（含 M61 节） |
+| M62 | 正服部署结果回填（龙哥手动完成）+ 授权验收冒烟：正式域名 + 独立账号 35/35 全绿（19/19 判据 + M53 ping/conflicts/进行中行跨设备可见/计时收尾 + M57 feeding_method 往返作 V2.2.16 间接铁证）；只读复核六仓零漂移、两处临时域名 M62 三核归零；四项决策（部署完成授权冒烟 / 5 文档随下批入库不 commit / 记录留痕全部不动 / 暂无新需求）；正服实测 ping lastChangeAt 是字符串（覆盖核对单 4.1 旧描述），无一是线上缺陷 |
+| M63 | 纯收口：龙哥四项拍板 —— ① 暂无新需求、纯收口（不落代码）；② 5 个未提交文档改为**现在单独 commit**（覆盖 M62「随下批入库」口径，只 commit 不 push、双推由龙哥）；③ 正服 `flyway_schema_history` 已由龙哥在 1Panel 直接确认（`V2.2.16` Success、无 failed），**回填 PROGRESS** 覆盖 M62「间接铁证 + 待确认」；④ M62 遗留的核对单 4.1 #1/#10「ping 返回 long 数字」滞后表述本轮一并修订为「正服实测 JSON 字符串、全局 Long→String 无例外」（该文件在工作区根独立目录、不入库）。M63 四核只读复核六仓零漂移、两处临时域名 diff 四段归零；`记录.md` 与测试环境 4 包保持不动；本批各仓 1 个 `docs(M63)` 提交后未提交项归零、tracking 仍停 M57（ahead=1） |
 
 ## 未解冻 / 候选（非 V2 缺口）
 
