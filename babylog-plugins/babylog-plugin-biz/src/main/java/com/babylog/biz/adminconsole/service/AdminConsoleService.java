@@ -129,8 +129,9 @@ public class AdminConsoleService {
             args.add("%" + keyword.trim() + "%");
         }
         String from = " FROM bl_children c" + where;
+        // M57：feeding_method 随宝宝档案下发，后台只读列表一并展示（列白名单显式枚举）
         String select = "SELECT c.id, c.name, c.gender, c.birthday, c.is_premature,"
-                + " c.archived, c.owner_user_id, c.family_id, c.created_at, c.deleted";
+                + " c.feeding_method, c.archived, c.owner_user_id, c.family_id, c.created_at, c.deleted";
         return page(select, from, "c.created_at DESC, c.id DESC", pageNum, pageSize, args);
     }
 

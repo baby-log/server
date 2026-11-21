@@ -59,12 +59,15 @@ public final class ExportTableSpecs {
     private static final Map<String, String> REMINDER_SOURCE = map("VACCINATION", "疫苗", "FOLLOW_UP", "随访/复诊", "VISIT", "就医", "MEDICATION", "补剂", "PUMP_STORAGE", "储奶", "CUSTOM", "自定义");
     private static final Map<String, String> REMINDER_REPEAT = map("NONE", "单次", "DAILY", "每天");
     private static final Map<String, String> RECORD_TYPE = map("BOTTLE", "奶瓶", "BREAST_LEFT", "母乳左", "BREAST_RIGHT", "母乳右", "SOLID", "辅食", "WATER", "喝水", "PUMP", "泵奶", "DIAPER", "尿布", "SLEEP", "睡眠", "BATH", "洗澡", "CORD", "脐带护理", "SPIT_UP", "吐奶", "TEMP", "体温", "WEIGHT", "体重", "HEIGHT", "身高", "HEAD", "头围", "JAUNDICE", "黄疸", "SUPPLEMENT", "补剂", "MEDICINE", "用药", "VACCINE", "疫苗", "FOLLOW_UP", "随访", "VISIT", "就医");
+    /** M57 宝宝喂养方式（只存 name；未知值原样输出，不因漏登记变空） */
+    private static final Map<String, String> FEEDING_METHOD = map(
+            "BREAST_ONLY", "纯母乳", "FORMULA_ONLY", "纯配方(奶粉)", "MIXED", "混合");
 
     public static final List<TableSpec> ALL = List.of(
-            global("children", "宝宝列表", "id name gender birthday is_premature gestational_weeks birth_weight_g birth_height_cm avatar_path note archived created_at updated_at deleted version device_id",
-                    set("birthday", "created_at"), set("is_premature", "archived"), enums("gender", map("MALE", "男", "FEMALE", "女", "UNKNOWN", "未填")),
+            global("children", "宝宝列表", "id name gender birthday is_premature gestational_weeks birth_weight_g birth_height_cm avatar_path note feeding_method archived created_at updated_at deleted version device_id",
+                    set("birthday", "created_at"), set("is_premature", "archived"), enums("gender", map("MALE", "男", "FEMALE", "女", "UNKNOWN", "未填"), "feeding_method", FEEDING_METHOD),
                     set("updated_at", "deleted", "device_id", "avatar_path"),
-                    headers("name", "昵称", "gender", "性别", "birthday", "生日", "is_premature", "早产", "gestational_weeks", "孕周", "birth_weight_g", "出生体重(g)", "birth_height_cm", "出生身长(cm)", "archived", "已归档")),
+                    headers("name", "昵称", "gender", "性别", "birthday", "生日", "is_premature", "早产", "gestational_weeks", "孕周", "birth_weight_g", "出生体重(g)", "birth_height_cm", "出生身长(cm)", "feeding_method", "喂养方式", "archived", "已归档")),
             child("record_type_settings", "记录开关", "id child_id record_type enabled start_age_days end_age_days created_at updated_at deleted version device_id",
                     set(), set("enabled"), enums("record_type", RECORD_TYPE), set(),
                     headers("record_type", "记录类型", "enabled", "已启用", "start_age_days", "起始日龄", "end_age_days", "截止日龄")),

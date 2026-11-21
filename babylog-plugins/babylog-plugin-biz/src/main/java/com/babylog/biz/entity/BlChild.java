@@ -52,6 +52,14 @@ public class BlChild extends BlSyncDO {
     /** 备注 */
     private String note;
 
+    /**
+     * M57 喂养方式（宝宝档案可改，四端同步）：
+     * BREAST_ONLY 纯母乳 / FORMULA_ONLY 纯配方 / MIXED 混合；null = 老数据未设置。
+     * 只存枚举 name，绝不存序号（与 gender 同口径）。值域校验在客户端，服务端不强制——
+     * 未知值原样下发，避免新枚举上线时旧服务端把整行拒成 8342。
+     */
+    private String feedingMethod;
+
     /** 归档标记（归档 ≠ 删除）：0 否 1 是 */
     private Integer archived;
 

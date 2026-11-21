@@ -77,6 +77,8 @@ dev 服同账号双设备 push/pull 实测互通（含 `categories` 四分类 + 
 | M32 | 正式服部署新版：1Panel + 正式库清空重灌 + 正服冒烟 19/19 |
 | S2+S3 | PivotOS 严格整改：动态 SQL 彻底消除，23 视图实体 + 类型化存储 |
 | M46 | 记录增强链第一棒：18 号契约 + Flyway V2.2.14（`bl_baths.ended_at` / `bl_sleeps.transitions`），biz 228/228 + dev 冒烟 19/19 |
+| M56 | 同步修复：`/sync/ping` 长轮询改 `CountDownLatch` 阻塞式（弃 `DeferredResult`，避免 SaToken ThreadLocal 在 async dispatch 丢失导致 1500）+ `markChanged(visibleUserIds())` 可见范围级变更戳；五仓提交推送，biz 245/245 |
+| M57 | 契约层：Flyway `V2.2.16` 给 `bl_children` 加 `feeding_method VARCHAR(16) NULL`；`BlChild` / `ExportTableSpecs`（`ANDROID_SCHEMA_VERSION` 保持 11）/ `AdminConsoleService` 补齐；新增 `ChildrenFeedingMethodContractTest`；biz 247/247（工作区未提交） |
 
 ## 未解冻 / 候选（非 V2 缺口）
 
