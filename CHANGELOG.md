@@ -87,6 +87,7 @@ dev 服同账号双设备 push/pull 实测互通（含 `categories` 四分类 + 
 | M63 | 纯收口：龙哥四项拍板 —— ① 暂无新需求、纯收口（不落代码）；② 5 个未提交文档改为**现在单独 commit**（覆盖 M62「随下批入库」口径，只 commit 不 push、双推由龙哥）；③ 正服 `flyway_schema_history` 已由龙哥在 1Panel 直接确认（`V2.2.16` Success、无 failed），**回填 PROGRESS** 覆盖 M62「间接铁证 + 待确认」；④ M62 遗留的核对单 4.1 #1/#10「ping 返回 long 数字」滞后表述本轮一并修订为「正服实测 JSON 字符串、全局 Long→String 无例外」（该文件在工作区根独立目录、不入库）。M63 四核只读复核六仓零漂移、两处临时域名 diff 四段归零；`记录.md` 与测试环境 4 包保持不动；本批各仓 1 个 `docs(M63)` 提交后未提交项归零、tracking 仍停 M57（ahead=1） |
 | M64 | 纯收口：龙哥三项拍板 —— ① 暂无新需求、纯收口（不落代码）；② 实测五仓仍 `ahead=1`，本批 5 个 `docs(M63)` **暂不处理双推**（保持留痕、AI 不代跑 push / 不给待推清单 / 不核实远端实时 SHA，双推仍由龙哥）；③ 暂无其他待办（V3 候选评估不启动）。M64 七核只读复核六仓零漂移、两处临时域名 diff 四段归零、18080 无监听、核对单 4.1 无「long 数字」残留 + M62 实测注记在；`记录.md` 与测试环境 6 条目保持不动。本会话零 commit / 零 push，收口写入后 4 仓 `PROGRESS.md` + server `CHANGELOG.md` 成为 5 个未提交文档、按 M62 惯例随下一批代码一并入库 |
 | M67 | 服务端契约层（M67-A，2026-11-23）：新增第 19 张同步表 `bl_product_prefs`（Flyway `V2.2.17`）与 `bl_products.sort_order`（需求 #7）；偏好语义=**家庭共享**（龙哥拍板）；后台 `sortOrder` 可编辑、`defaultCount` 只读聚合（需求 #8 后台仅查看默认值）。biz **248/248**、ArchUnit **24/24**、本地 dev 服 e2e **10/10**；只动 server 仓、未 commit / 未 push；四端与后台 ui（M67-B~F）、M68 疫苗链未开工 |
+| M67-H | 跨版本兼容修复（2026-11-23）：`products.sort_order` 登记为「载荷缺键保留现值」（`SyncSpec.preserveOnAbsentProperties`）。M67-A 上线后，M67 之前的 App 载荷无 `sortOrder` 键，按既有「缺键 = null」契约会在更新路径拼出 `SET sort_order = NULL` 撞 NOT NULL → 整条 8342，表现为老用户「改了产品名没生效」；而补 0 又会把后台设的排序静默清零。biz **253/253**（新增 5 例）、ArchUnit **24/24**；未登记列的既有契约零变化 |
 
 ### M67 · 服务端产品偏好契约层（M67-A，2026-11-23）
 
@@ -126,6 +127,42 @@ Flyway 自动迁移 → `/tmp/m67a-dev-e2e.js` **10/10**：注册独立账号 �
 关联产品（M67-B~E）、后台 ui 排序编辑列（M67-F）、M68 疫苗链均未开工。
 `defaultCount` 是跨账号聚合计数，家庭共享语义下读侧仍须按 product_id+category 收敛，
 展示口径由 M67-F 决定。
+
+### 修复（M67-H · products.sort_order 跨版本兼容，2026-11-23）
+
+**问题**：`bl_products.sort_order` 是 V2.2.17 新增的 `INT(11) NOT NULL DEFAULT 0` 列。
+M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。同步存储对「缺键」的
+既有契约是「按 null 写入」（对齐旧 ODKU 显式绑定 NULL），于是同一条老载荷在两条路径上
+表现不同：
+
+| 路径 | 实际行为 | 用户感受 |
+|---|---|---|
+| 更新（行已存在） | `SET sort_order = NULL` 撞 NOT NULL → 整条 8342 拒收 | 改产品名/停用产品「没生效」，下次拉取又变回旧值 |
+| 插入（新自定义产品） | MyBatis-Plus `NOT_NULL` 策略省略该列 → 落列 DEFAULT 0 | 正常（正好等于「不参与排序」） |
+
+**修法**：不给 `sortOrder` 补 0——那会把后台设的排序静默清零；改为在注册表上显式登记
+「缺键保留现值」，把「缺键」与「显式 null」彻底分开：
+
+- `SyncViewRegistry.SyncSpec` 新增第 6 个组件 `preserveOnAbsentProperties`，并保留原 5 参
+  构造器，既有 23 处注册零改动；仅 `PRODUCTS` 登记 `{sortOrder}`。
+- `GenericSyncTableHandler.upsert`：缺键且登记在该集合的列**不写实体、不进更新 SET**；
+  `versionGatedUpdate` 按此跳过。显式 null（键存在、值 null）不放宽，仍由库拒绝 → 8342。
+- 插入路径不变：实体里该字段仍为 null，由 MP 的 `NOT_NULL` 策略省略，落列 DEFAULT 0。
+
+**契约边界（刻意不扩散）**：只对登记列生效。未登记列「缺键 = 置 NULL」的既有契约、
+插入路径的列 DEFAULT 行为全部零变化——`SyncStoreH2Test.missingPayloadFieldsGetNullNotDefaults`
+仍绿即是证据。后续若再加 NOT NULL 列且要求老客户端无感，登记一行即可。
+
+**测试**：新增 `SyncStoreProductCompatH2Test` 4 例（H2 真库 + 真实 MyBatis-Plus 链路，
+表结构镜像 V2.2.4 + V2.2.7 user_id + V2.2.17 sort_order）：老载荷改名保留排序、
+老载荷首插落 DEFAULT 0、显式 null 仍被库拒、未登记列缺键仍置 NULL；
+`SyncViewRegistryTest` 加注册守卫（**只有** products 的 `sortOrder`，且不得与拒收列重叠）。
+
+**验证**：biz **253/253**（原 248 + 新增 5）、ArchUnit **24/24**、`BUILD SUCCESS`。
+
+**边界**：本批只动 server 仓，未 commit / 未 push；未起 18080 用真实老载荷打一发
+（H2 覆盖的是同一条 `versionGatedUpdate` SQL 路径，差别仅 H2 与 MySQL 的报错码）；
+客户端零改动——新版本本来就发 `sortOrder`，老版本靠本次服务端兜底。
 
 ## 未解冻 / 候选（非 V2 缺口）
 

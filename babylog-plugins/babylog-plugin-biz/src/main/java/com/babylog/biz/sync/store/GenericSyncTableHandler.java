@@ -14,6 +14,7 @@ import org.springframework.dao.DuplicateKeyException;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ public class GenericSyncTableHandler<E extends BlSyncDO> implements SyncTableHan
     private final Object pullPredicateValue;
     private final SFunction<E, ?> builtinColumn;
     private final Set<String> rejectNullProperties;
+    private final Set<String> preserveOnAbsentProperties;
 
     public GenericSyncTableHandler(SyncTable table, BaseMapper<E> mapper, Class<E> viewClass,
                                    SyncViewRegistry.SyncSpec spec) {
@@ -56,6 +58,7 @@ public class GenericSyncTableHandler<E extends BlSyncDO> implements SyncTableHan
         this.builtinColumn = SyncViewRegistry.builtinProperty(table) == null
                 ? null : SyncLambdas.resolve(viewClass, SyncViewRegistry.builtinProperty(table));
         this.rejectNullProperties = spec.rejectNullProperties();
+        this.preserveOnAbsentProperties = spec.preserveOnAbsentProperties();
     }
 
     @Override
@@ -111,7 +114,19 @@ public class GenericSyncTableHandler<E extends BlSyncDO> implements SyncTableHan
         E entity = newEntity();
         entity.setId(id);
         // 载荷 → 实体：只取该表登记过的载荷列（对象层赋值，与 SQL 无关）
+        //
+        // 「缺键」≠「显式 null」：缺键 = 该客户端版本不认识这一列（服务端新增列后，
+        // 老版本 App 的载荷里没有这个键）。登记在 preserveOnAbsentProperties 的列缺键时
+        // 既不写实体、也不进更新 SET —— 保留库中现值，避免「撞 NOT NULL 整条拒收」
+        // 或「静默清掉别的端刚写的值」。其余列沿用既有契约（缺键按 null 写入，
+        // 与旧 ODKU 显式绑定 NULL 同口径；插入时由 MyBatis-Plus 的 NOT_NULL 策略省略该列，
+        // 落到建表脚本的 DEFAULT）。
+        Set<String> absentPreserved = new HashSet<>();
         for (String property : meta.payloadProperties()) {
+            if (!payload.containsKey(property) && preserveOnAbsentProperties.contains(property)) {
+                absentPreserved.add(property);
+                continue;
+            }
             Object value = payload.get(property);
             if (value == null && rejectNullProperties.contains(property)) {
                 // 对齐旧 ODKU 行为：NOT NULL（带默认值）列收到显式 null 时由库拒绝，
@@ -137,15 +152,17 @@ public class GenericSyncTableHandler<E extends BlSyncDO> implements SyncTableHan
         SyncPropertyAccess.write(entity, "updateTime", now);
 
         // 1) 版本门禁原子更新（替代 ODKU 的 IF(:version > version, …) 逐列裁决）
-        if (versionGatedUpdate(entity, version, now) > 0) {
+        if (versionGatedUpdate(entity, version, now, absentPreserved) > 0) {
             return;
         }
-        // 2) 行不存在 → 插入（归属与审计列只在此刻写入）
+        // 2) 行不存在 → 插入（归属与审计列只在此刻写入；
+        //    absentPreserved 的列此刻在实体里是 null，由 MyBatis-Plus 的 NOT_NULL 策略省略，
+        //    落建表脚本的列 DEFAULT ——「老客户端不参与排序」正好等于 sort_order DEFAULT 0）
         try {
             mapper.insert(entity);
         } catch (DuplicateKeyException e) {
             // 3) 唯一键竞争：并发同 id 首插，一方已落库 → 交回版本门禁裁决
-            if (versionGatedUpdate(entity, version, now) == 0) {
+            if (versionGatedUpdate(entity, version, now, absentPreserved) == 0) {
                 // 对方已写入不旧于本方的版本：last-write-wins 输掉，幂等跳过
                 // （与服务层 skipped 同语义，不抛错——客户端重推安全）
             }
@@ -208,11 +225,14 @@ public class GenericSyncTableHandler<E extends BlSyncDO> implements SyncTableHan
      * 版本门禁条件更新：{@code SET <载荷列>=?, update_by=?, update_time=?, version=? WHERE id=? AND version<?}。
      * 单行原子裁决——并发推送谁先谁后都不会出现旧版本覆盖新版本；
      * 归属列（user_id/owner_user_id）刻意不在 SET 里：更新路径永不改写归属（与旧 ODKU 同）。
+     *
+     * @param absentPreserved 载荷整键缺失且登记为「保留现值」的列：不进 SET，库里原值不动
      */
-    private int versionGatedUpdate(E entity, long payloadVersion, LocalDateTime now) {
+    private int versionGatedUpdate(E entity, long payloadVersion, LocalDateTime now,
+                                   Set<String> absentPreserved) {
         LambdaUpdateWrapper<E> wrapper = new LambdaUpdateWrapper<>();
         for (String property : meta.payloadProperties()) {
-            if ("version".equals(property)) {
+            if ("version".equals(property) || absentPreserved.contains(property)) {
                 continue;
             }
             wrapper.set(column(property), SyncPropertyAccess.read(entity, property));

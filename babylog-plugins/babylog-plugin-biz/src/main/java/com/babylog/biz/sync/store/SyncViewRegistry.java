@@ -20,12 +20,30 @@ import java.util.Set;
  */
 public final class SyncViewRegistry {
 
-    /** 一张同步表的注册规格 */
+    /**
+     * 一张同步表的注册规格。
+     *
+     * @param rejectNullProperties      显式 null 打到 NOT NULL 列时按库拒绝语义拒收（8342）
+     * @param preserveOnAbsentProperties <b>载荷整键缺失</b>时保留库中现值的列（不写实体、不进 SET）。
+     *                                   「缺键」与「显式 null」是两件事：缺键 = 该客户端版本不认识
+     *                                   这一列（服务端新增列后的老版本 App），置 NULL 既可能撞
+     *                                   NOT NULL 约束整条拒收，也可能静默清掉别的端刚写的值。
+     */
     public record SyncSpec(SyncTable table,
                            Class<? extends com.babylog.biz.entity.BlSyncDO> viewClass,
                            String predicateProperty,
                            Object predicateValue,
-                           Set<String> rejectNullProperties) {
+                           Set<String> rejectNullProperties,
+                           Set<String> preserveOnAbsentProperties) {
+
+        /** 兼容既有写法：不声明「缺键保留」列 */
+        public SyncSpec(SyncTable table,
+                        Class<? extends com.babylog.biz.entity.BlSyncDO> viewClass,
+                        String predicateProperty,
+                        Object predicateValue,
+                        Set<String> rejectNullProperties) {
+            this(table, viewClass, predicateProperty, predicateValue, rejectNullProperties, Set.of());
+        }
     }
 
     /** 一张 base 运营表的注册规格 */
@@ -44,8 +62,12 @@ public final class SyncViewRegistry {
                     com.babylog.biz.sync.entity.BlFamilyMemberSyncView.class, null, null, Set.of()),
             new SyncSpec(SyncTable.MEMBER_PERMISSIONS,
                     com.babylog.biz.sync.entity.BlMemberPermissionSyncView.class, null, null, Set.of()),
+            // M67-H：products.sort_order（V2.2.17 新增，NOT NULL DEFAULT 0）登记为「缺键保留」。
+            // M67-A 上线后，老版本 App 的 products 载荷没有 sortOrder 键：若按缺键=null 写入，
+            // 更新路径会 SET sort_order = NULL 撞 NOT NULL → 整条 8342 拒收，表现为
+            // 「改了产品名没生效」；而补 0 又会把后台设的排序静默清零。故缺键时保留现值。
             new SyncSpec(SyncTable.PRODUCTS, com.babylog.biz.sync.entity.BlProductSyncView.class,
-                    null, null, Set.of()),
+                    null, null, Set.of(), Set.of("sortOrder")),
             // M67：产品偏好（第 19 张同步表），无谓词、无 NOT NULL 拒收列
             new SyncSpec(SyncTable.PRODUCT_PREFS,
                     com.babylog.biz.sync.entity.BlProductPrefSyncView.class, null, null, Set.of()),

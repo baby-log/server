@@ -220,6 +220,27 @@ class SyncViewRegistryTest {
         assertThat(SyncViewRegistry.syncSpec(SyncTable.SLEEPS).rejectNullProperties()).isEmpty();
     }
 
+    @Test
+    void preserveOnAbsentIsRegisteredOnlyForProductSortOrder() {
+        // M67-H：products.sort_order 是 V2.2.17 新增的 NOT NULL DEFAULT 0 列，M67 之前的 App
+        // 载荷里没有这个键。缺键时保留库中现值——置 NULL 会整条 8342 拒收（老用户改品名失效），
+        // 补 0 会把后台设的排序静默清零。其余表不登记：缺键维持「按 null 写入」的既有契约。
+        SyncViewRegistry.SyncSpec products = SyncViewRegistry.syncSpec(SyncTable.PRODUCTS);
+        assertThat(products.preserveOnAbsentProperties()).containsExactly("sortOrder");
+        for (SyncTable table : SyncTable.values()) {
+            if (table != SyncTable.PRODUCTS) {
+                assertThat(SyncViewRegistry.syncSpec(table).preserveOnAbsentProperties())
+                        .as("%s 不应有缺键保留列", table.apiName()).isEmpty();
+            }
+        }
+        // 登记列必须是真实载荷列，且不得同时是拒收列（「缺键保留」与「显式 null 拒收」互斥）
+        SyncEntityMeta meta = SyncEntityMeta.from(products.viewClass(),
+                SyncTable.PRODUCTS.serverOwnedProperties());
+        assertThat(meta.payloadProperties()).containsAll(products.preserveOnAbsentProperties());
+        assertThat(products.rejectNullProperties())
+                .doesNotContainAnyElementsOf(products.preserveOnAbsentProperties());
+    }
+
     private static Field declaredField(Class<?> type, String name) {
         try {
             return type.getDeclaredField(name);
