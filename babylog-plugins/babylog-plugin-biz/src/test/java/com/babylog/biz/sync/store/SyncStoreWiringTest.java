@@ -13,6 +13,7 @@ import com.babylog.biz.sync.mapper.BlMeasurementSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlMedicationSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlMemberPermissionSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlProductSyncViewMapper;
+import com.babylog.biz.sync.mapper.BlProductPrefSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlPumpSessionSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlRecordTypeRuleSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlRecordTypeSettingSyncViewMapper;
@@ -40,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * 存储层接线守卫（PivotOS 严格整改 S3）：
  * <ol>
- *   <li>22 个 @Bean 装配方法用 mock Mapper 逐个实例化 Handler——任何一张表的
+ *   <li>23 个 @Bean 装配方法用 mock Mapper 逐个实例化 Handler——任何一张表的
  *       视图实体/列推导/SFunction 解析有问题都会在这里炸（启动前拦截）；</li>
  *   <li>{@link MybatisPlusSyncRecordStore} 注册完整性 fail-fast（缺表/重表即拒）与
  *       路由、limit 钳位、契约异常逐项钉死。</li>
@@ -49,7 +50,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class SyncStoreWiringTest {
 
-    /** 用 mock Mapper 跑通全部装配方法，返回 18 个同步 Handler（与配置一一对应） */
+    /** 用 mock Mapper 跑通全部装配方法，返回 19 个同步 Handler（与配置一一对应） */
     private static List<SyncTableHandler> wiredSyncHandlers() {
         SyncStoreHandlerConfiguration config = new SyncStoreHandlerConfiguration();
         List<SyncTableHandler> handlers = new ArrayList<>();
@@ -58,6 +59,7 @@ class SyncStoreWiringTest {
         handlers.add(config.familyMembersSyncTableHandler(Mockito.mock(BlFamilyMemberSyncViewMapper.class)));
         handlers.add(config.memberPermissionsSyncTableHandler(Mockito.mock(BlMemberPermissionSyncViewMapper.class)));
         handlers.add(config.productsSyncTableHandler(Mockito.mock(BlProductSyncViewMapper.class)));
+        handlers.add(config.productPrefsSyncTableHandler(Mockito.mock(BlProductPrefSyncViewMapper.class)));
         handlers.add(config.remindersSyncTableHandler(Mockito.mock(BlReminderSyncViewMapper.class)));
         handlers.add(config.feedingsSyncTableHandler(Mockito.mock(BlFeedingSyncViewMapper.class)));
         handlers.add(config.diapersSyncTableHandler(Mockito.mock(BlDiaperSyncViewMapper.class)));
@@ -85,9 +87,9 @@ class SyncStoreWiringTest {
     }
 
     @Test
-    void allEighteenSyncAndFourBaseHandlersWireUp() {
+    void allNineteenSyncAndFourBaseHandlersWireUp() {
         List<SyncTableHandler> syncHandlers = wiredSyncHandlers();
-        assertThat(syncHandlers).hasSize(18);
+        assertThat(syncHandlers).hasSize(19);
         assertThat(syncHandlers.stream().map(SyncTableHandler::table))
                 .containsExactlyInAnyOrder(SyncTable.values());
         List<BaseTableHandler> baseHandlers = wiredBaseHandlers();

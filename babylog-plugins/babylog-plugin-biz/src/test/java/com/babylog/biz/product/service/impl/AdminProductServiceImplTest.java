@@ -1,13 +1,19 @@
 package com.babylog.biz.product.service.impl;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.babylog.biz.api.enums.BabyLogErrorCode;
 import com.babylog.biz.entity.BlProduct;
+import com.babylog.biz.entity.BlProductPref;
 import com.babylog.biz.mapper.BlProductMapper;
+import com.babylog.biz.mapper.BlProductPrefMapper;
 import com.babylog.biz.product.dto.ProductEditCmd;
 import com.babylog.biz.product.vo.ProductVO;
 import com.babylog.common.core.exception.ServiceException;
 import com.babylog.common.core.page.PageResult;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -38,8 +44,20 @@ class AdminProductServiceImplTest {
 
     private static final int BUILTIN = 1;
 
+    @BeforeAll
+    static void initMybatisPlusLambdaCache() {
+        // 单测 JVM 没有 MP 启动引导：countDefaults() 的 .select(SFunction) 立即解析
+        // 方法引用，需要实体 TableInfo 缓存，否则抛 can not find lambda cache
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        TableInfoHelper.initTableInfo(assistant, BlProduct.class);
+        TableInfoHelper.initTableInfo(assistant, BlProductPref.class);
+    }
+
     @Mock
     private BlProductMapper productMapper;
+
+    @Mock
+    private BlProductPrefMapper productPrefMapper;
 
     @InjectMocks
     private AdminProductServiceImpl service;
@@ -52,6 +70,7 @@ class AdminProductServiceImplTest {
         row.setName("维生素 AD 滴剂");
         row.setIsBuiltin(BUILTIN);
         row.setEnabled(1);
+        row.setSortOrder(5);
         row.setVersion(7L);
         row.setServerUpdatedAt(LocalDateTime.of(2026, 11, 12, 10, 0));
         return row;
@@ -64,6 +83,7 @@ class AdminProductServiceImplTest {
         cmd.setName("新品名");
         cmd.setSpec("15ml");
         cmd.setDefaultDose("每日 1 粒");
+        cmd.setSortOrder(88);
         cmd.setNote("备注");
         cmd.setIconPath("file-123");
         cmd.setEnabled(0);
@@ -77,14 +97,36 @@ class AdminProductServiceImplTest {
         page.setRecords(List.of(row));
         page.setTotal(1);
         when(productMapper.selectPage(any(), any())).thenReturn(page);
+        when(productPrefMapper.selectList(any())).thenReturn(List.of());
 
         PageResult<ProductVO> result = service.page(new com.babylog.biz.product.dto.ProductPageQuery());
 
         assertThat(result.getTotal()).isEqualTo(1);
         ProductVO vo = result.getList().get(0);
         assertThat(vo.getId()).isEqualTo(10L);
+        assertThat(vo.getSortOrder()).isEqualTo(5);
+        assertThat(vo.getDefaultCount()).isZero();
         assertThat(vo.getVersion()).isEqualTo(7L);
         assertThat(vo.getServerUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void page_aggregatesDefaultCountAcrossAccounts() {
+        // M67 需求 #8：后台可查看默认值（不提供设置/取消）——聚合 is_default=1 偏好行数
+        BlProduct row = builtinRow(10L);
+        Page<BlProduct> page = new Page<>(1, 10);
+        page.setRecords(List.of(row));
+        page.setTotal(1);
+        when(productMapper.selectPage(any(), any())).thenReturn(page);
+        BlProductPref p1 = new BlProductPref();
+        p1.setProductId(10L);
+        BlProductPref p2 = new BlProductPref();
+        p2.setProductId(10L);
+        when(productPrefMapper.selectList(any())).thenReturn(List.of(p1, p2));
+
+        PageResult<ProductVO> result = service.page(new com.babylog.biz.product.dto.ProductPageQuery());
+
+        assertThat(result.getList().get(0).getDefaultCount()).isEqualTo(2L);
     }
 
     @Test
@@ -103,6 +145,7 @@ class AdminProductServiceImplTest {
         assertThat(saved.getName()).isEqualTo("新品名");
         assertThat(saved.getSpec()).isEqualTo("15ml");
         assertThat(saved.getDefaultDose()).isEqualTo("每日 1 粒");
+        assertThat(saved.getSortOrder()).isEqualTo(88);
         assertThat(saved.getNote()).isEqualTo("备注");
         assertThat(saved.getIconPath()).isEqualTo("file-123");
         assertThat(saved.getEnabled()).isZero();

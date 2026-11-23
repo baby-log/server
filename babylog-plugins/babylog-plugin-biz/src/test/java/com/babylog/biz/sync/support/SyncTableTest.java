@@ -13,8 +13,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class SyncTableTest {
 
     @Test
-    void registryCoversExactlyTheEighteenSyncTables() {
-        assertThat(SyncTable.values()).hasSize(18);
+    void registryCoversExactlyTheNineteenSyncTables() {
+        // M67：product_prefs（产品偏好）成为第 19 张同步表
+        assertThat(SyncTable.values()).hasSize(19);
     }
 
     @Test
@@ -33,15 +34,16 @@ class SyncTableTest {
 
         assertThat(feedingOnly).contains(SyncTable.FEEDINGS);
         // 基础设施表（无分类）任何时候都要下发，否则拉回来的业务记录连 child_id 都对不上
-        assertThat(feedingOnly).contains(SyncTable.CHILDREN, SyncTable.PRODUCTS, SyncTable.REMINDERS,
-                SyncTable.RECORD_TYPE_SETTINGS, SyncTable.FAMILY_MEMBERS, SyncTable.MEMBER_PERMISSIONS);
+        assertThat(feedingOnly).contains(SyncTable.CHILDREN, SyncTable.PRODUCTS, SyncTable.PRODUCT_PREFS,
+                SyncTable.REMINDERS, SyncTable.RECORD_TYPE_SETTINGS, SyncTable.FAMILY_MEMBERS,
+                SyncTable.MEMBER_PERMISSIONS);
         // 分类过滤生效：护理/健康/医疗的表示例都不该出现
         assertThat(feedingOnly).doesNotContain(SyncTable.DIAPERS, SyncTable.MEASUREMENTS, SyncTable.VISITS);
     }
 
     @Test
     void nullCategoriesMeansEverything() {
-        assertThat(SyncTable.forCategories(null)).hasSize(18);
+        assertThat(SyncTable.forCategories(null)).hasSize(19);
     }
 
     @Test

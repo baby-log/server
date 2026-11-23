@@ -149,7 +149,7 @@ class SyncServiceImplTest {
         // 没有新数据时不能把游标清成 0，否则客户端下次变成全量重拉
         assertThat(vo.getNextSince()).isZero();
         assertThat(vo.getNextSinceId()).isZero();
-        verify(store, times(18)).selectChanges(any(), eq(List.of(USER_ID)), any(), eq(0L),
+        verify(store, times(19)).selectChanges(any(), eq(List.of(USER_ID)), any(), eq(0L),
                 eq(SyncServiceImpl.DEFAULT_PULL_LIMIT));
     }
 

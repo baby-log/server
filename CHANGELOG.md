@@ -86,6 +86,46 @@ dev 服同账号双设备 push/pull 实测互通（含 `categories` 四分类 + 
 | M62 | 正服部署结果回填（龙哥手动完成）+ 授权验收冒烟：正式域名 + 独立账号 35/35 全绿（19/19 判据 + M53 ping/conflicts/进行中行跨设备可见/计时收尾 + M57 feeding_method 往返作 V2.2.16 间接铁证）；只读复核六仓零漂移、两处临时域名 M62 三核归零；四项决策（部署完成授权冒烟 / 5 文档随下批入库不 commit / 记录留痕全部不动 / 暂无新需求）；正服实测 ping lastChangeAt 是字符串（覆盖核对单 4.1 旧描述），无一是线上缺陷 |
 | M63 | 纯收口：龙哥四项拍板 —— ① 暂无新需求、纯收口（不落代码）；② 5 个未提交文档改为**现在单独 commit**（覆盖 M62「随下批入库」口径，只 commit 不 push、双推由龙哥）；③ 正服 `flyway_schema_history` 已由龙哥在 1Panel 直接确认（`V2.2.16` Success、无 failed），**回填 PROGRESS** 覆盖 M62「间接铁证 + 待确认」；④ M62 遗留的核对单 4.1 #1/#10「ping 返回 long 数字」滞后表述本轮一并修订为「正服实测 JSON 字符串、全局 Long→String 无例外」（该文件在工作区根独立目录、不入库）。M63 四核只读复核六仓零漂移、两处临时域名 diff 四段归零；`记录.md` 与测试环境 4 包保持不动；本批各仓 1 个 `docs(M63)` 提交后未提交项归零、tracking 仍停 M57（ahead=1） |
 | M64 | 纯收口：龙哥三项拍板 —— ① 暂无新需求、纯收口（不落代码）；② 实测五仓仍 `ahead=1`，本批 5 个 `docs(M63)` **暂不处理双推**（保持留痕、AI 不代跑 push / 不给待推清单 / 不核实远端实时 SHA，双推仍由龙哥）；③ 暂无其他待办（V3 候选评估不启动）。M64 七核只读复核六仓零漂移、两处临时域名 diff 四段归零、18080 无监听、核对单 4.1 无「long 数字」残留 + M62 实测注记在；`记录.md` 与测试环境 6 条目保持不动。本会话零 commit / 零 push，收口写入后 4 仓 `PROGRESS.md` + server `CHANGELOG.md` 成为 5 个未提交文档、按 M62 惯例随下一批代码一并入库 |
+| M67 | 服务端契约层（M67-A，2026-11-23）：新增第 19 张同步表 `bl_product_prefs`（Flyway `V2.2.17`）与 `bl_products.sort_order`（需求 #7）；偏好语义=**家庭共享**（龙哥拍板）；后台 `sortOrder` 可编辑、`defaultCount` 只读聚合（需求 #8 后台仅查看默认值）。biz **248/248**、ArchUnit **24/24**、本地 dev 服 e2e **10/10**；只动 server 仓、未 commit / 未 push；四端与后台 ui（M67-B~F）、M68 疫苗链未开工 |
+
+### M67 · 服务端产品偏好契约层（M67-A，2026-11-23）
+
+**需求与根因**：13 项优化里的产品共享 / 排序 / 默认值 / 上次使用（#1/#6~#11）。现有
+`bl_products.enabled/last_used_at` 与全局产品定义同行；内置产品 id 1~99 经 base 单向
+下发、push 8345 拒，无法承载「内置产品也可设默认/启停」；Mini 自定义产品纯本地
+wx Storage 不接主同步通道，是 #1 共享失败的根因。
+
+**两项拍板**（龙哥 11-23）：
+1. 偏好（启停/默认/上次使用）= **家庭共享**：`product_prefs` 行随 `visibleUserIds`
+   下发、家庭内成员可见可改（M16 家庭维度归属放行）；客户端写前查同 `product_id`
+   已有行收敛，竞态产生的跨账号重复行按 version 取最新防御。
+2. 排序 `sort_order` 存**产品行**（产品级共享，后台可维护含内置行）；选择排序口径 =
+   上次使用 → 默认 → `sort_order` 降序 → 创建日期降序（需求 #10）。
+
+**落码**：
+- `V2.2.17__bl_product_prefs.sql`：建 `bl_product_prefs`（`uk_user_product(user_id,product_id)`
+  唯一键；`category` 冗余分类免 join；TINYINT 启停/默认）+ `bl_products` 加 `sort_order`；
+  旧列 `enabled/last_used_at` 保留不删（老版本兼容），新逻辑以偏好表为准。
+- `BlProductPref` / `BlProductPrefSyncView` / `BlProductPrefMapper` /
+  `BlProductPrefSyncViewMapper`；`SyncTable` 注册第 19 表（category=null 基础设施）、
+  `SyncViewRegistry` + `SyncStoreHandlerConfiguration` 各注册一行 Handler（注册即用，
+  零 per-table SQL）。8345 是 `PRODUCTS` 专属判断，新表不受影响。
+- 后台：`ProductEditCmd/ProductVO` 补 `sortOrder`，`AdminProductServiceImpl` 编辑可改排序、
+  列表按 sort_order 降序、新增 `defaultCount`（只读聚合 `is_default=1` 偏好行数，
+  **不提供设置/取消**）。
+- 测试：19 表注册守卫（SyncTableTest / SyncViewRegistryTest / SyncStoreWiringTest）、
+  拉取全表次数、后台聚合与 MP lambda 缓存初始化。
+
+**验证**：重打 fat jar（内层 biz jar 实证含 `V2.2.17` 与全部新类）→ 本地 dev 服 18080
+Flyway 自动迁移 → `/tmp/m67a-dev-e2e.js` **10/10**：注册独立账号 → push 偏好行（引用
+内置产品 id=1 不被 8345 拒）→ 全量拉（字段完整、无 `userId` 盖章、`nextSince` 字符串）
+→ 同账号另一 token 可见 → version=2 更新 → `base/products` 内置行带 `sortOrder` 新列。
+正式环境零写、xxl-job 未动、临时 dev 服用完已停。
+
+**边界**：本批只落服务端契约层；四端选择器排序/默认/自定义保存弹框与 #5 品牌/医疗
+关联产品（M67-B~E）、后台 ui 排序编辑列（M67-F）、M68 疫苗链均未开工。
+`defaultCount` 是跨账号聚合计数，家庭共享语义下读侧仍须按 product_id+category 收敛，
+展示口径由 M67-F 决定。
 
 ## 未解冻 / 候选（非 V2 缺口）
 

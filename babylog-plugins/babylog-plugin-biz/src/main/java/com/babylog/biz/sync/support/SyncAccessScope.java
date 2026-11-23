@@ -24,7 +24,7 @@ import java.util.Set;
  *
  * @param memberId         家庭成员行 id（bl_family_members.id）；无家庭为 null
  * @param role             角色（OWNER/CAREGIVER/VIEWER）；无家庭为 null
- * @param visibleUserIds   同步拉取的可见账号集合（18 张同步表的 user_id 过滤条件）
+ * @param visibleUserIds   同步拉取的可见账号集合（19 张同步表的 user_id 过滤条件）
  * @param readableCategories 可读分类集合（拉取时与客户端请求的 categories 取交集）
  * @param writableCategories 可写分类集合（push 写拦截 8343 的裁决依据，M16 起生效）
  */

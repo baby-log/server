@@ -33,6 +33,9 @@ public class BlProduct extends BlSyncDO {
     /** 默认剂量（文本） */
     private String defaultDose;
 
+    /** 展示排序：数字越大越靠前（M67，产品级共享，后台可维护含内置行） */
+    private Integer sortOrder;
+
     /** 最近被记录使用时刻（epoch millis） */
     private Long lastUsedAt;
 

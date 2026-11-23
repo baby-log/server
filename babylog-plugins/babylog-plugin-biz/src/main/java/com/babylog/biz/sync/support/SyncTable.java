@@ -11,6 +11,7 @@ import com.babylog.biz.entity.BlMeasurement;
 import com.babylog.biz.entity.BlMedication;
 import com.babylog.biz.entity.BlMemberPermission;
 import com.babylog.biz.entity.BlProduct;
+import com.babylog.biz.entity.BlProductPref;
 import com.babylog.biz.entity.BlPumpSession;
 import com.babylog.biz.entity.BlRecordTypeSetting;
 import com.babylog.biz.entity.BlReminder;
@@ -26,7 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 同步表注册表：18 张同步表的<b>唯一</b>清单。
+ * 同步表注册表：19 张同步表的<b>唯一</b>清单（M67 新增 product_prefs）。
  *
  * <p>一张表要在同步协议里可用，必须在此登记——登记内容决定四件事：
  * <ol>
@@ -70,6 +71,13 @@ public enum SyncTable {
     MEMBER_PERMISSIONS("member_permissions", "bl_member_permissions", BlMemberPermission.class, null, java.util.Set.of()),
     /** 产品库（基础设施：内置行服务端下发，自定义行用户自己维护） */
     PRODUCTS("products", "bl_products", BlProduct.class, null, java.util.Set.of()),
+    /**
+     * 产品偏好（基础设施，M67 第 19 张表）：启停/默认/上次使用，家庭共享语义——
+     * 行随 visibleUserIds 下发、家庭内成员可见可改（M16 家庭维度归属放行）。
+     * 内置产品（id 1~99）的偏好也存这里：偏好行自身 id 是新雪花，不触发
+     * {@code PRODUCTS} 专属的内置段 8345 拒推。
+     */
+    PRODUCT_PREFS("product_prefs", "bl_product_prefs", BlProductPref.class, null, java.util.Set.of()),
     /** 提醒（基础设施：跨分类，App 靠它驱动本地通知） */
     REMINDERS("reminders", "bl_reminders", BlReminder.class, null, java.util.Set.of()),
 

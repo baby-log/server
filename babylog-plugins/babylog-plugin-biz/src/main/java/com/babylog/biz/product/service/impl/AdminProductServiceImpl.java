@@ -2,7 +2,9 @@ package com.babylog.biz.product.service.impl;
 
 import com.babylog.biz.api.enums.BabyLogErrorCode;
 import com.babylog.biz.entity.BlProduct;
+import com.babylog.biz.entity.BlProductPref;
 import com.babylog.biz.mapper.BlProductMapper;
+import com.babylog.biz.mapper.BlProductPrefMapper;
 import com.babylog.biz.product.dto.ProductEditCmd;
 import com.babylog.biz.product.dto.ProductPageQuery;
 import com.babylog.biz.product.service.AdminProductService;
@@ -16,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 管理端内置产品维护实现。
@@ -31,9 +35,11 @@ public class AdminProductServiceImpl implements AdminProductService {
     private static final int BUILTIN = 1;
 
     private final BlProductMapper productMapper;
+    private final BlProductPrefMapper productPrefMapper;
 
-    public AdminProductServiceImpl(BlProductMapper productMapper) {
+    public AdminProductServiceImpl(BlProductMapper productMapper, BlProductPrefMapper productPrefMapper) {
         this.productMapper = productMapper;
+        this.productPrefMapper = productPrefMapper;
     }
 
     @Override
@@ -45,13 +51,41 @@ public class AdminProductServiceImpl implements AdminProductService {
                         .like(StringUtils.hasText(query.getBrand()), BlProduct::getBrand, query.getBrand())
                         .like(StringUtils.hasText(query.getName()), BlProduct::getName, query.getName())
                         .eq(query.getEnabled() != null, BlProduct::getEnabled, query.getEnabled())
+                        .orderByDesc(BlProduct::getSortOrder)
                         .orderByAsc(BlProduct::getId));
-        return PageUtils.toPageResult(page, page.getRecords().stream().map(AdminProductServiceImpl::toVo).toList());
+        List<Long> ids = page.getRecords().stream().map(BlProduct::getId).toList();
+        Map<Long, Long> defaultCounts = countDefaults(ids);
+        List<ProductVO> rows = page.getRecords().stream().map(row -> {
+            ProductVO vo = toVo(row);
+            vo.setDefaultCount(defaultCounts.getOrDefault(row.getId(), 0L));
+            return vo;
+        }).toList();
+        return PageUtils.toPageResult(page, rows);
     }
 
     @Override
     public ProductVO get(long id) {
-        return toVo(requireBuiltin(id));
+        BlProduct row = requireBuiltin(id);
+        ProductVO vo = toVo(row);
+        vo.setDefaultCount(countDefaults(List.of(id)).getOrDefault(id, 0L));
+        return vo;
+    }
+
+    /**
+     * M67 默认值只读（需求 #8：后台可查看、不提供设置/取消）：统计本页产品被
+     * is_default=1 偏好行命中的条数（跨账号/家庭聚合；业务实体 @TableLogic 已滤墓碑行）。
+     */
+    private Map<Long, Long> countDefaults(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Map.of();
+        }
+        List<BlProductPref> defaults = productPrefMapper.selectList(
+                Wrappers.<BlProductPref>lambdaQuery()
+                        .select(BlProductPref::getProductId)
+                        .in(BlProductPref::getProductId, productIds)
+                        .eq(BlProductPref::getIsDefault, 1));
+        return defaults.stream().collect(Collectors.groupingBy(
+                BlProductPref::getProductId, Collectors.counting()));
     }
 
     @Override
@@ -62,6 +96,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         row.setName(cmd.getName());
         row.setSpec(cmd.getSpec());
         row.setDefaultDose(cmd.getDefaultDose());
+        row.setSortOrder(cmd.getSortOrder());
         row.setNote(cmd.getNote());
         row.setIconPath(cmd.getIconPath());
         row.setEnabled(cmd.getEnabled());
@@ -103,6 +138,7 @@ public class AdminProductServiceImpl implements AdminProductService {
         vo.setName(row.getName());
         vo.setSpec(row.getSpec());
         vo.setDefaultDose(row.getDefaultDose());
+        vo.setSortOrder(row.getSortOrder());
         vo.setNote(row.getNote());
         vo.setIconPath(row.getIconPath());
         vo.setEnabled(row.getEnabled());

@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * App 端基础数据下发端点（M8）。
  *
- * <p>与 18 表同步通道并列的<b>全局数据通道</b>：内置产品（is_builtin=1）不属于任何账号，
+ * <p>与 19 表同步通道并列的<b>全局数据通道</b>：内置产品（is_builtin=1）不属于任何账号，
  * 归属过滤会把它们滤掉，所以单独开端点。返回结构与 {@code /sync/changes} 完全一致
  * （SyncChangesVO），App 端复用同一套解析与 upsert，只是游标独立存一对。
  *

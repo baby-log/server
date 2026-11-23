@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 类型化注册规格守卫（PivotOS 严格整改 S3）：18 张同步表 + 4 张 base 运营表
+ * 类型化注册规格守卫（PivotOS 严格整改 S3）：19 张同步表 + 4 张 base 运营表
  * 每张恰好注册一个视图实体，列清单/谓词/NOT NULL 口径与旧动态 SQL 实现逐条对齐。
  *
  * <p>真正的「无逻辑删除」行为由 {@code SyncStoreH2Test} 在真实 MyBatis-Plus 链路上验证；
@@ -24,8 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SyncViewRegistryTest {
 
     @Test
-    void syncSpecsCoverExactlyTheEighteenTablesOnceEach() {
-        assertThat(SyncViewRegistry.syncSpecs()).hasSize(18);
+    void syncSpecsCoverExactlyTheNineteenTablesOnceEach() {
+        assertThat(SyncViewRegistry.syncSpecs()).hasSize(19);
         assertThat(SyncViewRegistry.syncSpecs().stream().map(SyncViewRegistry.SyncSpec::table))
                 .containsExactlyInAnyOrder(SyncTable.values());
         assertThat(SyncViewRegistry.syncSpecs().stream().map(SyncViewRegistry.SyncSpec::table))

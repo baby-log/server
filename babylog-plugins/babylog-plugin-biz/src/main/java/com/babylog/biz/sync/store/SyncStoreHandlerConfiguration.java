@@ -13,6 +13,7 @@ import com.babylog.biz.sync.entity.BlMeasurementSyncView;
 import com.babylog.biz.sync.entity.BlMedicationSyncView;
 import com.babylog.biz.sync.entity.BlMemberPermissionSyncView;
 import com.babylog.biz.sync.entity.BlProductSyncView;
+import com.babylog.biz.sync.entity.BlProductPrefSyncView;
 import com.babylog.biz.sync.entity.BlPumpSessionSyncView;
 import com.babylog.biz.sync.entity.BlRecordTypeRuleSyncView;
 import com.babylog.biz.sync.entity.BlRecordTypeSettingSyncView;
@@ -35,6 +36,7 @@ import com.babylog.biz.sync.mapper.BlMeasurementSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlMedicationSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlMemberPermissionSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlProductSyncViewMapper;
+import com.babylog.biz.sync.mapper.BlProductPrefSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlPumpSessionSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlRecordTypeRuleSyncViewMapper;
 import com.babylog.biz.sync.mapper.BlRecordTypeSettingSyncViewMapper;
@@ -85,6 +87,11 @@ public class SyncStoreHandlerConfiguration {
     @Bean
     public SyncTableHandler productsSyncTableHandler(BlProductSyncViewMapper mapper) {
         return sync(SyncTable.PRODUCTS, mapper, BlProductSyncView.class);
+    }
+
+    @Bean
+    public SyncTableHandler productPrefsSyncTableHandler(BlProductPrefSyncViewMapper mapper) {
+        return sync(SyncTable.PRODUCT_PREFS, mapper, BlProductPrefSyncView.class);
     }
 
     @Bean

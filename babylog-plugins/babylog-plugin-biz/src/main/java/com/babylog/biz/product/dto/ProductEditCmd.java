@@ -36,6 +36,12 @@ public class ProductEditCmd {
     @Size(max = 100, message = "默认剂量最长 100 字")
     private String defaultDose;
 
+    @Schema(description = "展示排序：数字越大越靠前（M67）")
+    @NotNull(message = "排序不能为空")
+    @Min(value = 0, message = "排序最小 0")
+    @Max(value = 999999, message = "排序最大 999999")
+    private Integer sortOrder;
+
     @Schema(description = "备注")
     @Size(max = 500, message = "备注最长 500 字")
     private String note;

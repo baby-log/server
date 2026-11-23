@@ -15,7 +15,7 @@ import java.util.Set;
  * 不是 SQL 片段——S2 之前 {@code SyncTable.pullPredicate()} 那种字符串谓词已彻底移除。
  *
  * <p>本类是注册表的唯一数据源：Spring 装配（{@link SyncStoreHandlerConfiguration}）
- * 与单测共用同一份清单，「18+4 张表每张恰好注册一次」由
+ * 与单测共用同一份清单，「19+4 张表每张恰好注册一次」由
  * {@code SyncViewRegistryTest} 钉死。
  */
 public final class SyncViewRegistry {
@@ -46,6 +46,9 @@ public final class SyncViewRegistry {
                     com.babylog.biz.sync.entity.BlMemberPermissionSyncView.class, null, null, Set.of()),
             new SyncSpec(SyncTable.PRODUCTS, com.babylog.biz.sync.entity.BlProductSyncView.class,
                     null, null, Set.of()),
+            // M67：产品偏好（第 19 张同步表），无谓词、无 NOT NULL 拒收列
+            new SyncSpec(SyncTable.PRODUCT_PREFS,
+                    com.babylog.biz.sync.entity.BlProductPrefSyncView.class, null, null, Set.of()),
             new SyncSpec(SyncTable.REMINDERS, com.babylog.biz.sync.entity.BlReminderSyncView.class,
                     null, null, Set.of()),
             // M53：进行中计时行改为正常下发（用户验收问题 3——一台设备点「开始喝奶」，

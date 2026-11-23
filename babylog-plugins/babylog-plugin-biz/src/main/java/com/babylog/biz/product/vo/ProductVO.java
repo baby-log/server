@@ -26,6 +26,12 @@ public class ProductVO {
     @Schema(description = "默认剂量")
     private String defaultDose;
 
+    @Schema(description = "展示排序：数字越大越靠前（M67，后台可维护）")
+    private Integer sortOrder;
+
+    @Schema(description = "被设为默认产品的偏好行数（M67，跨账号聚合，只读；后台仅查看默认值、不提供设置/取消）")
+    private Long defaultCount;
+
     @Schema(description = "备注")
     private String note;
 
