@@ -164,6 +164,28 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 （H2 覆盖的是同一条 `versionGatedUpdate` SQL 路径，差别仅 H2 与 MySQL 的报错码）；
 客户端零改动——新版本本来就发 `sortOrder`，老版本靠本次服务端兜底。
 
+### M69 · K2 媒体存储底座 · 服务端（2026-11-23~24）
+
+**范围**：只改 server 仓，消费 `独立产品规划/24` 号 ②③④ 契约（**24 号原文未改**）；M 号 M69（写前 grep 六仓 PROGRESS 占用 0）。V3 前零画面数据，不碰云同步开关（K8）。
+
+**新增表**：`V2.2.18__bl_media.sql` → `bl_media_file` / `bl_media_quota`。两表与 `bl_family` / `bl_device` / `bl_vaccine_schedule` / `bl_ai_quota` 同口径，**明确不进 `SyncTable` 枚举、不参与 `/sync/changes`**，走独立业务端点 ⇒ 不新增第 20 张同步表。`user_id` 是直写 `bl_*` 表的必填语义列（正服迁移漏写落 DEFAULT 0 拉不到的坑）；`used_bytes` 口径二选一选「由 `bl_media_file` 聚合」（`SUM(size_bytes) WHERE deleted=0`），不落冗余列避免双写漂移。
+
+**三后端统一接口**：`MediaStorageAdapter`（`backend` / `exists` / `put` / `get` / `delete`），`local` 用 `java.nio`、`cos` / `oss` 共用 `S3MediaStorageAdapter`。S3 侧**复用 `babylog-plugin-file` 的 `S3CompatibleStorageStrategy` 同款 `software.amazon.awssdk:s3`（BOM 仲裁 2.49.3）与 `babylog.file.*` COS 配置键**，零 yml 改动、零新 SDK；因 P0 ArchUnit C1 / A1-A2 禁止 `com.babylog.biz..` 依赖 `com.babylog.file..` 实现层、`IFileFacade` 又无字节流 put/get/delete，故在 biz 内自建 media 垂直域——复用的是同一 SDK / 同一协议 / 同一配置键与构造范式，不是跨插件调用。每行落 `storage_backend` + `object_key`，`MediaStorageRouter` **按行路由** ⇒ 改 `defaultBackend` / `keyPrefix` 只影响新写入，存量键不变，搬迁只能走 `MediaMigrationService`（离线手动工具，禁止隐式全量重定位）。
+
+**端点**：App `/app/babylog/media`（`@SaCheckLogin(app-user)`）7 个、管理端 `/babylog/media`（类级 `@SaCheckLogin(sys)`，不新增菜单权限字符）4 个。读侧按 `visibleUserIds` 家庭口径，不存在与无权统一 8420 避免枚举探测；下载同步返回 `ResponseEntity<byte[]>`（不用 StreamingResponseBody，异步二次 dispatch 会重走鉴权且上下文已清）。出站 Long 全局 `WriteLongAsString`、`isFinalFrame` 用 Integer 0/1、null 键缺省。错误码新开 8420~8427 子段。
+
+**淘汰（24 ④）**：`MediaRetentionService` 三类触发（已确认 2h / 未确认 3 天 / 容量满按 `createdAt` 升序删最早），保护规则统一在 `isProtected`（`linked_record_type`+`linked_record_id` 同时非空 = 已关联正式记录；`isFinalFrame=1` 定稿帧），三类一律跳过并计 `skippedLinked`。**两步删顺序**（④-3 授权 K2 自定）：选「先物理删 → 成功后才 DB 逻辑删」——适配器 `delete` 幂等、失败保留 `deleted=0` 的 DB 行供下次任务自然重试；若反过来先逻辑删，`@TableLogic` 会让 `deleted=1` 行对常规查询不可见，物理删失败就留下扫不回来的孤儿。确认瞬间「定稿帧转存记录附件」实现为**元数据关联**（不复制字节、不新建行），该行因已关联被排除、长期保留。`MediaRetentionJob` 只出 `@XxlJob("mediaRetentionCleanup")` 代码 + 配置清单，**刻意不加 `@PostConstruct` 本地兜底注册**（AI 不启 xxl-job，启停交龙哥）。
+
+**测试**：新增 4 个单测类共 28 例（`MediaStorageRouterTest` 8 / `LocalMediaStorageAdapterTest` 5 / `MediaRetentionServiceTest` 5 / `MediaFileServiceTest` 10），覆盖按行路由、未知后端 8422、本地适配器真实 `@TempDir` 读写与路径穿越、三类淘汰计数、已关联/定稿帧保护、物理删失败保留 DB 行、容量删最早、上传 `user_id` 盖章、`video/*` 拒收、配额满 8424、家庭范围外 8420、两步删顺序、定稿帧确认。
+
+**验证**：biz **281/281**（原 253 + 新增 28）、ArchUnit `P0ArchitectureTest` **24/24**、`test-compile` 257 主源码 + 32 测试源码全绿、`BUILD SUCCESS`。
+
+**坑（本批实证）**：`mvn package -pl babylog-admin-server -DskipTests` 的**增量构建复用了旧 fat jar**——首轮日志写着 `Replacing main artifact`，实际产物 mtime 仍是 16:58（约 7 小时前），抽出 `BOOT-INF/lib/babylog-plugin-biz-3.2.0.jar` 一看：0 个 media 类、无 `V2.2.18`、无 `MEDIA_` 错误码。改走 **`clean package`** 后 mtime=当刻，内嵌核验才全绿（26 media 类 / 1 个 V2.2.18 SQL / 3 个端点与 job 类 / 8 个 `MEDIA_` 错误码）。⇒ 以后「改 main 必重打 fat jar」一律 `clean package`，并**按退出码 + 时间戳 + 内嵌常量池三件套判 OK**，不能只看 BUILD SUCCESS。
+
+**验证未过 / 未执行（如实登记）**：dev 18080 冒烟**未跑**——本机 18080 无监听、3306 无监听、无 mysql 客户端、dev 服未起（脚本 `/tmp/k2_media_smoke.sh` 已备，交龙哥在有库环境执行）；COS 后端**未实测**（dev 未注入 COS 凭据，端点返回 8421 属「后端未配置」，S3 适配器代码路径由本地后端与单测覆盖）；xxl-job 任务创建与启停**交龙哥**。
+
+**边界**：零画面数据、不改 19 张同步表语义、不改 yml 生产凭据、不引统计/崩溃/推送 SDK、不启 plugin-message、不改 23/24/15/18/20/21 原文、不实现 V3.1/V4.1/V4.2、不预先实现 K3、不碰正服 SQL/Navicat/手机、不改隐私 md；**未 commit / 未 push**。
+
 ## 未解冻 / 候选（非 V2 缺口）
 
 - 按宝宝粒度权限裁决、refresh 轮换（M20+ 候选）

@@ -60,6 +60,20 @@
             <artifactId>hutool-all</artifactId>
         </dependency>
 
+        <!-- K2/M69 媒体存储：与 babylog-plugin-file 的 S3CompatibleStorageStrategy 同一个
+             software.amazon.awssdk:s3（BOM 已仲裁 aws-sdk-v2 2.49.3），非新 SDK；
+             biz 不能跨插件依赖 file 实现层（P0 ArchUnit C1），故在 media 垂直域自建字节流适配器 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <!-- K2/M69 淘汰任务：照既有 jobs 体例（MessageCleanupJob）用 @XxlJob + JobExecutionHelper，
+             复用项目内 starter-job（非新 SDK）；AI 不启 xxl-job，启停交龙哥 -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-starter-job</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

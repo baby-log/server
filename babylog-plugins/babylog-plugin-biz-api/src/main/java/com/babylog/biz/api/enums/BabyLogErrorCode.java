@@ -19,6 +19,7 @@ import com.babylog.common.core.enums.error.ErrorCode;
  *   <li>8390-8394 版本公告（M10 管理端）</li>
  *   <li>8395-8399 小程序认证（M20，wx.login code 换 app-user 双 token）</li>
  *   <li>8400-8419 电视设备码绑定（M45）</li>
+ *   <li>8420-8439 媒体存储底座（M69 / K2：上传 / 下载 / 删除 / 配额 / 淘汰 / 迁移）</li>
  * </ul>
  */
 public enum BabyLogErrorCode implements ErrorCode {
@@ -115,6 +116,24 @@ public enum BabyLogErrorCode implements ErrorCode {
     DEVICE_BIND_CONFIRM_LOCKED(8402, "设备码确认失败次数过多，请稍后再试"),
     /** 一次性领奖：已消费或失去最终消费权时都绝不重复返回 token。 */
     DEVICE_BIND_ALREADY_CLAIMED(8403, "设备登录凭证已领取，请重新申请设备码"),
+
+    // ---------- 媒体存储底座（8420-8439，M69 / K2） ----------
+    /** 媒体文件不存在，或不在当前账号的 visibleUserIds 家庭可见范围内（不区分，避免枚举探测） */
+    MEDIA_FILE_NOT_FOUND(8420, "媒体文件不存在或无权访问"),
+    /** 存储后端未配置 / 不可用（dev 本地目录未建、COS/OSS 缺 endpoint 或凭据） */
+    MEDIA_BACKEND_UNAVAILABLE(8421, "存储后端未配置或不可用"),
+    /** 行内 storage_backend 标识不在已注册适配器内（配置漂移 / 迁移中断的兜底） */
+    MEDIA_BACKEND_UNKNOWN(8422, "媒体存储后端标识非法"),
+    /** 上传体为空或超过单对象上限 */
+    MEDIA_PAYLOAD_INVALID(8423, "上传内容为空或超出大小上限"),
+    /** 单个宝宝容量配额已满：非「已关联记录」文件可按「删最早」淘汰后再试 */
+    MEDIA_QUOTA_EXCEEDED(8424, "宝宝媒体容量配额已满"),
+    /** 后台动态调整配额的参数非法（adjustedBytes < 0 等） */
+    MEDIA_QUOTA_INVALID(8425, "配额参数非法"),
+    /** 存储适配器 put/get/delete 失败（区别于 8421：后端在但本次 IO 失败） */
+    MEDIA_STORAGE_IO_FAILED(8426, "媒体对象读写失败"),
+    /** 手动迁移工具：源/目标后端相同或迁移批次中途失败 */
+    MEDIA_MIGRATE_FAILED(8427, "媒体对象迁移失败"),
 
     ;
 
