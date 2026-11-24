@@ -204,3 +204,18 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 - **验证**：biz 单测 **307/307**（原 281 + 26）、ArchUnit `P0ArchitectureTest` **24/24**（本地仓 biz jar 内 20 个 notice 类全在扫描路径，A8 `bl_` 前缀 / A11 类级鉴权 / A10 无 `last()` / A12 无 `${}` / C1-C2 跨插件依赖全绿）、`test-compile` 全绿。
 - **验证未过 / 未跑（如实登记，不伪造）**：`23` §五 K4 五项构造事件冒烟（13:30→13:50 正式记录时间 / 两人同时确认仅一人成功 / 无头异常全体成员可见 / 家庭读侧可见·非成员不可见）**全部未跑**——本机 18080/3306 无监听、无 dev jar、无 mysql 客户端、无登录态。补跑条件：龙哥在有库环境起 dev 服 + 三个 app-user token（同家庭两成员 + 非成员）+ `bash /tmp/k4_notice_smoke.sh`（`bash -n` 通过、缺凭据 SKIP 不伪造）；同等语义已由服务端单测覆盖。
 - **边界 / 遗留**：K0 四项 + K2 三项 + K3 三项遗留不随本节点关闭、只登记移交；零画面数据、不碰云同步开关（K8）、不改 19 张同步表语义、不改 yml 生产凭据、不碰正服 SQL/Navicat/手机/xxl-job、不改 23/24/22/15/18/20/21 原文、未自行判定验收、未生成 K5 提示词；**未 commit / 未 push**，报告后即停待龙哥综合验收。
+
+## K5 · M73 V3.0 AI 第一批 · 服务端（2026-11-24，工作区未提交 · 未纳入版本段落）
+
+> `develop` 上**未提交未提审**的开发批次（M 号 M73），不新开版本号段落、不回改 `[2.4.0]` 及以上历史、不回改 M67/M69/M71 章节。逐条交付与验证见 [PROGRESS.md](PROGRESS.md) 尾章「M73」。
+
+- **拍板（龙哥 2026-11-24）**：设额度 + 超限拒绝（`PARSE_RECORD` 20 次/天、`WEEKLY_REPORT` 2 次/周，数值只在 yml）/ 周报仅按需生成（不引 xxl-job）/ 计次按**家庭 × 功能** / **不做付费入口**（全版本免费、唯一收费=AI 按量的框架不动，也不新增收费项）。
+- **落库**：Flyway `V2.2.20__bl_ai_quota_scope.sql` —— `bl_ai_quota` 加 `scope_key`（`F:<family>` / `U:<user>`），唯一键换 `uk_scope_feature`；仍是**服务端专用表**（不进 `SyncTable`、不参与 `/sync/changes`）。
+- **端点**：`/app/babylog/ai/parse-record`（自然语言 → 草稿，`needConfirm` 恒 true）、`/app/babylog/ai/weekly-report`（按需生成）。**只产草稿、不落库**：19 张同步表零写入，正式记录由客户端确认后走既有 `/sync/push`。
+- **AI 接线**：只走 `plugin-ai` 的 `IAiFacade`（biz 新增只依赖 `babylog-plugin-ai-api`），零新 SDK；用 `dynamicChat` 而非 `internalChat`——没有 AI 配置时宁可报错，也不用静态兜底文案冒充结果。
+- **计次**：预占（单条条件更新 `quota_used < quota_limit`，并发不超额）→ 失败回滚；窗口到期条件归零（DAILY 次日 00:00 / WEEKLY 下周一 00:00）。
+- **降级**：无 provider / 无 Key → `5020`；配了但调用不通（Key 失效 / base-url 不可达）→ `5022`；输出不合 JSON 约束 → `8461`；额度用完 → `8460`（模型一次不调）。全部不抛 5xx、不返空草稿、不伪造内容；5020/5022 均为**复用既有码**，未新造。
+- **周报**：5 张同步表只读聚合出硬数字，模型只写 3~5 句解读（数字不经过模型）。
+- **测试**：新增 3 个单测类 34 例中的 28 例（`AiQuotaServiceTest` 12 / `BabyLogAiServiceTest` 10 / `RecordDraftParserTest` 6）；biz 全量 **335/335**、ArchUnit **24/24**、`clean package` fat jar 三件套核过。
+- **验证未过 / 未跑（如实登记，不伪造）**：dev 18080 冒烟未跑（本机 18080/3306 无监听、无 java/mysql、无登录态）；脚本 `/tmp/k5_ai_smoke.sh` 已备，缺凭据 SKIP 退出码 2。补跑条件见 `babylog-plugin-biz/docs/ai-endpoints-M73.md` §七。
+- **边界**：不做 K6 客户端、不碰 K7 隐私 md / K8 云同步开关、不动媒体与通知底座、不改 19 张同步表语义、不引 SDK、不改 yml 生产凭据、不改 23/24/22/15/18/20/21 原文、未自行判定验收；**未 commit / 未 push**。

@@ -29,3 +29,20 @@
 - **验证**：`mvn -pl babylog-plugins/babylog-plugin-biz test` **307/307**（原 281 + 新增 26：`HeadlessAnomalyRuleTest` 9 / `NoticeServiceTest` 17）、ArchUnit `P0ArchitectureTest` **24/24**（biz jar 内 20 个 notice 类全在扫描路径，A8 表前缀 `bl_` / A11 类级鉴权 / C1-C2 跨插件 / A10 无 `last()` / A12 无 `${}` 全绿）、`test-compile` 全绿。单测层覆盖 13:30/13:50 时间口径、两人确认仅一人成功 + conflicts、单点行如实落库 + 异常标记、`visibleUserIds` 隔离（非家庭成员 8440 / 单用户 scope 排除他人行）、「记游标 → 增量拉」、刚落库 `serverUpdatedAt` 未回填时键缺省不输出 `"0"`。
 - **未过 / 移交（如实登记）**：`23` §五 K4 五项构造事件冒烟**全部未跑**——本机 dev 18080/3306 无监听、无 dev jar、无 mysql 客户端、无登录态，无法注册/登录换 app-user token；补跑条件：龙哥在有库环境起 dev 服（Flyway V2.2.19 已建表）+ 三个 token（同家庭两成员 + 非成员）+ `bash /tmp/k4_notice_smoke.sh`（脚本 `bash -n` 通过、缺凭据时 SKIP 不伪造结果）。K0 四项 / K2 三项 / K3 三项遗留不随本节点关闭；K4 新登记：通知端点未纳入 `AdminControllerPermissionContractTest`（本节点不涉管理端）、`POST /events` 为接收侧验证入口（K9 采集侧接真实事件点时须复用规则引擎语义并复核鉴权/限流）。
 - **状态**：待龙哥综合验收；**未 commit / 未 push**（惯例 A）。四端读侧零改动（通知是小程序内轻量站内消息、按家庭读侧拉取；Android 隐私政策已明写「不接推送 SDK」，不引 SDK / 不改权限 / 不动签名 / 不建本地通知表，不为凑四端硬改）。
+
+## M73 · V3.0 AI 第一批 · 服务端（K5，2026-11-24）
+
+- **节点 / 范围**：K5「③ V3.0」，M 号 **M73**（写前 grep 六仓 PROGRESS `M73` 占用 0）。只改 server 仓；基线 HEAD `43a35e4`/`develop`（K4 M71 仍在工作区未提交）。消费 `09` 会话 R + `10` §十 + `24`，红线以 `22` §七为准。
+- **拍板（龙哥 2026-11-24，四问一次定）**：① 额度 = **设额度 + 超限拒绝**（`PARSE_RECORD` 20 次/天、`WEEKLY_REPORT` 2 次/周，数值只落 yml）；② 周报 = **仅按需生成**（不引 xxl-job）；③ 计次 = **家庭 × 功能**；④ **不做付费入口**（V3.0 无支付通道、小程序禁支付引导）。
+- **落库**：Flyway `V2.2.20__bl_ai_quota_scope.sql` —— `bl_ai_quota` 加 `scope_key`（`F:<family_id>` 家庭共享 / `U:<user_id>` 无家庭），唯一键 `uk_user_feature` → `uk_scope_feature`，`user_id` 退为「最后操作人 + 审计」。**为什么不直接加 family_id**：无家庭时 `family_id=0` 会让所有单用户撞同一行互相吃额度，且唯一索引对 NULL 各自独立、拦不住并发首建。表仍是服务端运营表：**不进 `SyncTable` 枚举 / 不参与 `/sync/changes`**（不新增第 20 张同步表）。
+- **AI 接线（不新造）**：只走 `plugin-ai` 的 `IAiFacade` 契约（biz pom 新增 `babylog-plugin-ai-api`，ArchUnit A1/A2 放行 `com.babylog.ai.api..`），**零新 SDK、零 ChatClient 自装配**；选 `dynamicChat`（无静态兜底）——补录/周报拿不到模型就该明说拿不到，不能用兜底文案冒充 AI。
+- **端点**（`BabyLogAiController`，类级 `@SaCheckLogin(app-user)`、裸 token、路径不占 `/sync/*`）：`POST /app/babylog/ai/parse-record`（自然语言 → 草稿，`needConfirm` 恒 true）/ `POST /app/babylog/ai/weekly-report`（按需生成）。**两个都只产草稿、不落库**：19 张同步表一行不写、不进 outbox，正式记录仍由客户端确认后走既有 `/sync/push`（沿用 K4「自动检测永不自动落库」）。
+- **计次（范围 A）**：预占 → 失败回滚。占位是**单条条件更新** `SET quota_used = quota_used + 1 WHERE scope_key=? AND feature=? AND quota_used < quota_limit`，影响行数 0 即 `8460`；没有「先 select 再 +1」的裸读改写。窗口 `reset_at` 到期条件归零（幂等），DAILY=次日 00:00 / WEEKLY=下周一 00:00；首建并发由 `(scope_key, feature)` 唯一键兜底（落败方吞 `DuplicateKeyException` 不重试）。未配置的功能 = 不限次只计次（`HANDWRITING_IMPORT` 只留枚举位，V3.1 再做）。
+- **降级（范围 C，复用既有码）**：无 provider / 无可用 Key → **`5020`**（AI 模型未配置，不新造码、不改 5020 语义）；配了但调用不通（Key 失效 / 余额 / 限流 / base-url 不可达）→ **`5022`**；模型输出不合 JSON 约束 → `8461`；全部**不抛 5xx、不返空草稿、不输出伪造内容**，且 AI 失败一律回滚额度。
+- **周报（范围 D）**：5 张同步表只读聚合（feedings / diapers / sleeps / pump_sessions / measurements，`user_id IN visibleUserIds`），**数字由服务端算、模型只写 3~5 句解读**（模型没有编数据的入口）；睡眠按与窗口重叠分钟计；周报不落库、不发通知。
+- **错误码**：新增 `8460 AI_QUOTA_EXCEEDED` / `8461 AI_DRAFT_UNPARSEABLE` / `8462 AI_CHILD_NOT_VISIBLE` / `8463 AI_REPORT_WINDOW_INVALID`（写前复核 8440~8443 K4 已占、8444+ 空闲）。
+- **验证**：`mvn -pl babylog-plugins/babylog-plugin-biz test` **335/335**（原 307 + 新增 28：`AiQuotaServiceTest` 12 / `BabyLogAiServiceTest` 10 / `RecordDraftParserTest` 6）；ArchUnit `P0ArchitectureTest` **24/24**；`clean package` fat jar 三件套核过（退出码 0 / mtime 10:35 / 内嵌 biz jar 8 个 `ai` 包 · `V2.2.20` SQL · yml `PARSE_RECORD` · biz-api 常量池含 `AI_QUOTA_EXCEEDED`）。
+- **未过 / 移交（如实登记）**：dev 18080 冒烟**未跑**——本机 18080/3306 无监听、无 java 进程、无 mysql 客户端、无登录态；脚本 `/tmp/k5_ai_smoke.sh` 已备（`bash -n` 通过，缺凭据打印 SKIP 且退出码 2，不伪造结果）。补跑条件见 `docs/ai-endpoints-M73.md` §七。K0 四项 / K2 三项 / K3 三项 / K4 三项遗留不随本节点关闭。
+- **新登记移交**：①「base-url 不可达」按「配了但打不通」归 `5022`（`09` R 字面写 5020；如要合并改 `AiErrorMapper` 一行）② `weeklyReport` 的 `stats` 目前不含医疗类（用药/疫苗/就医），K6 若要在周报里展示再扩 ③ 额度按家庭计次 ⇒ 家庭新成员加入后与既有个人额度行的合并逻辑已在迁移里处理，但「成员退出家庭」不会把额度拆分回去（只登记）。
+- **状态**：待龙哥综合验收；**未 commit / 未 push**（惯例 A）。
+

@@ -146,6 +146,17 @@ public enum BabyLogErrorCode implements ErrorCode {
     /** 构造事件（K4 接收侧验证用）参数非法：类型/宝宝/时间点缺失或组合不合法 */
     NOTICE_EVENT_INVALID(8443, "构造事件参数非法"),
 
+    // ---------- V3.0 AI 第一批（8460-8479，M73 / K5） ----------
+    // 段位说明：8440-8459 已被 K4 站内通知占用；V3.1 手写导入若要错误码，从 8470 起续。
+    /** 家庭（或本人）当窗口内的免费 AI 额度已用完；不发模型请求、不降级伪造内容（K5 拍板：超限拒绝） */
+    AI_QUOTA_EXCEEDED(8460, "AI 使用额度已用完，请稍后再试或手动录入"),
+    /** 模型返回的内容不满足 JSON 输出约束 / 记录类型不在既有 RecordType 注册表内 */
+    AI_DRAFT_UNPARSEABLE(8461, "没能理解这段描述，请换个说法或手动录入"),
+    /** 宝宝不存在或不在当前账号的 visibleUserIds 家庭可见范围内（不区分，避免枚举探测） */
+    AI_CHILD_NOT_VISIBLE(8462, "宝宝不存在或无权访问"),
+    /** 周报时间窗非法（weekStart 早于允许范围 / 未来时间 / 跨度过大） */
+    AI_REPORT_WINDOW_INVALID(8463, "周报时间范围非法"),
+
     ;
 
     private final int code;

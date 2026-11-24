@@ -48,6 +48,11 @@
             <groupId>com.babylog</groupId>
             <artifactId>babylog-plugin-system-api</artifactId>
         </dependency>
+        <!-- 跨插件只碰契约：AI 能力（K5/M73）走 IAiFacade，不依赖 plugin-ai 实现、不引新 SDK -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-ai-api</artifactId>
+        </dependency>
 
         <!-- SMTP 发信（spring.mail.* 配置齐全时 Boot 才装配 JavaMailSender，未配则发码端点返回 8374） -->
         <dependency>
