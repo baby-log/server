@@ -20,6 +20,7 @@ import com.babylog.common.core.enums.error.ErrorCode;
  *   <li>8395-8399 小程序认证（M20，wx.login code 换 app-user 双 token）</li>
  *   <li>8400-8419 电视设备码绑定（M45）</li>
  *   <li>8420-8439 媒体存储底座（M69 / K2：上传 / 下载 / 删除 / 配额 / 淘汰 / 迁移）</li>
+ *   <li>8440-8459 站内通知（M71 / K4：拉取 / 单人确认 / 无头异常构造事件）</li>
  * </ul>
  */
 public enum BabyLogErrorCode implements ErrorCode {
@@ -134,6 +135,16 @@ public enum BabyLogErrorCode implements ErrorCode {
     MEDIA_STORAGE_IO_FAILED(8426, "媒体对象读写失败"),
     /** 手动迁移工具：源/目标后端相同或迁移批次中途失败 */
     MEDIA_MIGRATE_FAILED(8427, "媒体对象迁移失败"),
+
+    // ---------- 站内通知（8440-8459，M71 / K4） ----------
+    /** 通知不存在，或不在当前账号的 visibleUserIds 家庭可见范围内（不区分，避免枚举探测） */
+    NOTICE_NOT_FOUND(8440, "通知不存在或无权访问"),
+    /** 通知已被其他成员确认 / 非待确认类型 / 已被逻辑删——后到者的确认帧应出队并触发拉取（24 ⑥-2 先到者赢） */
+    NOTICE_ALREADY_CONFIRMED(8441, "通知已被确认，请拉取最新状态"),
+    /** 单人确认的 version 乐观锁期望值非法（<=0 或缺省） */
+    NOTICE_CONFIRM_VERSION_INVALID(8442, "确认版本非法，请拉取最新状态"),
+    /** 构造事件（K4 接收侧验证用）参数非法：类型/宝宝/时间点缺失或组合不合法 */
+    NOTICE_EVENT_INVALID(8443, "构造事件参数非法"),
 
     ;
 

@@ -191,3 +191,16 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 - 按宝宝粒度权限裁决、refresh 轮换（M20+ 候选）
 - 7xxx 错误码重叠、starter-auth `DemoAcceptanceTest` 配置债（框架遗留，不动）
 - V3 公开处理（部署解冻与内测包压到 V3 完成）
+
+## K4 · M71 站内通知 + 单人确认 + 时间口径 + 无头异常 · 服务端（2026-11-24，工作区未提交 · 未纳入版本段落）
+
+> 本批是 `develop` 上**未提交未提审**的开发批次（M 号 M71），不新开版本号段落、不回改 `[2.4.0]` 及以上历史、不回改 M67/M69 章节。逐条交付与验证见 [PROGRESS.md](PROGRESS.md) 尾章「M71」。四端（Android/iOS/TV）读侧评估为**零改动**。
+
+- **落库 / 契约**：新增 Flyway `V2.2.19__bl_notice.sql` → `bl_notice`，**服务端专用表**：不进 `SyncTable` 枚举、不参与 `/sync/changes`、端点不占 `/sync/*`，与 `bl_media_file`/`bl_media_quota`/`bl_family`/`bl_device` 同口径（`24` ⑤）。含 4 个审计列（继承 `BaseDO` 自动填充，K2 媒体表同款教训）；`user_id` 按 token 盖章、`server_updated_at ON UPDATE` 自动维护双段游标。错误码新开 8440~8443 子段（写前复核 8440+ 全仓 0 命中）。
+- **端点**：App `/app/babylog/notice`（类级 `@SaCheckLogin(app-user)`、裸 token）3 个——`POST /events`（构造事件·K4 接收侧验证入口，零画面）、`GET /changes`（按 `visibleUserIds` 家庭读侧拉取式，双段游标 `since+sinceId`，`nextSince` 原样回传）、`POST /{id}/confirm`（单人确认）。服务端存、小程序拉；不动 plugin-message、不引推送 SDK、不发一次性订阅消息。
+- **单人确认 + 时间口径（24 ⑥）**：复用 `version` 乐观锁 + `conflicts`（结构对齐 M53 `SyncConflictVO`），两名成员同时确认仅一人成功（单行原子 CAS `WHERE version=? AND is_confirmed=0`），后到者 `confirmed=0` + 一条 conflicts 出队拉取。`detectedAt`（13:30 识别）/ `confirmedAt`（13:50 确认）都是 Long 字符串，**落正式记录用 `detectedAt`**（`businessTime=detectedAt`），`confirmedAt` 只作审计。`version`（CAS 条件）与 `server_updated_at`（增量拉游标）两套绝不混用；正式记录由客户端走既有 `/sync/push` 到 19 张同步表，**服务端零代写**、自动检测永不自动落库保持（`22` §7.2）。
+- **无头异常（24 ⑦）**：纯函数规则引擎 `HeadlessAnomalyRule` 加「醒来无入睡 `WAKE_WITHOUT_SLEEP` / 结束无开始 `END_WITHOUT_START`」两条；命中**如实记录**——逐条合成**单点行**（只有 `eventAt` 一个时间点、非计时行、无 `endedAt`/pauseEvents）+ `isHeadless`/`isAbnormal`=1 异常标记 + 异常站内消息，全体成员可见；不丢弃、不伪造配对、不假装完整会话、**不复用 `15` §二 同 ID 收尾、不造第二条结束行**（契约扩展而非改写）。配对齐全则返回空列表、不造假异常。V3 前零画面：`events` 只接结构化事件点（type+at，零字节），不接采集、不实现 K9、不定义 `bl_alert_rule` 阈值外的东西。
+- **测试**：新增 2 单测类共 26 例（`HeadlessAnomalyRuleTest` 9 纯函数 / `NoticeServiceTest` 17 Mockito），覆盖两条规则、配对齐全不伪造、脏数据宽容、13:30/13:50 时间口径、两人确认仅一人成功 + conflicts、非家庭成员 8440、增量拉「记游标→增量拉」+ `visibleUserIds` 隔离、刚落库 `serverUpdatedAt` 未回填时键缺省不输出 `"0"`。坑：单测 JVM 无 MP 启动引导，`LambdaUpdateWrapper.set(SFunction)`/`LambdaQueryWrapper` 方法引用需 `@BeforeAll` 用 `TableInfoHelper.initTableInfo(assistant, BlNotice.class)` 初始化列缓存（与 `AdminProductServiceImplTest` 同款）；`getParamNameValuePairs()` 是惰性绑定，断言前须先触发 `getSqlSegment()`。
+- **验证**：biz 单测 **307/307**（原 281 + 26）、ArchUnit `P0ArchitectureTest` **24/24**（本地仓 biz jar 内 20 个 notice 类全在扫描路径，A8 `bl_` 前缀 / A11 类级鉴权 / A10 无 `last()` / A12 无 `${}` / C1-C2 跨插件依赖全绿）、`test-compile` 全绿。
+- **验证未过 / 未跑（如实登记，不伪造）**：`23` §五 K4 五项构造事件冒烟（13:30→13:50 正式记录时间 / 两人同时确认仅一人成功 / 无头异常全体成员可见 / 家庭读侧可见·非成员不可见）**全部未跑**——本机 18080/3306 无监听、无 dev jar、无 mysql 客户端、无登录态。补跑条件：龙哥在有库环境起 dev 服 + 三个 app-user token（同家庭两成员 + 非成员）+ `bash /tmp/k4_notice_smoke.sh`（`bash -n` 通过、缺凭据 SKIP 不伪造）；同等语义已由服务端单测覆盖。
+- **边界 / 遗留**：K0 四项 + K2 三项 + K3 三项遗留不随本节点关闭、只登记移交；零画面数据、不碰云同步开关（K8）、不改 19 张同步表语义、不改 yml 生产凭据、不碰正服 SQL/Navicat/手机/xxl-job、不改 23/24/22/15/18/20/21 原文、未自行判定验收、未生成 K5 提示词；**未 commit / 未 push**，报告后即停待龙哥综合验收。
