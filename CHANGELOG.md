@@ -233,3 +233,8 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 - **验证**：biz 单测 / ArchUnit / `clean package` fat jar 三件套 / ui `typecheck`+`build` 结果见四问报告与端点文档 §九；dev 18080 冒烟**未跑**（无库环境，如实登记、不伪造）。
 - **边界**：不做 K6-C 客户端、不生成 K6-C/K7 提示词、不改 19 张同步表语义、不改上游 ai-kb 实现、不做付费引导、不填 `23A` 验收结论列、不自行判定验收；**未 commit / 未 push**。
 
+### K7 / M78 · 隐私政策改版（server 零改动 · 2026-11-25）
+
+- 无服务端代码 / 表 / 端点改动；本批 fat jar 不参与出包（无政策载体 + 禁传公开 Release）。
+- 六端产物清单与校验值见 `发布包/K7-M78-隐私政策改版/BUILD-LOG.md`。未 commit / push。
+
