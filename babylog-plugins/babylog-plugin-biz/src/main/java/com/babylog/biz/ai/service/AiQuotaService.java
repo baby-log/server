@@ -38,6 +38,11 @@ import java.util.List;
  *
  * <p><b>行不存在</b>：首次使用插入一行（{@code (scope_key, feature)} 唯一键），
  * 并发首建落败方吞 {@link DuplicateKeyException} 后走同一条占位语句，不重试、不递归。
+ *
+ * <p><b>K6-S / M76 动态额度（龙哥门禁 C 授权）</b>：三参 {@code reserve(..., limitOverride)}
+ * 允许调用方传入参数中心读到的 {@code KB_QA} 上限；非 {@code null} 时用它替代 yml 值，
+ * 并在占位前把已存在行的 {@code quota_limit} 同步成新值（运营后台改额度对存量行即时生效）。
+ * 两参重载恒传 {@code null} ⇒ K5 的 PARSE_RECORD / WEEKLY_REPORT 行为零变更、既有单测零改动。
  */
 @Service
 public class AiQuotaService {
@@ -67,11 +72,28 @@ public class AiQuotaService {
      * @throws ServiceException {@code 8460} 额度已用完
      */
     public int reserve(long userId, AiFeature feature) {
+        return reserve(userId, feature, null);
+    }
+
+    /**
+     * 预占一次额度（模型调用前），可覆盖上限。
+     *
+     * <p>{@code limitOverride} 仅由 K6-S 的 {@code KB_QA} 使用：来自参数中心
+     * {@code sys_config} 的实时值（缺失 / 非法由调用方回落 yml，传 {@code null} 即走两参语义）。
+     * 传 {@code null} 时本方法与 K5 原实现逐字等价。
+     *
+     * @return 本次占位后的剩余次数；{@code -1} 表示该功能不限次
+     * @throws ServiceException {@code 8460} 额度已用完
+     */
+    public int reserve(long userId, AiFeature feature, Integer limitOverride) {
         String scopeKey = scopeKeyOf(userId);
         BabyLogAiQuotaProperties.FeatureQuota config = properties.of(feature);
-        int limit = config == null ? 0 : config.getLimit();
+        int limit = limitOverride != null ? limitOverride : (config == null ? 0 : config.getLimit());
 
         ensureRow(scopeKey, userId, feature, limit, config);
+        if (limitOverride != null) {
+            syncLimit(scopeKey, feature, limitOverride);
+        }
         resetIfDue(scopeKey, feature, config);
 
         if (limit <= 0) {
@@ -135,6 +157,21 @@ public class AiQuotaService {
                     Comparator.nullsFirst(Comparator.naturalOrder())));
         }
         return SCOPE_FAMILY + memberships.get(memberships.size() - 1).getFamilyId();
+    }
+
+    /**
+     * 把参数中心的新上限同步到已存在的额度行（K6-S / M76）。
+     *
+     * <p>为什么必须做：{@code ensureRow} 只在「行不存在」时写 {@code quota_limit}，
+     * 运营在后台把额度从 10 改成 20 后，存量行仍停在 10 ⇒ 改了等于没改。
+     * 这里用条件更新只动不同的行，重复调用天然幂等；窗口归零仍由 {@code resetIfDue} 负责。
+     */
+    private void syncLimit(String scopeKey, AiFeature feature, int limit) {
+        quotaMapper.update(null, Wrappers.<BlAiQuota>lambdaUpdate()
+                .eq(BlAiQuota::getScopeKey, scopeKey)
+                .eq(BlAiQuota::getFeature, feature.code())
+                .ne(BlAiQuota::getQuotaLimit, limit)
+                .set(BlAiQuota::getQuotaLimit, limit));
     }
 
     /** 首建额度行；并发首建由唯一键兜底，落败方直接复用既有行 */

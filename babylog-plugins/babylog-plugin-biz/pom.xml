@@ -53,6 +53,12 @@
             <groupId>com.babylog</groupId>
             <artifactId>babylog-plugin-ai-api</artifactId>
         </dependency>
+        <!-- 跨插件只碰契约：知识库检索（K6-S/M76）走 IKnowledgeBaseFacade，
+             复用上游 ai-kb 的 RAG 骨架（simple 模式），不依赖 ai-kb 实现层、不部署 Milvus、不引新 SDK -->
+        <dependency>
+            <groupId>com.babylog</groupId>
+            <artifactId>babylog-plugin-ai-kb-api</artifactId>
+        </dependency>
 
         <!-- SMTP 发信（spring.mail.* 配置齐全时 Boot 才装配 JavaMailSender，未配则发码端点返回 8374） -->
         <dependency>

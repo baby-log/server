@@ -46,3 +46,18 @@
 - **新登记移交**：①「base-url 不可达」按「配了但打不通」归 `5022`（`09` R 字面写 5020；如要合并改 `AiErrorMapper` 一行）② `weeklyReport` 的 `stats` 目前不含医疗类（用药/疫苗/就医），K6 若要在周报里展示再扩 ③ 额度按家庭计次 ⇒ 家庭新成员加入后与既有个人额度行的合并逻辑已在迁移里处理，但「成员退出家庭」不会把额度拆分回去（只登记）。
 - **状态**：待龙哥综合验收；**未 commit / 未 push**（惯例 A）。
 
+## M76 · 育儿知识库 · 服务端 KB/RAG 底座（K6-S，2026-11-25，工作区未提交）
+
+- **节点 / 范围**：K6-S「③ V3.0」（S=Server，与 K6-A/B/C 客户端并列、**不占 `23` §四 K0~K12 总表编号**、与 `09` 号 S1~S4 无关），M 号 **M76**（写前 grep 六仓 PROGRESS `M76` 占用 0、全局上限 M75）。只改 server + ui 两仓；基线 HEAD server `06c3cbc` / ui `7fb174e`（本会话实测），其余四仓零改动。
+- **第一道门禁（`09` R）**：龙哥 2026-11-25 拍板 `KB_QA = 10 次/天 DAILY`；随后选 **「C 授权落点微调」** —— 本节点把 KB_QA 额度改为参数中心 `sys_config` 可配（回落 yml），V3 购买引导 / 虚拟支付 / 线下购买 / 个人主体支付能力**移交主会话**，节点不改归档事实、不做付费入口。
+- **上游复用（不重造 RAG）**：`babylog-plugin-ai-kb` / `ai-kb-api` 已有完整 simple / BM25 / HybridFusion / RRF / rerank / 溯源骨架，`07` 号拍板不部署 Milvus ⇒ 本节点**只走 `IKnowledgeBaseFacade` 契约 + `IAiFacade.dynamicChat`**，不重造解析 / 分块 / 检索 / 重排；biz 新增依赖仅 `babylog-plugin-ai-kb-api`（契约 jar，dependencyManagement 已仲裁），零新 SDK / 零新中间件 / 不启 `plugin-message`。
+- **落库**：Flyway `V2.2.21__bl_kb_faq.sql` 建 `bl_kb_faq`（条目化 FAQ，`source` 必填、正文应用层限 2000 字）与 `bl_kb_favorite`（纯关联表、不带 `deleted`、取消收藏物理删、`uk_user_faq` 兜底并发），并预置 `sys_config` 的 `babylog.ai.quota.kb_qa.limit = 10`（`id=5`、`INSERT IGNORE`、`config_type=N`）。两表**服务端专用**：不进 `SyncTable`、不参与 `/sync/changes`、不进 outbox、端点不占 /sync/ 开头的同步端点、不发 `bl_notice`；19 张同步表零改动。
+- **端点**：App `/app/babylog/kb`（类级 `@SaCheckLogin(app-user)`、裸 token）7 个——`GET /categories`、`GET /faqs`、`GET /faqs/{faqId}`、`GET /favorites`、`POST /favorites`、`DELETE /favorites/{faqId}`（全免费）+ `POST /ask`（计 `KB_QA`）；管理端 `/babylog/kb/faq`（类级 `@SaCheckLogin(sys)`）3 个——`GET /list`、`POST /save`、`DELETE /{id}`。字段、全局契约（Long 字符串 / 整数 1/0 / null 键缺省）、降级表见 `babylog-plugin-biz/docs/kb-endpoints-M76.md`。
+- **三条红线（`10` §4.1）**：① `source` 必填（`8465`）+ RAG 引用透传 `fileName/docId/chunkId`；② `KbDisclaimer.TEXT` 固定免责「仅供参考，不构成医疗建议，异常请及时就医」在每个问答响应（含降级）恒下发；③ 检索为空 / 模型返回空 ⇒ **一次模型都不调**、不占额度、返回空答案 + 空引用 + `degraded=1`，正常路径 `citations` 恒非空。禁用词清单只写进代码注释，0 处用于 UI / 接口 / prompt 文案。
+- **额度（门禁 C）**：`AiFeature.KB_QA` 三处逐字一致（枚举 / yml / 落库）；`AiQuotaService` 新增**三参** `reserve(..., limitOverride)`，两参重载恒传 `null` ⇒ K5 行为与既有单测零变更；覆盖时同步已存在行的 `quota_limit`（后台改额度对存量用户即时生效），首建行也写覆盖值。`AiQuotaConfigReader` 用 `JdbcTemplate` 单表只读 `sys_config`（`deleted = 0`），实时查库无缓存，避免跨插件 import system 实现层踩 ArchUnit C1；缺失 / 非数字 / 负数回落 yml，`0` = 不限次。
+- **FAQ 与 RAG 的关系（最易误读）**：FAQ 表负责浏览 / 分类 / 关键词搜索 / 收藏（列表过滤，**不是向量检索**）；RAG 问答引用来自**上游 ai-kb 知识库分块**，上游文档灌入走既有 `/ai/kb/doc`。当前 `kb-store.json` 为空 ⇒ 问答在灌入前返回「无可引用资料」降级响应，这是红线三的正确行为、不是缺陷；灌入属环境依赖，登记遗留。
+- **验证**：biz 单测、ArchUnit `P0ArchitectureTest`、`clean package` fat jar 内嵌三件套、ui `pnpm typecheck` + `pnpm build` 的实测数字见本节点四问报告；dev 18080 冒烟**未跑**（本机 18080/3306 无 LISTEN、无 dev java / mysqld、无登录态、Flyway 未到 V2.2.21、向量库为空、AI Key 未配），补跑用例见 `docs/kb-endpoints-M76.md` §九，如实登记、不伪造、不阻塞。
+- **新登记移交**：① 上游知识库文档灌入（走 `/ai/kb/doc`，本节点不改上游）② 管理端菜单行 / 方法级 `@SaCheckPermission` / `AdminControllerPermissionContractTest` 三处配套（K3 先例；本节点不新增权限字符）③ `sys_config` 直查在微服务拆库后须补 `IConfigFacade` 契约（架构欠账）④ 个人主体支付能力 / V3 购买引导 / 虚拟支付 / 线下购买**移交主会话**，含「个人主体不能支付」过时事实的订正建议 ⑤ K5「数值只落 yml」口径按本段文末追加登记（KB_QA 例外：参数中心可配），旧语义与行为不改 ⑥ K0/K2/K3/K4/K5/K6-A/K6-B 既有遗留不随本节点关闭。
+- **状态**：待龙哥综合验收；**未 commit / 未 push**（惯例 A）；不填 `23A` 验收结论列、不自行判定验收、不生成 K6-C / K7 提示词。
+
+

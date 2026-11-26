@@ -275,4 +275,37 @@ class AiQuotaServiceTest {
         assertThat(remaining).isEqualTo(19);
         verify(quotaMapper, times(1)).insert(any(BlAiQuota.class)); // 不重试、不递归
     }
+
+    // ==================================================================
+    // 8. K6-S / M76：参数中心动态额度覆盖（龙哥门禁 C 授权）
+    // ==================================================================
+
+    @Test
+    void reserveWithLimitOverrideUsesOverrideLimitAndSyncsExistingRow() {
+        List<String> sqls = new ArrayList<>();
+        doAnswer(inv -> {
+            LambdaUpdateWrapper<BlAiQuota> wrapper = inv.getArgument(1);
+            sqls.add(wrapper.getSqlSegment() + " || " + wrapper.getSqlSet());
+            return 1;
+        }).when(quotaMapper).update(any(), any());
+        when(quotaMapper.selectOne(any())).thenReturn(null);
+
+        int remaining = service.reserve(USER, AiFeature.KB_QA, 25);
+
+        // 覆盖值生效：读不到行时按 25-1 给保守值，而不是 yml 回落值 10-1
+        assertThat(remaining).isEqualTo(24);
+        // 存量行 quota_limit 必须被同步，否则运营后台改额度对老用户不起作用
+        assertThat(String.join(" | ", sqls)).contains("quota_limit");
+    }
+
+    @Test
+    void reserveWithoutOverrideKeepsK5YmlValueUntouched() {
+        when(quotaMapper.update(any(), any())).thenReturn(1);
+        BlAiQuota row = new BlAiQuota();
+        row.setQuotaUsed(1);
+        when(quotaMapper.selectOne(any())).thenReturn(row);
+
+        // 两参重载 = K5 原语义，仍读 yml 的 20；syncLimit 不触发
+        assertThat(service.reserve(USER, AiFeature.PARSE_RECORD)).isEqualTo(19);
+    }
 }

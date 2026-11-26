@@ -219,3 +219,17 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 - **测试**：新增 3 个单测类 34 例中的 28 例（`AiQuotaServiceTest` 12 / `BabyLogAiServiceTest` 10 / `RecordDraftParserTest` 6）；biz 全量 **335/335**、ArchUnit **24/24**、`clean package` fat jar 三件套核过。
 - **验证未过 / 未跑（如实登记，不伪造）**：dev 18080 冒烟未跑（本机 18080/3306 无监听、无 java/mysql、无登录态）；脚本 `/tmp/k5_ai_smoke.sh` 已备，缺凭据 SKIP 退出码 2。补跑条件见 `babylog-plugin-biz/docs/ai-endpoints-M73.md` §七。
 - **边界**：不做 K6 客户端、不碰 K7 隐私 md / K8 云同步开关、不动媒体与通知底座、不改 19 张同步表语义、不引 SDK、不改 yml 生产凭据、不改 23/24/22/15/18/20/21 原文、未自行判定验收；**未 commit / 未 push**。
+
+## K6-S · M76 育儿知识库 · 服务端 KB/RAG 底座（2026-11-25，工作区未提交 · 未纳入版本段落）
+
+> `develop` 上**未提交未提审**的开发批次（M 号 M76），不新开版本号段落、不回改 `[2.4.0]` 及以上历史、不回改 M67/M69/M71/M73 章节。逐条交付与验证见 [PROGRESS.md](PROGRESS.md) 尾章「M76」及 `babylog-plugin-biz/docs/kb-endpoints-M76.md`。
+
+- **范围**：K6-S（S=Server，K6 拆分层服务端节点，与 K6-A/B/C 客户端并列），只改 server + ui。复用上游 `ai-kb` 的 `IKnowledgeBaseFacade` + `IAiFacade` RAG 骨架，不重造检索、不部署 Milvus、不引新 SDK / 新中间件、不启 `plugin-message`。
+- **拍板 / 门禁**：`09` R 第一道门禁由龙哥 2026-11-25 定为 `KB_QA = 10 次/天 DAILY`；随后选「**C 授权落点微调**」= 额度改参数中心 `sys_config` 可配（回落 yml），V3 购买引导 / 虚拟支付 / 线下购买 / 个人主体支付能力**移交主会话**，本节点零付费代码。
+- **落库**：Flyway `V2.2.21__bl_kb_faq.sql` → `bl_kb_faq` / `bl_kb_favorite` 两张服务端专用表（**不进 `SyncTable`、不参与 `/sync/changes`、不进 outbox**）+ `sys_config` 预置 `babylog.ai.quota.kb_qa.limit=10`。19 张同步表零改动。
+- **端点**：App `/app/babylog/kb` 7 个（浏览 / 分类 / 搜索 / 收藏免费 + `POST /ask` 按量）、管理端 `/babylog/kb/faq` 3 个（来源必填 `8465`、正文限 2000 字）。`userId` 恒由裸 token 取，客户端不传。
+- **三条红线（`10` §4.1）**：来源可追溯（`source` 必填 + 引用 `fileName/docId/chunkId` 三件套）/ 固定免责恒下发 / 答案必带引用条目（零检索不调模型、不裸生成、不占额度）；禁用词 0 处用于 UI / 接口文案。
+- **额度实现**：`AiQuotaService` 新增三参 `reserve(..., limitOverride)`，两参重载恒 `null` ⇒ K5 行为零变更；覆盖时同步存量行 `quota_limit`。`AiQuotaConfigReader` 用 `JdbcTemplate` 单表只读 `sys_config`（不跨插件依赖 system 实现层），实时查库、无需重启。
+- **验证**：biz 单测 / ArchUnit / `clean package` fat jar 三件套 / ui `typecheck`+`build` 结果见四问报告与端点文档 §九；dev 18080 冒烟**未跑**（无库环境，如实登记、不伪造）。
+- **边界**：不做 K6-C 客户端、不生成 K6-C/K7 提示词、不改 19 张同步表语义、不改上游 ai-kb 实现、不做付费引导、不填 `23A` 验收结论列、不自行判定验收；**未 commit / 未 push**。
+

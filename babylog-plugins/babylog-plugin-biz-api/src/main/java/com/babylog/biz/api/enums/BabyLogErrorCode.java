@@ -157,6 +157,13 @@ public enum BabyLogErrorCode implements ErrorCode {
     /** 周报时间窗非法（weekStart 早于允许范围 / 未来时间 / 跨度过大） */
     AI_REPORT_WINDOW_INVALID(8463, "周报时间范围非法"),
 
+    // ---------- 育儿知识库（8464-8469，K6-S / M76） ----------
+    // 段位说明：8460-8463 是 K5 AI 第一批；8470 起留给 V3.1 手写导入。
+    /** 知识条目不存在 / 已下架 / 不在可见范围内（不区分，避免枚举探测） */
+    KB_FAQ_NOT_FOUND(8464, "知识条目不存在或已下架"),
+    /** 管理端录入未填来源：10 号 §4.1 红线一「内容来源必须可追溯」 */
+    KB_FAQ_SOURCE_REQUIRED(8465, "请填写资料来源后再保存"),
+
     ;
 
     private final int code;

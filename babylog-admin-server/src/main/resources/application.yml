@@ -221,11 +221,17 @@ babylog:
     total-size-cap: 5GB
     error-max-history: 60
     error-total-size-cap: 1GB
-  # ---------- AI 免费额度（K5 / M73，V3.0 AI 第一批） ----------
+  # ---------- AI 免费额度（K5 / M73 + K6-S / M76） ----------
   # 龙哥 2026-11-24 拍板：设额度 + 超限拒绝（8460，不发模型请求、不降级伪造内容）；V3.0 不做付费入口。
   # 计次粒度 = 家庭 × 功能（bl_ai_quota.scope_key：家庭成员共用一份额度，不是一人一份）。
   # 窗口按服务端时区对齐自然日 / 自然周；limit <= 0 或该功能没配 = 不限次（只计次）。
-  # 改额度只改这里 + 重启，不动代码、不改库；数值只应出现在本文件与 BabyLogAiQuotaProperties 的注释里。
+  # K5（PARSE_RECORD / WEEKLY_REPORT）：改额度只改这里 + 重启，不动代码、不改库；数值只应出现在
+  #   本文件与 BabyLogAiQuotaProperties 的注释里。
+  # K6-S / M76（KB_QA）：龙哥 2026-11-25 拍板 10 次/天 DAILY，并选「C 授权落点微调」——
+  #   本值是**回落基线**；运营在「系统工具 - 参数设置」改 babylog.ai.quota.kb_qa.limit（sys_config）
+  #   后下一次问答即时生效、无需重启（实时读库，见 AiQuotaConfigReader / V2.2.21 预置行）。
+  #   参数缺失 / 非数字 / 负数一律回落到本值，方向仍是「不挡人」。
+  #   V3 购买引导 / 虚拟支付 / 线下购买不在本节点范围（移交主会话）。
   ai:
     quota:
       features:
@@ -235,6 +241,9 @@ babylog:
         WEEKLY_REPORT:
           limit: 2
           window: WEEKLY
+        KB_QA:
+          limit: 10
+          window: DAILY
   mybatis:
     # 字段加密密钥（AES，16/24/32 位）：ai_api_key.api_key 等 @FieldEncrypt 字段落库加密
     # dev 默认值恰 16 位仅供本地联调，生产必须用环境变量覆盖
