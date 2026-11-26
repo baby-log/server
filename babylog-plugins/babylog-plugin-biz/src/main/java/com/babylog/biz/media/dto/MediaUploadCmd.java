@@ -8,8 +8,11 @@ import lombok.Data;
  * <p>入站 Long 一律按全局契约由客户端发字符串（雪花 id 19 位，JS 会丢精度），
  * fastjson2 / Spring 宽松转换为 Long；userId 不由客户端传，服务端按 token 盖章。
  *
- * <p>V3 前零画面数据：本端点只承载<b>附件语义</b>（E6 就医附件 / V3.1 拍照导入），
- * 不接摄像头帧流；{@code video/*} 由 service 侧拒绝（8423）。
+ * <p>K8 解锁后（24 ①-4 / ①-5）：本端点既承载<b>附件语义</b>（E6 就医附件 / V3.1 拍照导入），
+ * 也承载已开云同步用户主动选择的<b>静态画面帧</b>（截图 / 照片，{@code image/*}）。
+ * 是否允许上传画面由四端云同步总开关把关，服务端只认有效 app-user token，不接收客户端
+ * 开关状态（本 Cmd 亦无 userId 字段，user_id 一律由 token 盖章）。原始帧流归 K9，
+ * 不接摄像头帧流；{@code video/*} 由 service 侧拒绝（8423，M69 §一保持）。
  */
 @Data
 public class MediaUploadCmd {

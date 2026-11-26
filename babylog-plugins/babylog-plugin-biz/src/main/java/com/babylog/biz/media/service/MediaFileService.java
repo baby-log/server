@@ -30,9 +30,13 @@ import java.util.Set;
  * {@code SyncAccessScopeResolver.resolveAccess(userId).visibleUserIds()}，
  * 行不在范围内与「不存在」返回同一个 8420（不区分，避免枚举探测）——与家庭七端点同款。
  *
- * <p><b>V3 前零画面数据</b>（24 ①-4）：本服务只承载<b>附件语义</b>（E6 就医附件 /
- * V3.1 手写导入拍照），{@code image/*} / {@code application/pdf} 等允许，
- * {@code video/*} 一律 8423 拒收；不接摄像头帧流、不做云同步开关（归 K8）。
+ * <p><b>K8 解锁后的画面语义</b>（24 ①-4 / ①-5，K8 / M79）：V3 前零画面数据的红线随
+ * 画面云同步开关解锁而解除——已主动开启云同步的用户可经本端点上传<b>主动选择的静态画面</b>
+ * （截图 / 照片类，{@code image/*}），仍走同一配额 / 后端 / 对象键 / 淘汰口径。
+ * 服务端判据只认<b>有效 app-user token</b>（类级 {@code @SaCheckLogin}，见
+ * {@code BabyLogMediaController}），<b>不自建第二套开关状态</b>：四端总开关关闭时须清凭证 /
+ * 停同步，token 失效即等价于未开云同步。原始帧流与画面采集来源归 K9（V4.0 哨兵采集侧），
+ * 本端点不接摄像头帧流；{@code video/*} 一律 8423 拒收（M69 §一「端点逐字对齐」保持）。
  *
  * <p><b>user_id 盖章</b>：上传时由服务端按 token 写入，禁客户端传值；
  * {@code user_id} 是直写 {@code bl_*} 表的必填语义列（正服迁移漏写落 DEFAULT 0 拉不到的坑）。

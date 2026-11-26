@@ -69,3 +69,11 @@
 - 未跑：dev 18080 冒烟（18080 / 3306 `nc` CLOSED、无 dev 服、无登录态），按 K2~K6 先例如实登记、不阻塞验收。
 - **未 commit / 未 push**；不自行验收、不生成 K8 提示词。
 
+### K8 / M79 · 画面云同步开关解锁（server 门禁对齐 · 2026-11-25）
+
+- **结论**：K8 服务端**零业务端点改动**。「已开云同步」唯一等价判据 = 有效 app-user token（`BabyLogMediaController` 类级 `@SaCheckLogin(type = StpAppUtil.TYPE)`、`currentUserId()` 从 `LoginContext.getUserId()` 取），不新增第二套状态、不改 19 张同步表语义、不碰 `/sync/` 同步端点。
+- **交付**：新增 `MediaCloudSyncGateTest.java`（4 例：类级 app-user 登录注解 / `MediaUploadCmd` 无 `userId` 字段 / `bl_media_file`·`bl_media_quota` 不在 `SyncTable.values()`（仍 19 项）/ 7 个端点路径逐字对齐 M69）与 `docs/media-cloud-sync-gate-K8-M79.md`；`BabyLogMediaController` `@Operation` summary、`MediaFileService` / `MediaUploadCmd` 类注释从「V3 前零画面数据」订正为 K8 解锁后静态画面语义，业务逻辑与签名零改动。
+- **沿用 K2**：端点、错误码 8420~8427、video 类 8423 拒收、两步删、保留/淘汰策略（`24` ③/④）全部不改；两张媒体表仍是服务端专用表、不参与同步通道。
+- **验证**：Task #2 留痕 biz 全量 **355/355**、ArchUnit **24/24** BUILD SUCCESS；dev 18080 / 3306 未起，冒烟未跑（按 K2~K7 先例如实登记、不阻塞验收）。
+- **边界**：fat jar 不参与出包（内嵌 prod yml 禁传公开 Release）；不做付费入口、不读/不改 `sys_config`、不生成 K9。
+- **状态**：待龙哥综合验收；**未 commit / 未 push**；零对外动作（1Panel 上传 / 4G 自测 / 商店三处字段 / 真机安装 / push 全归龙哥）；不填 `23A` 验收结论列、不自行判定验收。

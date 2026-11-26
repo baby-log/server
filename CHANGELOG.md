@@ -238,3 +238,8 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 - 无服务端代码 / 表 / 端点改动；本批 fat jar 不参与出包（无政策载体 + 禁传公开 Release）。
 - 六端产物清单与校验值见 `发布包/K7-M78-隐私政策改版/BUILD-LOG.md`。未 commit / push。
 
+### K8 / M79 · 画面云同步开关解锁（server 门禁对齐 · 2026-11-25）
+
+- 服务端零业务端点改动：新增 `MediaCloudSyncGateTest`（4 例）与 `docs/media-cloud-sync-gate-K8-M79.md`，仅订正三处注释语义（解锁后静态画面）；「已开云同步」等价判据仍是有效 app-user token，不新增第二套状态。
+- 端点 / 8420~8427 / video 类 8423 / 两步删 / `24` ③·④ 淘汰策略全部沿用 K2；两张媒体表不进 `SyncTable`。验证：biz 355/355、ArchUnit 24/24（Task #2 留痕）；dev 18080 冒烟未跑。
+- fat jar 不参与出包；六端 release 产物未重建的原因与待拍板口径见 `发布包/K8-M79-画面云同步开关解锁/BUILD-LOG.md` §四。**未 commit / 未 push**，不自行验收、不生成 K9 提示词。

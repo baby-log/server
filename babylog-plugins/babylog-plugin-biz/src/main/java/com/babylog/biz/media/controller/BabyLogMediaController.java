@@ -58,7 +58,7 @@ public class BabyLogMediaController {
         this.quotaService = quotaService;
     }
 
-    @Operation(summary = "上传媒体附件（multipart；V3 前仅附件语义，拒 video/*）")
+    @Operation(summary = "上传媒体（multipart；K8 解锁后含已开云同步用户主动选择的静态画面，拒 video/*）")
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public R<MediaFileVO> upload(@RequestParam("file") MultipartFile file,
                                  @ModelAttribute MediaUploadCmd cmd) throws IOException {
