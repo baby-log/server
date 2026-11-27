@@ -243,3 +243,11 @@ M67 之前的 App 版本，products 载荷里**没有 `sortOrder` 这个键**。
 - 服务端零业务端点改动：新增 `MediaCloudSyncGateTest`（4 例）与 `docs/media-cloud-sync-gate-K8-M79.md`，仅订正三处注释语义（解锁后静态画面）；「已开云同步」等价判据仍是有效 app-user token，不新增第二套状态。
 - 端点 / 8420~8427 / video 类 8423 / 两步删 / `24` ③·④ 淘汰策略全部沿用 K2；两张媒体表不进 `SyncTable`。验证：biz 355/355、ArchUnit 24/24（Task #2 留痕）；dev 18080 冒烟未跑。
 - fat jar 不参与出包；六端 release 产物未重建的原因与待拍板口径见 `发布包/K8-M79-画面云同步开关解锁/BUILD-LOG.md` §四。**未 commit / 未 push**，不自行验收、不生成 K9 提示词。
+
+### K10 / M81 · 设备绑定 + 按钮进行中行闭环（server 契约锁 · 2026-11-26）
+
+> `develop` 上未提交未发版的开发批次（M 号 M81，写前六仓 `PROGRESS.md` grep `M81` 复核 0 命中），不新开版本号段落、不回改 `[2.4.0]` 及以上历史。逐条交付与验证见 [PROGRESS.md](PROGRESS.md) 尾章「K10 / M81」；契约单一事实源 `独立产品规划/24-后续链统一契约.md` §八。
+
+- **服务端零业务端点改动**：设备绑定四端点 / `bl_device` / 8400~8403（M45）、`SyncTable` 19 项、M53 进行中行下发与同 ID 收尾均为 V2 既有已验收能力，K10 只做契约锁死。新增 `K10ContractLockTest.java`（6 例，纯反射 / 查表、不启 Spring 上下文）锁四端点与登录策略、8400~8403 恰四码、`SyncTable` 恰 19 项不含 device/event/button 表、`syncSpecs()`=19 / `baseSpecs()`=4、FEEDINGS 无 `in_progress=0` 谓词、计时五列类型。
+- **验证**：biz `-pl :babylog-plugin-biz test` **361/361**（基线 355 + 新增 6）、ArchUnit **24/24** BUILD SUCCESS；dev 18080 全链跨端冒烟未跑，按 K2~K9 先例移交 V3 发布收口补跑、不阻塞验收。
+- **边界**：零新增端点 / 表 / 错误码 / 设备事件流通道、不碰 19 张同步表语义、不做固件（K11）、不改归档原文；fat jar 不参与出包。**未 commit / 未 push**；不自行验收、不生成 K11 提示词。待龙哥综合验收。

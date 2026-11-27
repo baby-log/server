@@ -77,3 +77,12 @@
 - **验证**：Task #2 留痕 biz 全量 **355/355**、ArchUnit **24/24** BUILD SUCCESS；dev 18080 / 3306 未起，冒烟未跑（按 K2~K7 先例如实登记、不阻塞验收）。
 - **边界**：fat jar 不参与出包（内嵌 prod yml 禁传公开 Release）；不做付费入口、不读/不改 `sys_config`、不生成 K9。
 - **状态**：待龙哥综合验收；**未 commit / 未 push**；零对外动作（1Panel 上传 / 4G 自测 / 商店三处字段 / 真机安装 / push 全归龙哥）；不填 `23A` 验收结论列、不自行判定验收。
+
+### K10 / M81 · 设备绑定 + 按钮进行中行闭环（server 契约锁 · 2026-11-26）
+
+- **开工门禁拍板（龙哥 2026-11-26）**：① 端别范围 = **零业务代码·全端对齐**（server 零业务改动，仅契约对齐测试 + 文档；四端各补单测锁）② 验证形态 = **仅契约 + 单测锁**，不做 UI 载体 ③ M 号申报 **M81**（写前六仓 `PROGRESS.md` grep `M81` 复核 0 命中）④ `26` #4 新规确认（验收通过后 commit+push）⑤ 放行总纲「**全部确认·按推荐开工**」（边界 A / 26 六条 / 27 四条 / 门禁甲 / 两处口径差按最新拍板）。
+- **关键发现（本节点定位依据）**：`24` §八 的设备绑定 + 按钮进行中行闭环能力**几乎全部已存在于 V2 既有代码且已验收**——`BabyLogDeviceBindController` 四端点 / `bl_device` / 8400~8403（M45）、`SyncTable` 19 项含 `FEEDINGS`、M53 的 `in_progress=1` 下发 + 同 ID 收尾软删、计时五列齐备。⇒ 按「零新增端点/表/码/通道、不碰 19 张同步表语义」红线，K10 实质是「闭环验证 + 契约锁死」节点，不写新功能。
+- **交付（本仓业务源码零改动）**：新增 `babylog-plugin-biz/src/test/java/com/babylog/biz/contract/K10ContractLockTest.java`（6 例，纯反射 / 查表、不启 Spring 上下文）锁：device-bind 四端点路径与 apply/poll 匿名·confirm/deny app-user 登录策略、8400~8403 恰四码且无 8404+、`SyncTable.values()` 恰 19 项且不含 device/event/button 表、`syncSpecs()`=19 / `baseSpecs()`=4 / `BaseDataTable.values()`=4、FEEDINGS 无 `in_progress=0` 拉取谓词（M53）且 `rejectNullProperties` 恰 `inProgress`、计时五列类型 Integer/String/Long/Integer/Integer。
+- **验证（真跑）**：`-pl :babylog-plugin-biz test` **361/361**（基线 355 + 新增 6）、0 failures / 0 errors / 0 skipped、BUILD SUCCESS；`-pl :babylog-admin-server -am -Dtest=P0ArchitectureTest -Dsurefire.failIfNoSpecifiedTests=false test` **24/24** BUILD SUCCESS。dev 18080 全链跨端冒烟未跑（环境依赖，统一移到 V3 发布收口补跑，按 K2~K9 先例如实登记、不阻塞验收）。实跑 Java 25（语法均 17 兼容，未受影响）。
+- **边界**：零业务端点改动、零新增端点 / 表 / 错误码 / 设备事件流通道、不改 19 张同步表语义、不做固件（K11）、不改 `23` 号正文及其它归档原文；fat jar 不参与出包。
+- **状态**：待龙哥综合验收；**未 commit / 未 push**（按 `26` #4 须龙哥明确「综合验收通过」后才执行）；不填 `23A` 验收两列、不自行判定验收、不生成 K11 及以后任何节点提示词；`28` §九 九项遗留照单携带、不随本节点关闭。
